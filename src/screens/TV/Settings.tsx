@@ -16,6 +16,7 @@ import { httpFetch } from '@/utils/request'
 import { importUserApi, removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
+import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
@@ -63,6 +64,7 @@ function TVSettings({ componentId }: { componentId: string }) {
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null)
   const sourceScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
   const sourceLayoutRef = useRef<Record<string, number>>({})
+  useTVFocusRefresh()
 
   useTVNavigationBack(componentId)
   useTVRemoteActions({ playPause: () => { if (musicInfo.id) pushTVPlayerScreen(componentId) } })
@@ -160,10 +162,10 @@ function TVSettings({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={musicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="settings" subtitle={tvText.settings} />
+      <TVTopTabs items={createTVTabs(componentId)} activeId="settings" subtitle={tvText.settings} nextFocusDown={firstSourceFocus.getNodeHandle() ?? undefined} />
       <View style={styles.root}>
         <TVSettingsPane title={`${tvText.source}${dot}${tvText.userApi}`} subtitle={tvText.sourceSettingsDesc} style={styles.sourcePanel}>
-          <ScrollView ref={sourceScrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.sourceContent}>
+          <ScrollView ref={sourceScrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.sourceContent}>
             {allSources.map((src, index) => {
               const focusKey = getFocusKey(src.id)
               const prevSourceId = allSources[index - 1]?.id

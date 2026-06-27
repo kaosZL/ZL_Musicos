@@ -16,6 +16,7 @@ export const tvText = {
   playlist: '\u64ad\u653e\u5217\u8868',
   charts: '\u6392\u884c\u699c',
   hotChart: '\u70ed\u6b4c\u699c',
+  ranking: '\u6392\u884c\u699c',
   songlist: '\u6b4c\u5355',
   recommendSonglist: '\u63a8\u8350\u6b4c\u5355',
   playMode: '\u64ad\u653e\u6a21\u5f0f',

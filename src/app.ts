@@ -1,4 +1,3 @@
-import { Platform } from 'react-native'
 import '@/utils/errorHandle'
 import { init as initLog } from '@/utils/log'
 import { bootLog, getBootLog } from '@/utils/bootLog'

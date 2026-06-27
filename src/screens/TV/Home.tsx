@@ -18,6 +18,7 @@ import { useBackHandler } from '@/utils/hooks/useBackHandler'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { exitApp } from '@/utils/tools'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
+import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { pushTVDetailScreen, pushTVPlayerScreen, pushTVSearchScreen, pushTVSettingsScreen } from '@/navigation/navigation'
 import { createTVTabs, getSourceName } from './utils'
 import { dot, tvText } from './labels'
@@ -31,7 +32,10 @@ function TVHome({ componentId }: { componentId: string }) {
   const [songlists, setSonglists] = useState<ListInfoItem[]>([])
   const playFocus = useTVFocusRef()
   const searchFocus = useTVFocusRef()
+  const firstCardFocus = useTVFocusRef()
+  const activeTabFocus = useRef<FocusNode>(null)
   const cardRefs = useRef<FocusRefMap>({})
+  const queueFocusRefresh = useTVFocusRefresh()
 
   useEffect(() => { setComponentId(COMPONENT_IDS.home, componentId) }, [componentId])
   useBackHandler(() => { exitApp(); return true })
@@ -78,7 +82,14 @@ function TVHome({ componentId }: { componentId: string }) {
     return () => { mounted = false }
   }, [songlistSource, sortId])
 
-  const bindCardRef = (key: string) => (node: FocusNode) => { cardRefs.current[key] = node }
+  const bindFirstCardRef = (key: string, syncFirst = false) => (node: FocusNode) => {
+    cardRefs.current[key] = node
+    if (syncFirst && node && firstCardFocus.ref.current !== node) {
+      firstCardFocus.ref.current = node as any
+      queueFocusRefresh()
+    }
+  }
+  const getActiveTabHandle = () => activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null
   const getCardHandle = (key?: string | null) => key && cardRefs.current[key] ? findNodeHandle(cardRefs.current[key]) : null
 
   const openSonglist = (songlist: ListInfoItem) => {
@@ -92,14 +103,14 @@ function TVHome({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={musicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="home" />
+      <TVTopTabs items={createTVTabs(componentId)} activeId="home" hasTVPreferredFocus nextFocusDown={playFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus as any} onActiveTabReady={queueFocusRefresh} />
       <ScrollView showsVerticalScrollIndicator={false}>
         <TVHeroShelf kicker={tvText.todayRecommend} title={heroTitle} subtitle={heroSubtitle} image={musicInfo.pic}>
-          <TVButton ref={playFocus.ref as any} label={musicInfo.id ? (isPlay ? tvText.pause : tvText.continuePlay) : tvText.searchSong} onPress={() => {
-            if (musicInfo.id) { togglePlay(); pushTVPlayerScreen(componentId); return }
-            pushTVSearchScreen(componentId)
-          }} hasTVPreferredFocus nextFocusRight={searchFocus.getNodeHandle() ?? undefined} />
-          <TVButton ref={searchFocus.ref as any} label={tvText.search} tone="dark" onPress={() => { pushTVSearchScreen(componentId) }} nextFocusLeft={playFocus.getNodeHandle() ?? undefined} />
+         <TVButton ref={playFocus.ref as any} label={musicInfo.id ? (isPlay ? tvText.pause : tvText.continuePlay) : tvText.searchSong} onPress={() => {
+           if (musicInfo.id) { togglePlay(); pushTVPlayerScreen(componentId); return }
+           pushTVSearchScreen(componentId)
+         }} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusRight={searchFocus.getNodeHandle() ?? undefined} nextFocusDown={firstCardFocus.getNodeHandle() ?? undefined} />
+          <TVButton ref={searchFocus.ref as any} label={tvText.search} tone="dark" onPress={() => { pushTVSearchScreen(componentId) }} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusLeft={playFocus.getNodeHandle() ?? undefined} nextFocusDown={firstCardFocus.getNodeHandle() ?? undefined} />
         </TVHeroShelf>
 
         <TVShelf title={tvText.recommendSonglist} subtitle={songlistSource ? `${getSourceName(songlistSource)}` : tvText.loading}>
@@ -107,7 +118,7 @@ function TVHome({ componentId }: { componentId: string }) {
             const key = `songlist_${item.source}_${item.id}`
             const nextKey = songlists[index + 1] ? `songlist_${songlists[index + 1].source}_${songlists[index + 1].id}` : null
             const prevKey = songlists[index - 1] ? `songlist_${songlists[index - 1].source}_${songlists[index - 1].id}` : null
-            return <TVPosterCard key={key} ref={bindCardRef(key) as any} title={item.name} subtitle={item.author || tvText.songlist} meta={item.play_count ? `${item.play_count}` : tvText.openSonglist} image={item.img} size="medium" tint={index % 2 ? tvColors.purple : tvColors.primary} onPress={() => { openSonglist(item) }} nextFocusLeft={getCardHandle(prevKey) ?? undefined} nextFocusRight={getCardHandle(nextKey) ?? undefined} />
+            return <TVPosterCard key={key} ref={bindFirstCardRef(key, index === 0) as any} title={item.name} subtitle={item.author || tvText.songlist} meta={item.play_count ? `${item.play_count}` : tvText.openSonglist} image={item.img} size="medium" tint={index % 2 ? tvColors.purple : tvColors.primary} onPress={() => { openSonglist(item) }} nextFocusUp={getActiveTabHandle() ?? playFocus.getNodeHandle() ?? undefined} nextFocusLeft={getCardHandle(prevKey) ?? undefined} nextFocusRight={getCardHandle(nextKey) ?? undefined} />
           })}
         </TVShelf>
         <View style={styles.bottomSpace} />

@@ -14,6 +14,7 @@ import { pushTVDetailScreen, pushTVPlayerScreen, pushTVSettingsScreen } from '@/
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
+import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { dot, tvText } from './labels'
 import { createTVTabs, getSourceName } from './utils'
@@ -27,10 +28,11 @@ function TVHistory({ componentId }: { componentId: string }) {
   const [boards, setBoards] = useState<BoardItem[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [loadingText, setLoadingText] = useState(tvText.loading + tvText.hotChart)
-  const openFocus = useTVFocusRef()
   const playerFocus = useTVFocusRef()
+  const firstBoardFocus = useTVFocusRef()
   const listRef = useRef<FlatList<BoardItem>>(null)
   const boardRefs = useRef<FocusRefMap>({})
+  useTVFocusRefresh()
 
   useTVNavigationBack(componentId)
   const boardSource = leaderboardState.sources[0]
@@ -56,7 +58,10 @@ function TVHistory({ componentId }: { componentId: string }) {
 
   const getBoardKey = (item: BoardItem, index: number) => `${boardSource}_${item.bangid}_${index}`
   const getBoardHandle = (key?: string | null) => key && boardRefs.current[key] ? findNodeHandle(boardRefs.current[key]) : null
-  const bindBoardRef = (key: string) => (node: FocusNode) => { boardRefs.current[key] = node }
+  const bindBoardRef = (key: string, syncFirst = false) => (node: FocusNode) => {
+    boardRefs.current[key] = node
+    if (syncFirst) firstBoardFocus.ref.current = node as any
+  }
 
   const handleBoardFocus = (index: number) => {
     setSelectedIndex(index)
@@ -88,19 +93,18 @@ function TVHistory({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={currentMusicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="new" />
+      <TVTopTabs items={createTVTabs(componentId)} activeId="new" nextFocusDown={firstBoardFocus.getNodeHandle() ?? undefined} />
       <View style={styles.root}>
         <TVGlassPanel style={styles.listPanel}>
-          <View style={styles.header}>
-            <View>
-              <TVText variant="pageTitle" style={styles.title}>{tvText.hotChart}</TVText>
-              <TVText variant="body" style={styles.subtitle}>{boardSource ? getSourceName(boardSource) : tvText.noMusic} · {boards.length} {tvText.charts}</TVText>
-            </View>
-            <View style={styles.actions}>
-              <TVButton ref={openFocus.ref as any} label={tvText.openChart} onPress={() => { openBoard() }} tone={selectedBoard ? 'primary' : 'dark'} hasTVPreferredFocus nextFocusRight={playerFocus.getNodeHandle() ?? undefined} />
-              <TVButton ref={playerFocus.ref as any} label={tvText.nowPlaying} tone="ghost" onPress={() => { pushTVPlayerScreen(componentId) }} nextFocusLeft={openFocus.getNodeHandle() ?? undefined} />
-            </View>
+         <View style={styles.header}>
+           <View>
+             <TVText variant="pageTitle" style={styles.title}>{tvText.ranking}</TVText>
+             <TVText variant="body" style={styles.subtitle}>{boardSource ? getSourceName(boardSource) : tvText.noMusic} · {boards.length} {tvText.charts}</TVText>
+           </View>
+          <View style={styles.actions}>
+            <TVButton ref={playerFocus.ref as any} label={tvText.nowPlaying} tone="ghost" onPress={() => { pushTVPlayerScreen(componentId) }} />
           </View>
+         </View>
           <FlatList
             ref={listRef}
             data={boards}
@@ -114,20 +118,21 @@ function TVHistory({ componentId }: { componentId: string }) {
               const prevKey = boards[index - 1] ? getBoardKey(boards[index - 1], index - 1) : null
               const nextKey = boards[index + 1] ? getBoardKey(boards[index + 1], index + 1) : null
               return (
-                <TVMusicRow
-                  ref={bindBoardRef(itemKey) as any}
-                  index={index}
-                  title={item.name}
-                  subtitle={`${getSourceName(boardSource)}${dot}${tvText.realSongs}`}
-                  meta={index === 0 ? tvText.hotChart : tvText.charts}
-                  badge={index < 3 ? tvText.hotChart : undefined}
-                  active={selectedIndex === index}
-                  onFocus={() => { handleBoardFocus(index) }}
-                  onPress={() => { openBoard(item) }}
-                  nextFocusUp={index === 0 ? undefined : getBoardHandle(prevKey) ?? undefined}
-                  nextFocusRight={openFocus.getNodeHandle() ?? undefined}
-                  nextFocusDown={getBoardHandle(nextKey) ?? undefined}
-                />
+               <TVMusicRow
+                 ref={bindBoardRef(itemKey, index === 0) as any}
+                 index={index}
+                 hasTVPreferredFocus={index === 0}
+                 title={item.name}
+                 subtitle={`${getSourceName(boardSource)}${dot}${tvText.realSongs}`}
+                 meta={index === 0 ? tvText.hotChart : tvText.charts}
+                 badge={index < 3 ? tvText.hotChart : undefined}
+                 active={selectedIndex === index}
+                 onFocus={() => { handleBoardFocus(index) }}
+                 onPress={() => { openBoard(item) }}
+                 nextFocusUp={index === 0 ? undefined : getBoardHandle(prevKey) ?? undefined}
+                 nextFocusRight={playerFocus.getNodeHandle() ?? undefined}
+                 nextFocusDown={getBoardHandle(nextKey) ?? undefined}
+               />
               )
             }}
           />

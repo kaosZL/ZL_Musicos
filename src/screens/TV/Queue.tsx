@@ -16,6 +16,7 @@ import { pushTVPlayerScreen, pushTVSettingsScreen } from '@/navigation/navigatio
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
+import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { tvText } from './labels'
 import { createTVTabs, getMusicSubtitle, getSourceName } from './utils'
 import { useTVFetchedMusicList } from './useTVFetchedMusicList'
@@ -30,8 +31,10 @@ function TVQueue({ componentId }: { componentId: string }) {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const playNowFocus = useTVFocusRef()
   const clearFocus = useTVFocusRef()
+  const firstQueueFocus = useTVFocusRef()
   const listRef = useRef<FlatList<LX.Music.MusicInfo>>(null)
   const queueRefs = useRef<FocusRefMap>({})
+  useTVFocusRefresh()
 
   useTVNavigationBack(componentId)
 
@@ -46,7 +49,10 @@ function TVQueue({ componentId }: { componentId: string }) {
   const selectedMusicInfo = fetchedMusicList[selectedIndex] ?? null
   const getQueueItemKey = (item: LX.Music.MusicInfo, index: number) => `${item.id}_${index}`
   const getQueueHandle = (key?: string | null) => key && queueRefs.current[key] ? findNodeHandle(queueRefs.current[key]) : null
-  const bindQueueRef = (key: string) => (node: FocusNode) => { queueRefs.current[key] = node }
+  const bindQueueRef = (key: string, syncFirst = false) => (node: FocusNode) => {
+    queueRefs.current[key] = node
+    if (syncFirst) firstQueueFocus.ref.current = node as any
+  }
 
   const handleQueueFocus = (index: number) => {
     setSelectedIndex(index)
@@ -78,7 +84,7 @@ function TVQueue({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={currentMusicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="queue" />
+      <TVTopTabs items={createTVTabs(componentId)} activeId="queue" nextFocusDown={firstQueueFocus.getNodeHandle() ?? playNowFocus.getNodeHandle() ?? undefined} />
       <View style={styles.root}>
         <TVGlassPanel style={styles.listPanel}>
           <View style={styles.header}>
@@ -105,7 +111,7 @@ function TVQueue({ componentId }: { componentId: string }) {
               const nextKey = fetchedMusicList[index + 1] ? getQueueItemKey(fetchedMusicList[index + 1], index + 1) : null
               return (
                 <TVMusicRow
-                  ref={bindQueueRef(itemKey) as any}
+                  ref={bindQueueRef(itemKey, index === 0) as any}
                   index={index}
                   title={item.name ?? tvText.unknownSong}
                   subtitle={getMusicSubtitle(item)}
@@ -115,7 +121,7 @@ function TVQueue({ componentId }: { componentId: string }) {
                   active={selectedIndex === index}
                   onFocus={() => { handleQueueFocus(index) }}
                   onPress={() => { void handlePlayNow(index) }}
-                  nextFocusUp={index === 0 ? undefined : getQueueHandle(prevKey) ?? undefined}
+                  nextFocusUp={index === 0 ? playNowFocus.getNodeHandle() ?? undefined : getQueueHandle(prevKey) ?? undefined}
                   nextFocusRight={playNowFocus.getNodeHandle() ?? undefined}
                   nextFocusDown={getQueueHandle(nextKey) ?? undefined}
                 />

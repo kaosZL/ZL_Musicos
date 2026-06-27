@@ -8,9 +8,10 @@ interface Props {
   now: string
   total: string
   style?: ViewStyle | ViewStyle[]
+  controlsStyle?: ViewStyle | ViewStyle[]
 }
 
-const TVNowPlayingDock = ({ progressPercent, now, total, style, children }: PropsWithChildren<Props>) => (
+const TVNowPlayingDock = ({ progressPercent, now, total, style, controlsStyle, children }: PropsWithChildren<Props>) => (
   <View style={[styles.root, style]}>
     <View style={styles.progressTrack}>
       <View style={[styles.progressBar, { width: `${Math.max(0, Math.min(progressPercent, 100))}%` }]} />
@@ -19,13 +20,14 @@ const TVNowPlayingDock = ({ progressPercent, now, total, style, children }: Prop
       <TVText variant="caption">{now}</TVText>
       <TVText variant="caption">{total}</TVText>
     </View>
-    <View style={styles.controls}>{children}</View>
+    <View style={[styles.controls, controlsStyle]}>{children}</View>
   </View>
 )
 
 const styles: Record<string, ViewStyle> = {
   root: {
-    paddingTop: 10,
+    position: 'relative',
+    paddingTop: 0,
   },
   progressTrack: {
     height: 4,
@@ -41,13 +43,14 @@ const styles: Record<string, ViewStyle> = {
   timeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 7,
-    opacity: 0.68,
+    marginTop: 6,
+    opacity: 0.70,
   },
   controls: {
-    marginTop: 11,
+    position: 'absolute',
+    marginTop: 8,
     flexDirection: 'column',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'center',
     gap: 0,
   },

@@ -70,8 +70,6 @@ export const formatPlayTime2 = (time: number) => {
   return numFix(m) + ':' + numFix(s)
 }
 
-
-
 export const isUrl = (path: string) => /https?:\/\//.test(path)
 
 // 解析URL参数为对象

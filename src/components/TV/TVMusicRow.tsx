@@ -99,7 +99,7 @@ const styles: Record<string, ViewStyle | any> = {
     backgroundColor: tvColors.surfaceRed,
   },
   indexBox: {
-    width: 54,
+    width: 50,
   },
   art: {
     width: 58,
@@ -124,13 +124,13 @@ const styles: Record<string, ViewStyle | any> = {
   info: {
     flex: 1,
     minWidth: 0,
-    paddingRight: 18,
+    paddingRight: 12,
   },
   subtitle: {
     marginTop: 6,
   },
   meta: {
-    minWidth: 126,
+    minWidth: 86,
     alignItems: 'flex-end',
   },
   metaText: {

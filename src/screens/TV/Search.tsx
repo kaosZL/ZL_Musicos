@@ -9,18 +9,19 @@ import TVGlassPanel from '@/components/TV/TVGlassPanel'
 import TVSearchKeyboard from '@/components/TV/TVSearchKeyboard'
 import Focusable from '@/components/TV/Focusable'
 import { tvColors } from '@/theme/tv'
-import { search, setSource as setSearchSource } from '@/core/search/music'
+import { search } from '@/core/search/music'
 import searchMusicState from '@/store/search/music/state'
 import { pushTVPlayerScreen, pushTVSettingsScreen } from '@/navigation/navigation'
 import { setTempList } from '@/core/list'
 import { playList } from '@/core/player/player'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
+import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { LIST_IDS } from '@/config/constant'
 import { tvText } from './labels'
-import { createTVTabs, getMusicSubtitle, getSourceName } from './utils'
+import { createTVTabs, getMusicSubtitle } from './utils'
 
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
@@ -30,9 +31,10 @@ type TVTextInputProps = TextInputProps & {
   nextFocusLeft?: number
   nextFocusRight?: number
 }
+
 const TVTextInput = TextInput as React.ComponentType<TVTextInputProps & { ref?: React.Ref<ComponentRef<typeof TextInput>> }>
 const RESULT_ITEM_SIZE = 78
-const hotWords = ['\u5468\u6770\u4f26', '\u6797\u4fca\u6770', '\u9648\u5955\u8fc5', 'Taylor Swift', '\u4e94\u6708\u5929', '\u7ca4\u8bed\u7ecf\u5178', tvText.hotChart, tvText.newSongs]
+const hotWords = ['\u5468\u6770\u4f26', '\u6797\u4fca\u6770', '\u9648\u5955\u8fc5']
 
 const getHandleFromMap = (mapRef: MutableRefObject<FocusRefMap>, key?: string | null) => {
   if (!key) return null
@@ -49,14 +51,14 @@ function TVSearch({ componentId }: { componentId: string }) {
   const [error, setError] = useState('')
   const [pageInfo, setPageInfo] = useState({ page: 0, maxPage: 0, total: 0 })
   const sourceOptions = searchMusicState.sources
-  const [source, setSource] = useState<typeof searchMusicState.source>(sourceOptions.includes(searchMusicState.source) ? searchMusicState.source : sourceOptions[0])
+  const [source] = useState<typeof searchMusicState.source>(sourceOptions.includes(searchMusicState.source) ? searchMusicState.source : sourceOptions[0])
+  const queueFocusRefresh = useTVFocusRefresh()
   const searchButtonFocus = useTVFocusRef()
-  const firstSourceFocus = useTVFocusRef()
   const firstResultFocus = useTVFocusRef()
+  const firstKeyboardKeyFocus = useRef<FocusNode>(null)
   const loadMoreFocus = useTVFocusRef()
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null)
   const listRef = useRef<FlatList<LX.Music.MusicInfoOnline>>(null)
-  const sourceRefs = useRef<FocusRefMap>({})
   const resultRefs = useRef<FocusRefMap>({})
   const hotRefs = useRef<FocusRefMap>({})
 
@@ -67,17 +69,17 @@ function TVSearch({ componentId }: { componentId: string }) {
   })
 
   const getInputHandle = () => inputRef.current ? findNodeHandle(inputRef.current) : null
+  const getKeyboardHandle = () => firstKeyboardKeyFocus.current ? findNodeHandle(firstKeyboardKeyFocus.current) : null
   const getHotHandle = (id?: string | null) => getHandleFromMap(hotRefs, id)
   const getResultHandle = (key?: string | null) => getHandleFromMap(resultRefs, key)
   const getResultKey = useCallback((item: LX.Music.MusicInfoOnline) => `${item.source}_${item.id}`, [])
-  const bindSourceRef = (id: string, syncFirstSource = false) => (node: FocusNode) => {
-    sourceRefs.current[id] = node
-    if (syncFirstSource) firstSourceFocus.ref.current = node as any
-  }
   const bindHotRef = (id: string) => (node: FocusNode) => { hotRefs.current[id] = node }
   const bindResultRef = (key: string, syncFirstResult = false) => (node: FocusNode) => {
     resultRefs.current[key] = node
-    if (syncFirstResult) firstResultFocus.ref.current = node as any
+    if (syncFirstResult && node && firstResultFocus.ref.current !== node) {
+      firstResultFocus.ref.current = node as any
+      queueFocusRefresh()
+    }
   }
 
   const syncPageInfo = useCallback((targetSource: typeof source) => {
@@ -139,38 +141,57 @@ function TVSearch({ componentId }: { componentId: string }) {
   }
 
   const handleKeyboardKey = (key: string) => { setText(value => `${value}${key}`) }
-  const hasMore = !!pageInfo.maxPage && pageInfo.page < pageInfo.maxPage
+  const hasMore = !!pageInfo.maxPage && pageInfo.page < pageInfo.maxPage
+  const firstHotHandle = getHotHandle(hotWords[0]) ?? undefined
+  const lastHotHandle = getHotHandle(hotWords[hotWords.length - 1]) ?? firstHotHandle
+  const searchButtonHandle = searchButtonFocus.getNodeHandle() ?? undefined
+  const firstResultHandle = firstResultFocus.getNodeHandle() ?? undefined
+  const keyboardHandle = getKeyboardHandle() ?? undefined
 
   return (
     <TVAppleScaffold image={musicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="search" />
+      <TVTopTabs items={createTVTabs(componentId)} activeId="search" nextFocusDown={getInputHandle() ?? searchButtonHandle} />
       <View style={styles.root}>
         <TVGlassPanel style={styles.leftPanel}>
           <TVText variant="pageTitle" style={styles.pageTitle}>{tvText.searchTitle}</TVText>
-          <TVText variant="body" style={styles.pageSubtitle}>{tvText.searchPlaceholder}</TVText>
           <View style={styles.inputRow}>
-            <TVTextInput ref={inputRef} value={text} onChangeText={setText} placeholder={tvText.searchPlaceholder} placeholderTextColor={tvColors.dimText} style={styles.input} nextFocusRight={searchButtonFocus.getNodeHandle() ?? undefined} nextFocusDown={getHotHandle(hotWords[0]) ?? firstSourceFocus.getNodeHandle() ?? undefined} onSubmitEditing={() => { void handleSearch() }} />
-            <TVButton ref={searchButtonFocus.ref as any} label={loading ? tvText.searching : tvText.search} onPress={() => { void handleSearch() }} hasTVPreferredFocus nextFocusLeft={getInputHandle() ?? undefined} />
+            <TVTextInput ref={inputRef} value={text} onChangeText={setText} placeholder={tvText.searchPlaceholder} placeholderTextColor={tvColors.dimText} style={styles.input} nextFocusRight={searchButtonHandle} nextFocusDown={firstHotHandle} onSubmitEditing={() => { void handleSearch() }} />
+            <TVButton ref={searchButtonFocus.ref as any} label={loading ? tvText.searching : tvText.search} onPress={() => { void handleSearch() }} hasTVPreferredFocus nextFocusLeft={getInputHandle() ?? undefined} nextFocusRight={firstResultHandle} nextFocusDown={firstHotHandle} />
           </View>
           <TVText variant="cardTitle" style={styles.blockTitle}>{tvText.hotSearch}</TVText>
-          <View style={styles.hotWrap}>{hotWords.map((word, index) => <Focusable key={word} ref={bindHotRef(word) as any} style={styles.hotItem} onPress={() => { void handleSearch(1, word) }} nextFocusLeft={getHotHandle(hotWords[index - 1]) ?? undefined} nextFocusRight={getHotHandle(hotWords[index + 1]) ?? undefined}><TVText variant="body">{word}</TVText></Focusable>)}</View>
-          <TVText variant="cardTitle" style={styles.blockTitle}>{tvText.searchSource}</TVText>
-          <View style={styles.sourceWrap}>{sourceOptions.map((item, index) => <Focusable key={item} ref={bindSourceRef(item, index === 0) as any} style={[styles.sourceItem, item === source ? styles.sourceActive : null]} onPress={() => { setSource(item); setSearchSource(item); syncPageInfo(item) }}><TVText variant="body" color={item === source ? tvColors.text : tvColors.subtext}>{getSourceName(item)}</TVText></Focusable>)}</View>
-          <TVText variant="cardTitle" style={styles.blockTitle}>{tvText.tvKeyboard}</TVText>
-          <TVSearchKeyboard onKeyPress={handleKeyboardKey} onBackspace={() => { setText(value => value.slice(0, -1)) }} onClear={() => { setText('') }} onSubmit={() => { void handleSearch() }} />
+          <View style={styles.hotWrap}>
+            {hotWords.map((word, index) => (
+              <Focusable key={word} ref={bindHotRef(word) as any} style={styles.hotItem} onPress={() => { void handleSearch(1, word) }} nextFocusLeft={getHotHandle(hotWords[index - 1]) ?? undefined} nextFocusRight={getHotHandle(hotWords[index + 1]) ?? firstResultHandle} nextFocusUp={getInputHandle() ?? searchButtonHandle} nextFocusDown={keyboardHandle}>
+                <TVText variant="body">{word}</TVText>
+              </Focusable>
+            ))}
+          </View>
+          <TVSearchKeyboard firstKeyRef={firstKeyboardKeyFocus} onFirstKeyReady={queueFocusRefresh} onKeyPress={handleKeyboardKey} onBackspace={() => { setText(value => value.slice(0, -1)) }} onClear={() => { setText('') }} onSubmit={() => { void handleSearch() }} nextFocusUp={lastHotHandle} nextFocusRight={firstResultHandle} />
         </TVGlassPanel>
         <TVGlassPanel style={styles.resultPanel}>
           <View style={styles.resultHeader}>
-            <View><TVText variant="sectionTitle">{tvText.searchResult}</TVText><TVText variant="caption" style={styles.line}>{loading ? `${tvText.searching} ${getSourceName(source)}...` : `${results.length} ${tvText.songs}${pageInfo.total ? ` / 共 ${pageInfo.total}` : ''}${pageInfo.page ? ` / 第 ${pageInfo.page}/${pageInfo.maxPage || pageInfo.page} 页` : ''}`}</TVText></View>
-            <TVText variant="caption" color={tvColors.primaryHigh}>{getSourceName(source)}</TVText>
+            <View>
+              <TVText variant="sectionTitle">{tvText.searchResult}</TVText>
+              <TVText variant="caption" style={styles.line}>{loading ? tvText.searching : `${results.length} ${tvText.songs}${pageInfo.total ? ` / \u5171 ${pageInfo.total}` : ''}${pageInfo.page ? ` / \u7b2c ${pageInfo.page}/${pageInfo.maxPage || pageInfo.page} \u9875` : ''}`}</TVText>
+            </View>
           </View>
           {error ? <TVText variant="caption" color={tvColors.warn} style={styles.error}>{error}</TVText> : null}
-          <FlatList ref={listRef} data={results} keyExtractor={getResultKey} showsVerticalScrollIndicator={false} removeClippedSubviews={false} contentContainerStyle={styles.resultContent} ListEmptyComponent={!loading && !error ? <TVText variant="meta">{tvText.emptySearchHint}</TVText> : null} ListFooterComponent={hasMore ? <View style={styles.footer}><TVButton ref={loadMoreFocus.ref as any} label={loadingMore ? tvText.loading : tvText.loadMore} tone="dark" onFocus={() => { listRef.current?.scrollToEnd({ animated: true }) }} onPress={() => { void handleLoadMore() }} /></View> : null} renderItem={({ item, index }) => {
-            const itemKey = getResultKey(item)
-            const prevKey = results[index - 1] ? getResultKey(results[index - 1]) : null
-            const nextKey = results[index + 1] ? getResultKey(results[index + 1]) : null
-            return <TVMusicRow ref={bindResultRef(itemKey, index === 0) as any} hasTVPreferredFocus={index === 0 && !!results.length} index={index} title={item.name} subtitle={getMusicSubtitle(item)} meta={item.interval ?? getSourceName(item.source)} badge={index < 3 ? tvText.hotChart : undefined} onFocus={() => { handleResultFocus(index) }} onPress={() => { void handleOpenPlayer(item, index) }} nextFocusUp={index === 0 ? (firstSourceFocus.getNodeHandle() ?? searchButtonFocus.getNodeHandle() ?? undefined) : (getResultHandle(prevKey) ?? undefined)} nextFocusDown={getResultHandle(nextKey) ?? (hasMore && index === results.length - 1 ? loadMoreFocus.getNodeHandle() ?? undefined : undefined)} />
-          }} />
+          <FlatList
+            ref={listRef}
+            data={results}
+            keyExtractor={getResultKey}
+            showsVerticalScrollIndicator={false}
+            removeClippedSubviews={false}
+            contentContainerStyle={styles.resultContent}
+            ListEmptyComponent={!loading && !error ? <TVText variant="meta">{tvText.emptySearchHint}</TVText> : null}
+            ListFooterComponent={hasMore ? <View style={styles.footer}><TVButton ref={loadMoreFocus.ref as any} label={loadingMore ? tvText.loading : tvText.loadMore} tone="dark" onFocus={() => { listRef.current?.scrollToEnd({ animated: true }) }} onPress={() => { void handleLoadMore() }} /></View> : null}
+            renderItem={({ item, index }) => {
+              const itemKey = getResultKey(item)
+              const prevKey = results[index - 1] ? getResultKey(results[index - 1]) : null
+              const nextKey = results[index + 1] ? getResultKey(results[index + 1]) : null
+              return <TVMusicRow ref={bindResultRef(itemKey, index === 0) as any} hasTVPreferredFocus={index === 0 && !!results.length} index={index} title={item.name} subtitle={getMusicSubtitle(item)} meta={item.interval} onFocus={() => { handleResultFocus(index) }} onPress={() => { void handleOpenPlayer(item, index) }} nextFocusLeft={searchButtonHandle} nextFocusUp={index === 0 ? searchButtonHandle : (getResultHandle(prevKey) ?? undefined)} nextFocusDown={getResultHandle(nextKey) ?? (hasMore && index === results.length - 1 ? loadMoreFocus.getNodeHandle() ?? undefined : undefined)} />
+            }}
+          />
         </TVGlassPanel>
       </View>
     </TVAppleScaffold>
@@ -179,17 +200,13 @@ function TVSearch({ componentId }: { componentId: string }) {
 
 const styles: Record<string, ViewStyle | TextStyle | any> = {
   root: { flex: 1, flexDirection: 'row', gap: 24 },
-  leftPanel: { width: 500, paddingHorizontal: 30, paddingVertical: 26 },
-  pageTitle: { fontSize: 46, lineHeight: 54 },
-  pageSubtitle: { marginTop: 6, color: tvColors.subtext },
-  inputRow: { flexDirection: 'row', gap: 12, marginTop: 18 },
-  input: { flex: 1, minHeight: 58, color: tvColors.text, backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: 24, paddingHorizontal: 20, fontSize: 20, borderWidth: 1, borderColor: tvColors.border },
-  blockTitle: { marginTop: 18 },
-  hotWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginTop: 10 },
-  hotItem: { minHeight: 40, borderRadius: 999, paddingHorizontal: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: tvColors.border },
-  sourceWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginTop: 10 },
-  sourceItem: { minHeight: 40, borderRadius: 999, paddingHorizontal: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: tvColors.border },
-  sourceActive: { backgroundColor: tvColors.primarySoft, borderColor: tvColors.primaryHigh },
+  leftPanel: { width: 420, paddingHorizontal: 30, paddingVertical: 18 },
+  pageTitle: { fontSize: 34, lineHeight: 40 },
+  inputRow: { flexDirection: 'row', gap: 12, marginTop: 12 },
+  input: { flex: 1, minHeight: 46, color: tvColors.text, backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: 20, paddingHorizontal: 16, fontSize: 17, borderWidth: 1, borderColor: tvColors.border },
+  blockTitle: { marginTop: 12, fontSize: 20 },
+  hotWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, marginBottom: 12 },
+  hotItem: { minHeight: 32, borderRadius: 999, paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: tvColors.border },
   resultPanel: { flex: 1, paddingHorizontal: 30, paddingVertical: 26, backgroundColor: 'rgba(10,13,21,0.96)' },
   resultHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 },
   resultContent: { paddingBottom: 20 },

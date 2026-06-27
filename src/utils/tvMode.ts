@@ -3,6 +3,7 @@ import { isTVDevice } from '@/utils/nativeModules/utils'
 
 let resolved = false
 let cachedIsTV = false
+let resolvePromise: Promise<boolean> | null = null
 
 export function getCachedIsTV(): boolean {
   return cachedIsTV
@@ -14,11 +15,16 @@ export function isTVResolved(): boolean {
 
 export async function resolveIsTV(): Promise<boolean> {
   if (resolved) return cachedIsTV
-  try {
-    cachedIsTV = await isTVDevice()
-  } catch {
-    cachedIsTV = Platform.isTV ?? false
+  if (!resolvePromise) {
+    resolvePromise = (async() => {
+      try {
+        cachedIsTV = await isTVDevice()
+      } catch {
+        cachedIsTV = Platform.isTV ?? false
+      }
+      resolved = true
+      return cachedIsTV
+    })()
   }
-  resolved = true
-  return cachedIsTV
+  return resolvePromise
 }

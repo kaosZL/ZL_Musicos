@@ -1,39 +1,65 @@
-﻿# ZL-Music TV
+# ZL-Music TV
 
-基于 [lx-music-mobile 1.8.4](https://github.com/lyswhut/lx-music-mobile) 二次开发的 Android TV 音乐播放器，TV 端 UI 采用 Apple TV Music / tvOS 风格高仿（深色沉浸背景、货架式卡片、焦点放大、毛玻璃面板）。
+ZL-Music TV 是基于 [lx-music-mobile 1.8.4](https://github.com/lyswhut/lx-music-mobile) 二次开发的 Android TV 音乐播放器。当前版本重点重构了 TV 端体验：遥控器焦点、高亮反馈、排行榜、搜索、设置页、播放页和 Apple Music TV 风格的沉浸式背景。
 
-> 本项目不内置任何音源，仅作为学习用途的聚合播放前端；不商用、不分发版权素材。请自行遵守当地法律法规。
+> 本项目仅用于学习、研究与个人设备体验，不内置任何版权音乐资源，不提供付费分发服务。TV 界面改造由 Codex 全程协助编写；至于有没有“侵了谁的权”，我也不知道，如有权利问题请联系处理或删除相关内容。
 
-## 功能特性
+## 界面预览
 
-- **首页**：大 Hero 横幅、今日推荐、推荐歌单货架横滑。
-- **排行榜**：热歌榜等榜单列表，点击进入榜单详情页。
-- **搜索**：顶部搜索框 + 电视键盘 + 热门热词，支持多音源切换（酷我 / 酷狗 / QQ音乐 / 网易云 / 咪咕 / 用户 API），右侧实时展示搜索结果。
-- **播放页**：大封面 + 模糊背景 + 歌词流，底部自动隐藏的播放控制条（播放/暂停、上一首、下一首、随机、单曲循环、列表循环、切源）。OK 键暂停/播放，左右键上/下一首。
-- **设置**：API 设置、音源切换、播放模式。
-- **遥控器适配**：方向键焦点导航、返回键正常、焦点居中滚动。
+### 首页
 
-## 目录结构
+![TV 首页](docs/screenshots/tv-home.png)
 
-```
-src/
-├─ screens/TV/        # TV 端页面：Home / Search / Player / Detail / History / Settings / Queue
-├─ components/TV/     # TV 端组件：TVAppleScaffold / TVTopTabs / TVShelf / TVPosterCard
-│                     #            TVMusicRow / TVGlassPanel / Focusable / TVText ...
-├─ theme/tv.ts        # TV 设计 token（深色配色、圆角、焦点缩放）
-└─ navigation/        # TV 导航注册（pushTVPlayerScreen 等）
-scripts/
-├─ tv-build.cjs       # 打包 APK
-├─ tv-install.cjs     # 安装到设备
-└─ tv-launch.cjs      # 启动应用
-```
+### 排行榜
+
+![TV 排行榜](docs/screenshots/tv-ranking.png)
+
+### 榜单详情
+
+![TV 榜单详情](docs/screenshots/tv-ranking-detail.png)
+
+### 搜索
+
+![TV 搜索](docs/screenshots/tv-search.png)
+
+### 设置
+
+![TV 设置](docs/screenshots/tv-settings.png)
+
+### 播放页
+
+![TV 播放页](docs/screenshots/tv-player.png)
+
+## 主要特性
+
+- TV 遥控器优先：方向键导航、OK 打开/播放、返回键回退、播放键暂停/继续。
+- 首页打开后焦点默认在「推荐」，所有 TV 可聚焦控件都有明显高亮。
+- 排行榜页面标题统一为「排行榜」，榜单行直接按 OK 进入详情。
+- 搜索页移除音源选择和音源标签，结果列表直接展示歌曲名、歌手和时长。
+- 设置页音源列表限制在卡片内部滚动，不再溢出背景块。
+- 播放页参考 Apple Music TV 的比例重新布局：左侧封面、右侧歌词、底部进度条、右下角圆形控制按钮。
+- 播放页新增播放方式圆形按钮，支持列表循环、随机、顺序、单曲循环等模式切换。
+- 所有 TV 页面统一为 Apple Music TV 风格的专辑图模糊暗场背景。
+
+## 遥控器操作
+
+| 按键 | 行为 |
+| --- | --- |
+| 方向键 | 移动焦点 |
+| OK / Enter | 打开当前项、播放歌曲或触发按钮 |
+| Back | 返回上一页 |
+| Play/Pause | 播放页暂停或继续 |
+| Previous / Rewind | 播放上一首 |
+| Next / Fast Forward | 播放下一首 |
+| Menu | 打开 TV 设置 |
 
 ## 环境要求
 
-- Node.js 20
+- Node.js 20+
+- npm 8.5+
 - JDK 17
-- Android SDK（API 29 / Android 10 为目标）
-- Python（NDK 构建依赖）
+- Android SDK / Gradle
+- 夜神模拟器或 Android TV / Android 设备
 
 ## 安装依赖
 
@@ -44,64 +70,80 @@ npm install
 ## 构建 APK
 
 ```bash
-npm run tv:assemble        # 等价于 node scripts/tv-build.cjs
+npm run tv:assemble
 ```
 
-产物路径：
+构建产物位于：
 
+```text
+android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-x86.apk
+android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-x86_64.apk
+android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-arm64-v8a.apk
+android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-armeabi-v7a.apk
+android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-universal.apk
 ```
-android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-x86.apk      # 模拟器(夜神/x86)
-android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-arm64-v8a.apk # 真机(64位)
-android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-universal.apk # 通用
-```
 
-## 安装到夜神模拟器调试
+夜神模拟器优先使用 `x86` 包；真机或电视盒子不确定架构时可使用 `universal` 包。
 
-应用包名：`cn.toside.music.mobile`，主 Activity：`cn.toside.music.mobile.MainActivity`。
+## 安装到夜神模拟器
+
+应用包名：`cn.toside.music.mobile`
 
 ```bash
-# 1. 连接夜神（默认端口 62001）
-"D:\Program Files\Nox\bin\nox_adb.exe" connect 127.0.0.1:62001
-
-# 2. 安装
-"D:\Program Files\Nox\bin\nox_adb.exe" -s 127.0.0.1:62001 install -r android\app\build\outputs\apk\debug\lx-music-mobile-v1.8.4-x86.apk
-
-# 3. 启动
-"D:\Program Files\Nox\bin\nox_adb.exe" -s 127.0.0.1:62001 shell am start -n cn.toside.music.mobile/.MainActivity
+npm run tv:deploy
 ```
 
-或使用脚本：
+手动安装示例：
 
 ```bash
-npm run tv:deploy    # 安装并启动（自动选择已连接设备）
-```
-
-## 查看日志
-
-```bash
-# 只看应用日志与错误
-"D:\Program Files\Nox\bin\nox_adb.exe" -s 127.0.0.1:62001 logcat *:E ReactNativeJS:V ReactNative:V
+C:\Data\NOX\Nox\bin\nox_adb.exe connect 127.0.0.1:62001
+C:\Data\NOX\Nox\bin\nox_adb.exe -s 127.0.0.1:62001 install -r android\app\build\outputs\apk\debug\lx-music-mobile-v1.8.4-x86.apk
+C:\Data\NOX\Nox\bin\nox_adb.exe -s 127.0.0.1:62001 shell am start -n cn.toside.music.mobile/.MainActivity
 ```
 
 ## 代码检查
 
 ```bash
 npm run tv:lint
-# 或只检查 TV 范围
-npx eslint src/screens/TV src/components/TV --ext .tsx,.ts
 ```
 
-## TV 焦点开发约定
+本次发布前已验证：
 
-- 使用 `src/components/TV/Focusable.tsx` 包裹可聚焦元素，通过 `hasTVPreferredFocus`、`nextFocusUp/Down/Left/Right` 控制焦点流转。
-- 列表行统一用 `TVMusicRow`，已处理 `width: 100%` 撑满与无封面时的标题可见性。
-- 原生按键映射在 `android/app/src/main/java/cn/toside/music/mobile/MainActivity.java`：`select(OK/ENTER)`、`left/right/up/down`、`playPause/next/previous/menu`。
+```bash
+npx eslint src\screens\TV\Player.tsx src\components\TV\TVRoundControl.tsx src\components\TV\TVAppleScaffold.tsx
+npm run tv:assemble
+```
+
+并在夜神模拟器 `127.0.0.1:62001` 上实际巡检了首页、排行榜、榜单详情、搜索、设置和播放页。
+
+## 目录结构
+
+```text
+src/
+  components/TV/      TV 端基础组件、焦点组件、卡片、按钮、面板
+  screens/TV/         TV 首页、排行榜、搜索、设置、播放页、队列页
+  theme/tv.ts         TV 端颜色、圆角、间距、字号等设计 token
+scripts/
+  tv-build.cjs        构建 TV APK
+  tv-install.cjs      安装 APK
+  tv-launch.cjs       启动应用
+docs/screenshots/     README 使用的 TV 实机截图
+```
+
+## 发布说明
+
+GitHub Releases / Tags 会上传最新构建好的 APK。推荐下载：
+
+- `lx-music-mobile-v1.8.4-x86.apk`：夜神模拟器。
+- `lx-music-mobile-v1.8.4-arm64-v8a.apk`：大多数 64 位 Android TV / 盒子。
+- `lx-music-mobile-v1.8.4-universal.apk`：不确定设备架构时使用。
 
 ## 致谢
 
-- [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile) — 原始移动端项目。
-- Apple TV Music / tvOS — TV 端视觉与交互参考（仅复刻布局/比例/动效，不使用官方品牌资产）。
+- [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile)：原始移动端项目。
+- Apple Music TV / tvOS：TV 端布局、比例和沉浸式播放页的视觉参考。
+- Codex：本仓库 TV 端开发、调试、打包、截图巡检和 README 整理的主要协作者。
 
 ## License
 
-沿用原项目协议，详见 LICENSE。
+沿用原项目协议，详见 [LICENSE](LICENSE)。

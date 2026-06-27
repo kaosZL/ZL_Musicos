@@ -1,0 +1,5 @@
+android/app/build/
+android/app/src/main/assets/script/
+android/build/
+build/
+node_modules/

@@ -14,6 +14,7 @@ import { pushTVPlayerScreen, pushTVSettingsScreen } from '@/navigation/navigatio
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
+import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { getListDetail as getBoardListDetail } from '@/core/leaderboard'
 import { getListDetail as getSonglistDetail } from '@/core/songlist'
 import { handlePlay as handleBoardPlay } from '@/screens/Home/Views/Leaderboard/listAction'
@@ -36,15 +37,26 @@ function TVDetail({ componentId, payload }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [total, setTotal] = useState(0)
+  const [preferFirstRow, setPreferFirstRow] = useState(false)
   const listRef = useRef<FlatList<LX.Music.MusicInfoOnline>>(null)
   const rowRefs = useRef<FocusRefMap>({})
   const playAllFocus = useTVFocusRef()
   const backFocus = useTVFocusRef()
   const firstRowFocus = useTVFocusRef()
+  const queueFocusRefresh = useTVFocusRefresh()
+  const actionFocusedRef = useRef(false)
+
+  const focusFirstRow = useCallback(() => {
+    if (!firstRowFocus.ref.current) return
+    listRef.current?.scrollToOffset({ offset: 0, animated: true })
+    setPreferFirstRow(false)
+    requestAnimationFrame(() => { setPreferFirstRow(true) })
+  }, [firstRowFocus.ref])
 
   useTVNavigationBack(componentId)
   useTVRemoteActions({
     playPause: () => { if (list.length) void handlePlay(0) },
+    down: () => { if (actionFocusedRef.current) focusFirstRow() },
     menu: () => { pushTVSettingsScreen(componentId) },
   })
 
@@ -81,12 +93,19 @@ function TVDetail({ componentId, payload }: Props) {
   const getRowHandle = (key?: string | null) => key && rowRefs.current[key] ? findNodeHandle(rowRefs.current[key]) : null
   const bindRowRef = (key: string, syncFirst = false) => (node: FocusNode) => {
     rowRefs.current[key] = node
-    if (syncFirst) firstRowFocus.ref.current = node as any
+    if (syncFirst && node && firstRowFocus.ref.current !== node) {
+      firstRowFocus.ref.current = node as any
+      queueFocusRefresh()
+    }
   }
 
   const handleFocus = (index: number) => {
+    if (preferFirstRow) setPreferFirstRow(false)
     listRef.current?.scrollToOffset({ offset: Math.max(0, index * ITEM_SIZE - ITEM_SIZE), animated: true })
   }
+
+  const handleActionFocus = () => { actionFocusedRef.current = true }
+  const handleActionBlur = () => { actionFocusedRef.current = false }
 
   const handlePlay = async(index = 0) => {
     if (payload.type === 'board') await handleBoardPlay(payload.id, list, index)
@@ -94,32 +113,69 @@ function TVDetail({ componentId, payload }: Props) {
     pushTVPlayerScreen(componentId)
   }
 
+  const statsText = loading
+    ? tvText.loadingSongs
+    : error
+      ? `${tvText.loadFailed}${dot}${error}`
+      : `${tvText.loaded} ${list.length} ${tvText.songs}${total ? ` / ${total} ${tvText.songs}` : ''}`
+
   return (
-    <TVAppleScaffold image={image}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId={payload.type === 'board' ? 'new' : 'home'} subtitle={tvText.detailSubtitle} />
+    <TVAppleScaffold image={image} immersive contentStyle={styles.scaffoldContent}>
+      <TVTopTabs items={createTVTabs(componentId)} activeId={payload.type === 'board' ? 'new' : 'home'} subtitle={tvText.detailSubtitle} nextFocusDown={playAllFocus.getNodeHandle() ?? undefined} />
       <View style={styles.root}>
-        <TVGlassPanel style={styles.hero} accent>
-          <View style={styles.cover}>
-            {image ? <Image url={image} style={styles.coverImage as ImageStyle} resizeMode="cover" /> : <TVText variant="pageTitle" color={tvColors.primaryHigh} style={styles.coverPlaceholder}>{(payload.title || '?').slice(0, 1)}</TVText>}
-          </View>
-          <View style={styles.heroInfo}>
-            <TVText variant="caption" color={tvColors.primaryHigh}>{heroMeta}</TVText>
-            <TVText variant="pageTitle" style={styles.title} numberOfLines={2}>{payload.title}</TVText>
-            <TVText variant="meta" style={styles.desc} numberOfLines={4}>{payload.subtitle ?? (payload.type === 'songlist' ? payload.songlist.desc : tvText.selectedListDesc)}</TVText>
-            <View style={styles.actions}>
-              <TVButton ref={playAllFocus.ref as any} label={loading ? tvText.loading : tvText.playAll} onPress={() => { void handlePlay(0) }} hasTVPreferredFocus nextFocusRight={backFocus.getNodeHandle() ?? undefined} nextFocusDown={firstRowFocus.getNodeHandle() ?? undefined} />
-              <TVButton ref={backFocus.ref as any} label={tvText.back} tone="dark" onPress={() => { void pop(componentId) }} nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined} nextFocusDown={firstRowFocus.getNodeHandle() ?? undefined} />
+        <View style={styles.stage}>
+          <View style={styles.coverStage}>
+            <View style={styles.coverGlow} />
+            <View style={styles.coverFrame}>
+              {image ? <Image url={image} style={styles.coverImage as ImageStyle} resizeMode="cover" /> : <TVText variant="pageTitle" color={tvColors.primaryHigh} style={styles.coverPlaceholder}>{(payload.title || '?').slice(0, 1)}</TVText>}
             </View>
-            <TVText variant="caption" style={styles.stats}>{loading ? tvText.loadingSongs : error ? `${tvText.loadFailed}${dot}${error}` : `${tvText.loaded} ${list.length} ${tvText.songs}${total ? ` / ${total} ${tvText.songs}` : ''}`}</TVText>
+            <View style={styles.coverReflection} />
           </View>
-        </TVGlassPanel>
+
+          <View style={styles.heroInfo}>
+            <View style={styles.kickerRow}>
+              <TVText variant="caption" color={tvColors.primaryHigh} numberOfLines={1} style={styles.kicker}>{heroMeta}</TVText>
+            </View>
+            <TVText variant="pageTitle" style={styles.title} numberOfLines={2}>{payload.title}</TVText>
+            <TVText variant="meta" style={styles.desc} numberOfLines={3}>{payload.subtitle ?? (payload.type === 'songlist' ? payload.songlist.desc : tvText.selectedListDesc)}</TVText>
+            <View style={styles.actions}>
+              <TVButton
+                ref={playAllFocus.ref as any}
+                label={loading ? tvText.loading : tvText.playAll}
+                style={styles.actionButton}
+                onPress={() => { void handlePlay(0) }}
+                onFocus={handleActionFocus}
+                onBlur={handleActionBlur}
+                hasTVPreferredFocus
+                nextFocusRight={backFocus.getNodeHandle() ?? undefined}
+                nextFocusDown={firstRowFocus.getNodeHandle() ?? undefined}
+              />
+              <TVButton
+                ref={backFocus.ref as any}
+                label={tvText.back}
+                tone="dark"
+                style={styles.backButton}
+                onPress={() => { void pop(componentId) }}
+                onFocus={handleActionFocus}
+                onBlur={handleActionBlur}
+                nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
+                nextFocusRight={firstRowFocus.getNodeHandle() ?? undefined}
+                nextFocusDown={firstRowFocus.getNodeHandle() ?? undefined}
+              />
+            </View>
+          </View>
+        </View>
 
         <TVGlassPanel style={styles.listPanel}>
-          <TVText variant="sectionTitle">{tvText.songList}</TVText>
+          <View style={styles.listHeader}>
+            <TVText variant="sectionTitle" style={styles.listTitle}>{tvText.songList}</TVText>
+            <TVText variant="caption" color={tvColors.primaryHigh}>{statsText}</TVText>
+          </View>
           <FlatList
             ref={listRef}
             data={list}
             keyExtractor={getRowKey}
+            style={styles.list}
             showsVerticalScrollIndicator={false}
             removeClippedSubviews={false}
             contentContainerStyle={styles.listContent}
@@ -136,9 +192,11 @@ function TVDetail({ componentId, payload }: Props) {
                   subtitle={`${item.singer ?? tvText.unknownSinger}${dot}${item.meta.albumName ?? tvText.unknownAlbum}`}
                   meta={item.interval ?? getSourceName(item.source)}
                   badge={index < 3 ? tvText.hotChart : undefined}
+                  hasTVPreferredFocus={preferFirstRow && index === 0}
                   onFocus={() => { handleFocus(index) }}
                   onPress={() => { void handlePlay(index) }}
                   nextFocusUp={index === 0 ? playAllFocus.getNodeHandle() ?? undefined : getRowHandle(prevKey) ?? undefined}
+                  nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
                   nextFocusDown={getRowHandle(nextKey) ?? undefined}
                 />
               )
@@ -151,18 +209,64 @@ function TVDetail({ componentId, payload }: Props) {
 }
 
 const styles: Record<string, ViewStyle | TextStyle | ImageStyle | any> = {
-  root: { flex: 1, flexDirection: 'row', gap: 28 },
-  hero: { width: 440, padding: 26 },
-  cover: { width: 300, height: 300, borderRadius: 36, overflow: 'hidden', backgroundColor: tvColors.surfaceWarm, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: tvColors.line },
+  scaffoldContent: { paddingTop: 30, paddingBottom: 38 },
+  root: { flex: 1, flexDirection: 'row', gap: 24, alignItems: 'stretch' },
+  stage: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 18, paddingRight: 2 },
+  coverStage: { width: 188, height: 300, alignItems: 'center', justifyContent: 'center' },
+  coverGlow: {
+    position: 'absolute',
+    width: 198,
+    height: 198,
+    borderRadius: 44,
+    backgroundColor: 'rgba(216,230,255,0.16)',
+    top: 32,
+    opacity: 0.9,
+  },
+  coverFrame: {
+    width: 184,
+    height: 184,
+    borderRadius: 26,
+    overflow: 'hidden',
+    backgroundColor: tvColors.surfaceWarm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.34)',
+    elevation: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.45,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 22 },
+  },
   coverImage: { width: '100%', height: '100%' },
-  coverPlaceholder: { fontSize: 120, fontWeight: '900', opacity: 0.5 },
-  heroInfo: { marginTop: 24 },
-  title: { marginTop: 10, lineHeight: 54 },
-  desc: { marginTop: 12, lineHeight: 24 },
-  actions: { flexDirection: 'row', gap: 14, marginTop: 24 },
-  stats: { marginTop: 14 },
-  listPanel: { flex: 1, padding: 26 },
-  listContent: { paddingTop: 12, paddingBottom: 20 },
+  coverPlaceholder: { fontSize: 76, fontWeight: '900', opacity: 0.5 },
+  coverReflection: {
+    width: 146,
+    height: 46,
+    marginTop: 12,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    transform: [{ scaleY: 0.42 }],
+    opacity: 0.72,
+  },
+  heroInfo: { flex: 1, minWidth: 0, justifyContent: 'center', paddingBottom: 18 },
+  kickerRow: { flexDirection: 'row', alignItems: 'center', maxWidth: '100%' },
+  kicker: { flexShrink: 1 },
+  title: { marginTop: 14, lineHeight: 42, fontSize: 36 },
+  desc: { marginTop: 12, lineHeight: 22, color: tvColors.subtext },
+  actions: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  actionButton: { minWidth: 118, minHeight: 50, paddingHorizontal: 18, paddingVertical: 12 },
+  backButton: { minWidth: 88, minHeight: 50, paddingHorizontal: 18, paddingVertical: 12 },
+  listPanel: {
+    width: 376,
+    padding: 22,
+    backgroundColor: 'rgba(10,14,24,0.55)',
+    borderColor: 'rgba(255,255,255,0.24)',
+  },
+  listHeader: { minHeight: 42, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
+  listTitle: { fontSize: 25 },
+  list: { flex: 1 },
+  listContent: { paddingTop: 14, paddingBottom: 18, gap: 10 },
   empty: { marginTop: 18 },
 }
 

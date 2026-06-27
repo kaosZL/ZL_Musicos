@@ -24,6 +24,7 @@ const styles: Record<string, ViewStyle | TextStyle> = {
     borderWidth: 1,
     borderColor: tvColors.border,
     padding: 24,
+    overflow: 'hidden',
   },
   subtitle: {
     marginTop: 7,
@@ -31,6 +32,7 @@ const styles: Record<string, ViewStyle | TextStyle> = {
   },
   body: {
     marginTop: 20,
+    flex: 1,
   },
 }
 
