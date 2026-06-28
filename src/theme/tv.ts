@@ -1,3 +1,36 @@
+import { Dimensions, PixelRatio } from 'react-native'
+
+const TV_BASE_WIDTH = 1280
+const TV_BASE_HEIGHT = 720
+const TV_UHD_EDGE = 3000
+
+export const getTVLayoutMetrics = (width: number, height: number, pixelRatio = PixelRatio.get()) => {
+  const longEdge = Math.max(width, height)
+  const shortEdge = Math.min(width, height)
+  const physicalLongEdge = longEdge * pixelRatio
+  const physicalShortEdge = shortEdge * pixelRatio
+  const logicalScale = Math.min(width / TV_BASE_WIDTH, height / TV_BASE_HEIGHT)
+  const isUhd = longEdge >= TV_UHD_EDGE || physicalLongEdge >= TV_UHD_EDGE || physicalShortEdge >= 1700
+  const minScale = shortEdge < 650 ? 0.9 : 1
+  const maxScale = isUhd ? 1.4 : 1.2
+  const scale = Math.max(minScale, Math.min(logicalScale, maxScale))
+  const fontScale = Math.max(minScale, Math.min(scale, isUhd ? 1.32 : 1.16))
+
+  return {
+    width,
+    height,
+    pixelRatio,
+    isUhd,
+    scale,
+    fontScale,
+  }
+}
+
+const initialWindow = Dimensions.get('window')
+export const tvMetrics = getTVLayoutMetrics(initialWindow.width, initialWindow.height)
+export const tvSize = (value: number) => Math.round(value * tvMetrics.scale)
+export const tvFont = (value: number) => Math.round(value * tvMetrics.fontScale)
+
 export const tvColors = {
   bg: '#0a0d15',
   bgDeep: '#060810',
@@ -30,21 +63,21 @@ export const tvColors = {
 } as const
 
 export const tvTokens = {
-  radius: 22,
-  radiusLg: 30,
-  radiusXl: 38,
+  radius: tvSize(22),
+  radiusLg: tvSize(30),
+  radiusXl: tvSize(38),
   radiusPill: 999,
-  gap: 22,
-  cardPad: 22,
-  pagePadX: 68,
-  pagePadY: 34,
-  title: 44,
-  subtitle: 21,
-  body: 19,
-  caption: 15,
-  nav: 20,
-  cardTitle: 22,
-  heroTitle: 56,
-  railTitle: 28,
+  gap: tvSize(22),
+  cardPad: tvSize(22),
+  pagePadX: tvSize(68),
+  pagePadY: tvSize(34),
+  title: tvFont(44),
+  subtitle: tvFont(21),
+  body: tvFont(19),
+  caption: tvFont(15),
+  nav: tvFont(20),
+  cardTitle: tvFont(22),
+  heroTitle: tvFont(56),
+  railTitle: tvFont(28),
   focusScale: 1.06,
 } as const

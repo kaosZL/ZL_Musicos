@@ -1,7 +1,7 @@
 import { memo, type PropsWithChildren } from 'react'
 import { View, type ViewStyle } from 'react-native'
 import TVText from './TVText'
-import { tvColors } from '@/theme/tv'
+import { tvColors, tvSize } from '@/theme/tv'
 
 interface Props {
   progressPercent: number
@@ -30,7 +30,7 @@ const styles: Record<string, ViewStyle> = {
     paddingTop: 0,
   },
   progressTrack: {
-    height: 4,
+    height: tvSize(4),
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.18)',
     overflow: 'hidden',
@@ -43,12 +43,12 @@ const styles: Record<string, ViewStyle> = {
   timeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 6,
+    marginTop: tvSize(6),
     opacity: 0.70,
   },
   controls: {
     position: 'absolute',
-    marginTop: 8,
+    marginTop: tvSize(8),
     flexDirection: 'column',
     alignItems: 'flex-end',
     justifyContent: 'center',

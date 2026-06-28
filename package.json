@@ -1,7 +1,7 @@
 {
     "name":  "lx-music-mobile",
-    "version":  "1.8.4",
-    "versionCode":  76,
+    "version":  "1.8.5",
+    "versionCode":  77,
     "private":  true,
     "scripts":  {
                     "bundle-android":  "react-native bundle --platform android --dev true --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res",

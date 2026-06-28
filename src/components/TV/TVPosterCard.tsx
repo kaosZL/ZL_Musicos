@@ -3,7 +3,7 @@ import { View, type ImageStyle, type TextStyle, type ViewStyle } from 'react-nat
 import Image from '@/components/common/Image'
 import Focusable from './Focusable'
 import TVText from './TVText'
-import { tvColors, tvTokens } from '@/theme/tv'
+import { tvColors, tvFont, tvSize, tvTokens } from '@/theme/tv'
 
 interface Props extends Omit<ComponentProps<typeof Focusable>, 'children'> {
   title: string
@@ -15,10 +15,10 @@ interface Props extends Omit<ComponentProps<typeof Focusable>, 'children'> {
 }
 
 const sizes = {
-  hero: { width: 390, height: 220 },
-  large: { width: 250, height: 250 },
-  medium: { width: 210, height: 210 },
-  wide: { width: 330, height: 186 },
+  hero: { width: tvSize(390), height: tvSize(220) },
+  large: { width: tvSize(250), height: tvSize(250) },
+  medium: { width: tvSize(210), height: tvSize(210) },
+  wide: { width: tvSize(330), height: tvSize(186) },
 }
 
 const TVPosterCard = forwardRef<any, Props>(({ title, subtitle, meta, image, size = 'medium', tint = tvColors.primary, style, ...props }, ref) => {
@@ -40,7 +40,7 @@ const TVPosterCard = forwardRef<any, Props>(({ title, subtitle, meta, image, siz
 const styles: Record<string, ViewStyle | TextStyle> = {
   root: {
     borderRadius: tvTokens.radiusLg,
-    padding: 8,
+    padding: tvSize(8),
   },
   focus: {
     backgroundColor: 'rgba(255,255,255,0.08)',
@@ -66,19 +66,19 @@ const styles: Record<string, ViewStyle | TextStyle> = {
     backgroundColor: 'rgba(0,0,0,0.12)',
   },
   placeholder: {
-    fontSize: 74,
+    fontSize: tvFont(74),
     color: 'rgba(255,255,255,0.88)',
   },
   title: {
-    marginTop: 14,
-    fontSize: 21,
+    marginTop: tvSize(14),
+    fontSize: tvFont(21),
   },
   subtitle: {
-    marginTop: 5,
+    marginTop: tvSize(5),
     color: tvColors.subtext,
   },
   meta: {
-    marginTop: 3,
+    marginTop: tvSize(3),
     color: tvColors.dimText,
   },
 }

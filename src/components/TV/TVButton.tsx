@@ -1,7 +1,7 @@
 import { forwardRef, memo, type ComponentProps } from 'react'
 import { Text, View, type TextStyle, type ViewStyle } from 'react-native'
 import Focusable from './Focusable'
-import { tvColors, tvTokens } from '@/theme/tv'
+import { tvColors, tvFont, tvSize, tvTokens } from '@/theme/tv'
 
 interface Props extends Omit<ComponentProps<typeof Focusable>, 'children'> {
   label: string
@@ -40,9 +40,9 @@ const TVButtonBase = forwardRef<any, Props>(({ label, tone = 'primary', style, f
 
 const styles: Record<string, ViewStyle | TextStyle> = {
   root: {
-    minHeight: 54,
-    paddingHorizontal: 26,
-    paddingVertical: 14,
+    minHeight: tvSize(54),
+    paddingHorizontal: tvSize(26),
+    paddingVertical: tvSize(14),
     borderRadius: tvTokens.radiusPill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -74,7 +74,7 @@ const styles: Record<string, ViewStyle | TextStyle> = {
   },
   text: {
     fontWeight: '900',
-    fontSize: 18,
+    fontSize: tvFont(18),
   },
   primaryText: {
     color: tvColors.bgDeep,

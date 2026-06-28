@@ -1,7 +1,7 @@
 import { memo, type PropsWithChildren } from 'react'
 import { View, type TextStyle, type ViewStyle } from 'react-native'
 import TVText from './TVText'
-import { tvColors, tvTokens } from '@/theme/tv'
+import { tvColors, tvSize, tvTokens } from '@/theme/tv'
 
 interface Props {
   title: string
@@ -23,15 +23,15 @@ const styles: Record<string, ViewStyle | TextStyle> = {
     backgroundColor: 'rgba(255,255,255,0.09)',
     borderWidth: 1,
     borderColor: tvColors.border,
-    padding: 24,
+    padding: tvSize(24),
     overflow: 'hidden',
   },
   subtitle: {
-    marginTop: 7,
+    marginTop: tvSize(7),
     color: tvColors.dimText,
   },
   body: {
-    marginTop: 20,
+    marginTop: tvSize(20),
     flex: 1,
   },
 }

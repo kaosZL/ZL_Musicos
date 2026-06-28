@@ -2,7 +2,7 @@ import { forwardRef, memo, useRef, type ComponentProps, type ComponentRef, type 
 import { View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
 import Focusable from './Focusable'
 import TVText from './TVText'
-import { tvColors, tvTokens } from '@/theme/tv'
+import { tvColors, tvSize, tvTokens } from '@/theme/tv'
 
 export interface TVTabItem {
   id: string
@@ -70,18 +70,18 @@ const TVTopTabs = ({ items, activeId, subtitle, hasTVPreferredFocus, nextFocusDo
 
 const styles: Record<string, ViewStyle | TextStyle> = {
   root: {
-    minHeight: 74,
+    minHeight: tvSize(74),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 28,
-    marginBottom: 26,
+    gap: tvSize(28),
+    marginBottom: tvSize(26),
   },
   brandWrap: {
-    minWidth: 240,
+    minWidth: tvSize(240),
   },
   subtitle: {
-    marginTop: 4,
+    marginTop: tvSize(4),
     color: tvColors.dimText,
   },
   tabs: {
@@ -89,11 +89,11 @@ const styles: Record<string, ViewStyle | TextStyle> = {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    gap: 8,
+    gap: tvSize(8),
   },
   tab: {
-    minHeight: 48,
-    paddingHorizontal: 20,
+    minHeight: tvSize(48),
+    paddingHorizontal: tvSize(20),
     borderRadius: tvTokens.radiusPill,
     alignItems: 'center',
     justifyContent: 'center',

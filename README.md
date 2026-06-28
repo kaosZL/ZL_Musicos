@@ -39,7 +39,19 @@ ZL-Music TV 是基于 [lx-music-mobile 1.8.4](https://github.com/lyswhut/lx-musi
 - 设置页音源列表限制在卡片内部滚动，不再溢出背景块。
 - 播放页参考 Apple Music TV 的比例重新布局：左侧封面、右侧歌词、底部进度条、右下角圆形控制按钮。
 - 播放页新增播放方式圆形按钮，支持列表循环、随机、顺序、单曲循环等模式切换。
-- 所有 TV 页面统一为 Apple Music TV 风格的专辑图模糊暗场背景。
+- 适配 75 寸 4K Android TV：针对 3840x2160 大屏限制 UI 最大缩放，提升远距离可读性，并降低 4K 背景模糊开销。
+- APK Manifest 显式声明 Wi-Fi、以太网、触摸屏、faketouch、leanback 均非必需，减少电视安装器误判“不兼容”。
+
+## 适配设备
+
+已按用户电视信息做专项适配：
+
+- 型号：FF 75S595C Ultra / 75S595C Ultra
+- 分辨率：3840x2160
+- 内存：4GB
+- 存储：64GB
+
+如果电视不确定 CPU 架构，优先安装 `universal` 包；多数 Android TV 可先尝试 `arm64-v8a` 包。
 
 ## 遥控器操作
 
@@ -76,11 +88,11 @@ npm run tv:assemble
 构建产物位于：
 
 ```text
-android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-x86.apk
-android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-x86_64.apk
-android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-arm64-v8a.apk
-android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-armeabi-v7a.apk
-android/app/build/outputs/apk/debug/lx-music-mobile-v1.8.4-universal.apk
+android/app/build/outputs/apk/release/lx-music-mobile-v1.8.5-x86.apk
+android/app/build/outputs/apk/release/lx-music-mobile-v1.8.5-x86_64.apk
+android/app/build/outputs/apk/release/lx-music-mobile-v1.8.5-arm64-v8a.apk
+android/app/build/outputs/apk/release/lx-music-mobile-v1.8.5-armeabi-v7a.apk
+android/app/build/outputs/apk/release/lx-music-mobile-v1.8.5-universal.apk
 ```
 
 夜神模拟器优先使用 `x86` 包；真机或电视盒子不确定架构时可使用 `universal` 包。
@@ -97,7 +109,7 @@ npm run tv:deploy
 
 ```bash
 C:\Data\NOX\Nox\bin\nox_adb.exe connect 127.0.0.1:62001
-C:\Data\NOX\Nox\bin\nox_adb.exe -s 127.0.0.1:62001 install -r android\app\build\outputs\apk\debug\lx-music-mobile-v1.8.4-x86.apk
+C:\Data\NOX\Nox\bin\nox_adb.exe -s 127.0.0.1:62001 install -r android\app\build\outputs\apk\release\lx-music-mobile-v1.8.5-x86.apk
 C:\Data\NOX\Nox\bin\nox_adb.exe -s 127.0.0.1:62001 shell am start -n cn.toside.music.mobile/.MainActivity
 ```
 
@@ -110,11 +122,12 @@ npm run tv:lint
 本次发布前已验证：
 
 ```bash
-npx eslint src\screens\TV\Player.tsx src\components\TV\TVRoundControl.tsx src\components\TV\TVAppleScaffold.tsx
+npm run tv:lint
 npm run tv:assemble
+aapt dump badging android/app/build/outputs/apk/release/lx-music-mobile-v1.8.5-universal.apk
 ```
 
-并在夜神模拟器 `127.0.0.1:62001` 上实际巡检了首页、排行榜、榜单详情、搜索、设置和播放页。
+`aapt` 已确认 release 包没有 `application-debuggable`，并且 Wi-Fi、以太网、触摸屏等硬件特性均为 `uses-feature-not-required`。
 
 ## 目录结构
 
@@ -124,19 +137,19 @@ src/
   screens/TV/         TV 首页、排行榜、搜索、设置、播放页、队列页
   theme/tv.ts         TV 端颜色、圆角、间距、字号等设计 token
 scripts/
-  tv-build.cjs        构建 TV APK
+  tv-build.cjs        构建 TV release APK
   tv-install.cjs      安装 APK
   tv-launch.cjs       启动应用
-docs/screenshots/     README 使用的 TV 实机截图
+docs/screenshots/     README 使用的 TV 截图
 ```
 
 ## 发布说明
 
 GitHub Releases / Tags 会上传最新构建好的 APK。推荐下载：
 
-- `lx-music-mobile-v1.8.4-x86.apk`：夜神模拟器。
-- `lx-music-mobile-v1.8.4-arm64-v8a.apk`：大多数 64 位 Android TV / 盒子。
-- `lx-music-mobile-v1.8.4-universal.apk`：不确定设备架构时使用。
+- `lx-music-mobile-v1.8.5-arm64-v8a.apk`：大多数 64 位 Android TV / 盒子。
+- `lx-music-mobile-v1.8.5-universal.apk`：不确定设备架构时使用。
+- `lx-music-mobile-v1.8.5-x86.apk`：夜神模拟器。
 
 ## 致谢
 

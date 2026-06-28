@@ -8,7 +8,7 @@ import TVMusicRow from '@/components/TV/TVMusicRow'
 import TVGlassPanel from '@/components/TV/TVGlassPanel'
 import TVSearchKeyboard from '@/components/TV/TVSearchKeyboard'
 import Focusable from '@/components/TV/Focusable'
-import { tvColors } from '@/theme/tv'
+import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { search } from '@/core/search/music'
 import searchMusicState from '@/store/search/music/state'
 import { pushTVPlayerScreen, pushTVSettingsScreen } from '@/navigation/navigation'
@@ -33,7 +33,7 @@ type TVTextInputProps = TextInputProps & {
 }
 
 const TVTextInput = TextInput as React.ComponentType<TVTextInputProps & { ref?: React.Ref<ComponentRef<typeof TextInput>> }>
-const RESULT_ITEM_SIZE = 78
+const RESULT_ITEM_SIZE = tvSize(78)
 const hotWords = ['\u5468\u6770\u4f26', '\u6797\u4fca\u6770', '\u9648\u5955\u8fc5']
 
 const getHandleFromMap = (mapRef: MutableRefObject<FocusRefMap>, key?: string | null) => {
@@ -199,20 +199,20 @@ function TVSearch({ componentId }: { componentId: string }) {
 }
 
 const styles: Record<string, ViewStyle | TextStyle | any> = {
-  root: { flex: 1, flexDirection: 'row', gap: 24 },
-  leftPanel: { width: 420, paddingHorizontal: 30, paddingVertical: 18 },
-  pageTitle: { fontSize: 34, lineHeight: 40 },
-  inputRow: { flexDirection: 'row', gap: 12, marginTop: 12 },
-  input: { flex: 1, minHeight: 46, color: tvColors.text, backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: 20, paddingHorizontal: 16, fontSize: 17, borderWidth: 1, borderColor: tvColors.border },
-  blockTitle: { marginTop: 12, fontSize: 20 },
-  hotWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, marginBottom: 12 },
-  hotItem: { minHeight: 32, borderRadius: 999, paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: tvColors.border },
-  resultPanel: { flex: 1, paddingHorizontal: 30, paddingVertical: 26, backgroundColor: 'rgba(10,13,21,0.96)' },
-  resultHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 },
-  resultContent: { paddingBottom: 20 },
-  footer: { alignItems: 'center', paddingVertical: 18 },
-  line: { marginTop: 8 },
-  error: { marginBottom: 12 },
+  root: { flex: 1, flexDirection: 'row', gap: tvSize(24) },
+  leftPanel: { width: tvSize(420), paddingHorizontal: tvSize(30), paddingVertical: tvSize(18) },
+  pageTitle: { fontSize: tvFont(34), lineHeight: tvFont(40) },
+  inputRow: { flexDirection: 'row', gap: tvSize(12), marginTop: tvSize(12) },
+  input: { flex: 1, minHeight: tvSize(46), color: tvColors.text, backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: tvSize(20), paddingHorizontal: tvSize(16), fontSize: tvFont(17), borderWidth: 1, borderColor: tvColors.border },
+  blockTitle: { marginTop: tvSize(12), fontSize: tvFont(20) },
+  hotWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: tvSize(8), marginTop: tvSize(8), marginBottom: tvSize(12) },
+  hotItem: { minHeight: tvSize(32), borderRadius: 999, paddingHorizontal: tvSize(13), alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: tvColors.border },
+  resultPanel: { flex: 1, paddingHorizontal: tvSize(30), paddingVertical: tvSize(26), backgroundColor: 'rgba(10,13,21,0.96)' },
+  resultHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: tvSize(18) },
+  resultContent: { paddingBottom: tvSize(20) },
+  footer: { alignItems: 'center', paddingVertical: tvSize(18) },
+  line: { marginTop: tvSize(8) },
+  error: { marginBottom: tvSize(12) },
 }
 
 export default memo(TVSearch)

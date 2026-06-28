@@ -1,6 +1,6 @@
 import { memo, type PropsWithChildren } from 'react'
 import { Text, type TextProps, type TextStyle } from 'react-native'
-import { tvColors, tvTokens } from '@/theme/tv'
+import { tvColors, tvFont, tvTokens } from '@/theme/tv'
 
 interface Props extends TextProps {
   variant?: 'brand' | 'pageTitle' | 'sectionTitle' | 'cardTitle' | 'body' | 'caption' | 'meta'
@@ -10,7 +10,7 @@ interface Props extends TextProps {
 const variants: Record<NonNullable<Props['variant']>, TextStyle> = {
   brand: {
     color: tvColors.text,
-    fontSize: 28,
+    fontSize: tvFont(28),
     fontWeight: '900',
   },
   pageTitle: {
@@ -38,7 +38,7 @@ const variants: Record<NonNullable<Props['variant']>, TextStyle> = {
   },
   meta: {
     color: tvColors.subtext,
-    fontSize: 15,
+    fontSize: tvFont(15),
   },
 }
 

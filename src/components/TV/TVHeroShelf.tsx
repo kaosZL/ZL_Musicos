@@ -2,7 +2,7 @@ import { memo, type PropsWithChildren } from 'react'
 import { View, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native'
 import Image from '@/components/common/Image'
 import TVText from './TVText'
-import { tvColors, tvTokens } from '@/theme/tv'
+import { tvColors, tvFont, tvSize, tvTokens } from '@/theme/tv'
 
 interface Props {
   kicker?: string
@@ -28,9 +28,9 @@ const TVHeroShelf = ({ kicker, title, subtitle, image, style, children }: PropsW
 
 const styles: Record<string, ViewStyle | TextStyle | ImageStyle> = {
   root: {
-    minHeight: 300,
+    minHeight: tvSize(300),
     borderRadius: tvTokens.radiusXl,
-    padding: 32,
+    padding: tvSize(32),
     flexDirection: 'row',
     overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.075)',
@@ -40,33 +40,33 @@ const styles: Record<string, ViewStyle | TextStyle | ImageStyle> = {
   copy: {
     flex: 1,
     justifyContent: 'center',
-    paddingRight: 30,
+    paddingRight: tvSize(30),
   },
   kicker: {
     color: tvColors.primaryHigh,
     fontWeight: '900',
-    letterSpacing: 1.4,
+    letterSpacing: 1.2,
   },
   title: {
-    marginTop: 10,
+    marginTop: tvSize(10),
     fontSize: tvTokens.heroTitle,
-    lineHeight: 66,
+    lineHeight: tvFont(66),
   },
   subtitle: {
-    marginTop: 12,
+    marginTop: tvSize(12),
     color: tvColors.subtext,
-    lineHeight: 29,
+    lineHeight: tvFont(29),
   },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    marginTop: 28,
+    gap: tvSize(14),
+    marginTop: tvSize(28),
   },
   coverWrap: {
-    width: 276,
-    height: 276,
-    borderRadius: 36,
+    width: tvSize(276),
+    height: tvSize(276),
+    borderRadius: tvSize(36),
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -77,7 +77,7 @@ const styles: Record<string, ViewStyle | TextStyle | ImageStyle> = {
     height: '100%',
   },
   placeholder: {
-    fontSize: 110,
+    fontSize: tvFont(110),
   },
 }
 

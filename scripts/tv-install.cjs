@@ -14,7 +14,7 @@ if (args.has('--devices')) {
 }
 
 if (!fs.existsSync(apkPath) || args.has('--build')) {
-  runGradle([':app:assembleDebug', '--stacktrace'])
+  runGradle([':app:assembleRelease', '--stacktrace'])
 }
 
 ensureDeviceConnected()

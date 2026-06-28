@@ -2,7 +2,7 @@ import { forwardRef, memo, useCallback, useEffect, useRef, useState, type Compon
 import { View, type ImageStyle, type ViewStyle } from 'react-native'
 import Image from '@/components/common/Image'
 import { getPicUrl } from '@/core/music/online'
-import { tvColors } from '@/theme/tv'
+import { tvColors, tvSize } from '@/theme/tv'
 import Focusable from './Focusable'
 import TVText from './TVText'
 
@@ -79,10 +79,10 @@ const TVMusicRow = forwardRef<any, Props>(({
 
 const styles: Record<string, ViewStyle | any> = {
   root: {
-    minHeight: 72,
-    borderRadius: 18,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
+    minHeight: tvSize(72),
+    borderRadius: tvSize(18),
+    paddingHorizontal: tvSize(18),
+    paddingVertical: tvSize(11),
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'stretch',
@@ -99,16 +99,16 @@ const styles: Record<string, ViewStyle | any> = {
     backgroundColor: tvColors.surfaceRed,
   },
   indexBox: {
-    width: 50,
+    width: tvSize(50),
   },
   art: {
-    width: 58,
-    height: 58,
-    borderRadius: 14,
+    width: tvSize(58),
+    height: tvSize(58),
+    borderRadius: tvSize(14),
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: tvSize(16),
     backgroundColor: tvColors.surfaceWarm,
     borderWidth: 1,
     borderColor: tvColors.line,
@@ -124,17 +124,17 @@ const styles: Record<string, ViewStyle | any> = {
   info: {
     flex: 1,
     minWidth: 0,
-    paddingRight: 12,
+    paddingRight: tvSize(12),
   },
   subtitle: {
-    marginTop: 6,
+    marginTop: tvSize(6),
   },
   meta: {
-    minWidth: 86,
+    minWidth: tvSize(86),
     alignItems: 'flex-end',
   },
   metaText: {
-    marginTop: 4,
+    marginTop: tvSize(4),
   },
 }
 

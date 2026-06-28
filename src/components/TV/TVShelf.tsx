@@ -1,7 +1,7 @@
 import { memo, type PropsWithChildren } from 'react'
 import { ScrollView, View, type TextStyle, type ViewStyle } from 'react-native'
 import TVText from './TVText'
-import { tvColors } from '@/theme/tv'
+import { tvColors, tvSize } from '@/theme/tv'
 
 interface Props {
   title: string
@@ -29,21 +29,21 @@ const TVShelf = ({ title, subtitle, horizontal = true, style, contentStyle, chil
 
 const styles: Record<string, ViewStyle | TextStyle> = {
   root: {
-    marginTop: 28,
+    marginTop: tvSize(28),
   },
   header: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: tvSize(14),
   },
   subtitle: {
     color: tvColors.dimText,
   },
   row: {
-    gap: 18,
-    paddingRight: 48,
-    paddingBottom: 10,
+    gap: tvSize(18),
+    paddingRight: tvSize(48),
+    paddingBottom: tvSize(10),
   },
 }
 

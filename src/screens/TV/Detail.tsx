@@ -8,7 +8,7 @@ import TVMusicRow from '@/components/TV/TVMusicRow'
 import TVGlassPanel from '@/components/TV/TVGlassPanel'
 import type Focusable from '@/components/TV/Focusable'
 import Image from '@/components/common/Image'
-import { tvColors } from '@/theme/tv'
+import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { pop } from '@/navigation'
 import { pushTVPlayerScreen, pushTVSettingsScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
@@ -25,7 +25,7 @@ import { createTVTabs, getSourceName } from './utils'
 
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
-const ITEM_SIZE = 78
+const ITEM_SIZE = tvSize(78)
 
 interface Props {
   componentId: string
@@ -209,23 +209,23 @@ function TVDetail({ componentId, payload }: Props) {
 }
 
 const styles: Record<string, ViewStyle | TextStyle | ImageStyle | any> = {
-  scaffoldContent: { paddingTop: 30, paddingBottom: 38 },
-  root: { flex: 1, flexDirection: 'row', gap: 24, alignItems: 'stretch' },
-  stage: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 18, paddingRight: 2 },
-  coverStage: { width: 188, height: 300, alignItems: 'center', justifyContent: 'center' },
+  scaffoldContent: { paddingTop: tvSize(30), paddingBottom: tvSize(38) },
+  root: { flex: 1, flexDirection: 'row', gap: tvSize(24), alignItems: 'stretch' },
+  stage: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: tvSize(18), paddingRight: tvSize(2) },
+  coverStage: { width: tvSize(188), height: tvSize(300), alignItems: 'center', justifyContent: 'center' },
   coverGlow: {
     position: 'absolute',
-    width: 198,
-    height: 198,
-    borderRadius: 44,
+    width: tvSize(198),
+    height: tvSize(198),
+    borderRadius: tvSize(44),
     backgroundColor: 'rgba(216,230,255,0.16)',
-    top: 32,
+    top: tvSize(32),
     opacity: 0.9,
   },
   coverFrame: {
-    width: 184,
-    height: 184,
-    borderRadius: 26,
+    width: tvSize(184),
+    height: tvSize(184),
+    borderRadius: tvSize(26),
     overflow: 'hidden',
     backgroundColor: tvColors.surfaceWarm,
     alignItems: 'center',
@@ -235,39 +235,39 @@ const styles: Record<string, ViewStyle | TextStyle | ImageStyle | any> = {
     elevation: 24,
     shadowColor: '#000',
     shadowOpacity: 0.45,
-    shadowRadius: 30,
-    shadowOffset: { width: 0, height: 22 },
+    shadowRadius: tvSize(30),
+    shadowOffset: { width: 0, height: tvSize(22) },
   },
   coverImage: { width: '100%', height: '100%' },
-  coverPlaceholder: { fontSize: 76, fontWeight: '900', opacity: 0.5 },
+  coverPlaceholder: { fontSize: tvFont(76), fontWeight: '900', opacity: 0.5 },
   coverReflection: {
-    width: 146,
-    height: 46,
-    marginTop: 12,
-    borderRadius: 40,
+    width: tvSize(146),
+    height: tvSize(46),
+    marginTop: tvSize(12),
+    borderRadius: tvSize(40),
     backgroundColor: 'rgba(255,255,255,0.07)',
     transform: [{ scaleY: 0.42 }],
     opacity: 0.72,
   },
-  heroInfo: { flex: 1, minWidth: 0, justifyContent: 'center', paddingBottom: 18 },
+  heroInfo: { flex: 1, minWidth: 0, justifyContent: 'center', paddingBottom: tvSize(18) },
   kickerRow: { flexDirection: 'row', alignItems: 'center', maxWidth: '100%' },
   kicker: { flexShrink: 1 },
-  title: { marginTop: 14, lineHeight: 42, fontSize: 36 },
-  desc: { marginTop: 12, lineHeight: 22, color: tvColors.subtext },
-  actions: { flexDirection: 'row', gap: 12, marginTop: 20 },
-  actionButton: { minWidth: 118, minHeight: 50, paddingHorizontal: 18, paddingVertical: 12 },
-  backButton: { minWidth: 88, minHeight: 50, paddingHorizontal: 18, paddingVertical: 12 },
+  title: { marginTop: tvSize(14), lineHeight: tvFont(42), fontSize: tvFont(36) },
+  desc: { marginTop: tvSize(12), lineHeight: tvFont(22), color: tvColors.subtext },
+  actions: { flexDirection: 'row', gap: tvSize(12), marginTop: tvSize(20) },
+  actionButton: { minWidth: tvSize(118), minHeight: tvSize(50), paddingHorizontal: tvSize(18), paddingVertical: tvSize(12) },
+  backButton: { minWidth: tvSize(88), minHeight: tvSize(50), paddingHorizontal: tvSize(18), paddingVertical: tvSize(12) },
   listPanel: {
-    width: 376,
-    padding: 22,
+    width: tvSize(376),
+    padding: tvSize(22),
     backgroundColor: 'rgba(10,14,24,0.55)',
     borderColor: 'rgba(255,255,255,0.24)',
   },
-  listHeader: { minHeight: 42, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
-  listTitle: { fontSize: 25 },
+  listHeader: { minHeight: tvSize(42), flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: tvSize(16) },
+  listTitle: { fontSize: tvFont(25) },
   list: { flex: 1 },
-  listContent: { paddingTop: 14, paddingBottom: 18, gap: 10 },
-  empty: { marginTop: 18 },
+  listContent: { paddingTop: tvSize(14), paddingBottom: tvSize(18), gap: tvSize(10) },
+  empty: { marginTop: tvSize(18) },
 }
 
 export default memo(TVDetail)

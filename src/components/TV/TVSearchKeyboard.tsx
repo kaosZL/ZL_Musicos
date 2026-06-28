@@ -2,7 +2,7 @@ import { forwardRef, memo, useMemo, useRef, type ComponentProps, type ComponentR
 import { View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
 import Focusable from './Focusable'
 import TVText from './TVText'
-import { tvColors } from '@/theme/tv'
+import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { tvText } from '@/screens/TV/labels'
 
 interface Props {
@@ -82,11 +82,11 @@ const TVSearchKeyboard = ({ onKeyPress, onBackspace, onClear, onSubmit, firstKey
 }
 
 const styles: Record<string, ViewStyle | TextStyle> = {
-  root: { gap: 5 },
-  row: { flexDirection: 'row', gap: 4 },
-  key: { width: 32, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: tvColors.border, alignItems: 'center', justifyContent: 'center' },
-  keyWide: { width: 82 },
-  keyText: { fontWeight: '900', fontSize: 15 },
+  root: { gap: tvSize(5) },
+  row: { flexDirection: 'row', gap: tvSize(4) },
+  key: { width: tvSize(32), height: tvSize(30), borderRadius: tvSize(15), backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: tvColors.border, alignItems: 'center', justifyContent: 'center' },
+  keyWide: { width: tvSize(82) },
+  keyText: { fontWeight: '900', fontSize: tvFont(15) },
 }
 
 export default memo(TVSearchKeyboard)

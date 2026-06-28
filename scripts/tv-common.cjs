@@ -8,7 +8,9 @@ const androidDir = path.join(projectRoot, 'android')
 const sdkRoot = path.join(workspaceRoot, 'android-sdk')
 const adbPath = path.join(sdkRoot, 'platform-tools', process.platform === 'win32' ? 'adb.exe' : 'adb')
 const noxAdbPath = process.platform === 'win32' ? 'D:\\Program Files\\Nox\\bin\\nox_adb.exe' : ''
-const apkPath = path.join(androidDir, 'app', 'build', 'outputs', 'apk', 'debug', 'lx-music-mobile-v1.8.4-universal.apk')
+const apkBuildType = process.env.TV_APK_BUILD_TYPE || 'release'
+const packageJson = require(path.join(projectRoot, 'package.json'))
+const apkPath = path.join(androidDir, 'app', 'build', 'outputs', 'apk', apkBuildType, `${packageJson.name}-v${packageJson.version}-universal.apk`)
 const appActivity = 'cn.toside.music.mobile/.MainActivity'
 const defaultAdbSerial = process.env.TV_ADB_SERIAL || '127.0.0.1:62001'
 

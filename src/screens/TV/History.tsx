@@ -7,7 +7,7 @@ import TVButton from '@/components/TV/TVButton'
 import TVMusicRow from '@/components/TV/TVMusicRow'
 import TVGlassPanel from '@/components/TV/TVGlassPanel'
 import type Focusable from '@/components/TV/Focusable'
-import { tvColors } from '@/theme/tv'
+import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { getBoardsList } from '@/core/leaderboard'
 import leaderboardState, { type BoardItem } from '@/store/leaderboard/state'
 import { pushTVDetailScreen, pushTVPlayerScreen, pushTVSettingsScreen } from '@/navigation/navigation'
@@ -21,7 +21,7 @@ import { createTVTabs, getSourceName } from './utils'
 
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
-const ITEM_SIZE = 78
+const ITEM_SIZE = tvSize(78)
 
 function TVHistory({ componentId }: { componentId: string }) {
   const currentMusicInfo = usePlayerMusicInfo()
@@ -145,11 +145,11 @@ function TVHistory({ componentId }: { componentId: string }) {
 const styles: Record<string, ViewStyle | TextStyle | any> = {
   root: { flex: 1 },
   listPanel: { flex: 1, paddingHorizontal: 34, paddingVertical: 30 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, gap: 24 },
-  title: { fontSize: 48, lineHeight: 56 },
-  subtitle: { marginTop: 8, color: tvColors.subtext },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  listContent: { paddingBottom: 28 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: tvSize(18), gap: tvSize(24) },
+  title: { fontSize: tvFont(48), lineHeight: tvFont(56) },
+  subtitle: { marginTop: tvSize(8), color: tvColors.subtext },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: tvSize(12) },
+  listContent: { paddingBottom: tvSize(28) },
 }
 
 export default memo(TVHistory)

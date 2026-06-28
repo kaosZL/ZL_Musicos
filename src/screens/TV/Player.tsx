@@ -6,7 +6,7 @@ import TVText from '@/components/TV/TVText'
 import TVRoundControl from '@/components/TV/TVRoundControl'
 import Focusable from '@/components/TV/Focusable'
 import TVNowPlayingDock from '@/components/TV/TVNowPlayingDock'
-import { tvColors } from '@/theme/tv'
+import { getTVLayoutMetrics, tvColors, tvSize } from '@/theme/tv'
 import { useIsPlay, usePlayerMusicInfo, useProgress } from '@/store/player/hook'
 import { playNext, playPrev, togglePlay } from '@/core/player/player'
 import { useSettingValue } from '@/store/setting/hook'
@@ -78,7 +78,9 @@ function TVPlayer({ componentId }: { componentId: string }) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions()
 
   const appleLayout = useMemo(() => {
-    const scale = Math.min(screenWidth / 1144, screenHeight / 644)
+    const metrics = getTVLayoutMetrics(screenWidth, screenHeight)
+    const rawScale = Math.min(screenWidth / 1144, screenHeight / 644)
+    const scale = Math.max(0.92, Math.min(rawScale, metrics.isUhd ? 1.42 : 1.22))
     const offsetX = (screenWidth - 1144 * scale) / 2
     const offsetY = (screenHeight - 644 * scale) / 2
     const s = (value: number) => Math.round(value * scale)
@@ -165,6 +167,10 @@ function TVPlayer({ componentId }: { componentId: string }) {
       },
       controlSmall: Math.max(34, s(42)),
       controlPrimary: Math.max(42, s(52)),
+      backdropBlur: metrics.isUhd ? 22 : 34,
+      backdropInsetX: metrics.isUhd ? s(86) : s(160),
+      backdropInsetY: metrics.isUhd ? s(72) : s(130),
+      edgeInset: Math.max(0, offsetX),
     }
   }, [screenHeight, screenWidth])
 
@@ -272,7 +278,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
     <TVAppleScaffold image={musicInfo.pic} immersive contentStyle={styles.scaffoldContent}>
       <View style={styles.playbackBackdrop}>
         {musicInfo.pic ? (
-          <ImageBackground source={{ uri: musicInfo.pic, headers: defaultHeaders }} blurRadius={34} resizeMode="cover" style={styles.backdropImage}>
+          <ImageBackground source={{ uri: musicInfo.pic, headers: defaultHeaders }} blurRadius={appleLayout.backdropBlur} resizeMode="cover" style={[styles.backdropImage, { left: -appleLayout.backdropInsetX, right: -appleLayout.backdropInsetX, top: -appleLayout.backdropInsetY, bottom: -appleLayout.backdropInsetY }]}>
             <View style={styles.backdropImageScrim} />
           </ImageBackground>
         ) : null}
@@ -356,18 +362,14 @@ const styles: Record<string, ViewStyle | TextStyle | ImageStyle | any> = {
   root: { flex: 1 },
   playbackBackdrop: {
     position: 'absolute',
-    left: -66,
-    right: -66,
-    top: -20,
-    bottom: -18,
+    left: -tvSize(66),
+    right: -tvSize(66),
+    top: -tvSize(20),
+    bottom: -tvSize(18),
     overflow: 'visible',
   },
   backdropImage: {
     position: 'absolute',
-    left: -160,
-    right: -160,
-    top: -130,
-    bottom: -130,
     opacity: 0.42,
   },
   backdropImageScrim: {

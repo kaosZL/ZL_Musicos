@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useState, type ComponentRef } from 'react'
 import { Pressable, type NativeSyntheticEvent, type PressableProps, type StyleProp, type TargetedEvent, type ViewStyle } from 'react-native'
-import { tvColors, tvTokens } from '@/theme/tv'
+import { tvColors, tvSize, tvTokens } from '@/theme/tv'
 
 export interface FocusableProps extends PressableProps {
   focusStyle?: StyleProp<ViewStyle>
@@ -53,12 +53,12 @@ const styles: Record<string, ViewStyle> = {
     borderRadius: tvTokens.radius,
   },
   focused: {
-    borderWidth: 4,
+    borderWidth: tvSize(4),
     borderColor: tvColors.primary,
     backgroundColor: 'rgba(138,173,255,0.16)',
     shadowColor: tvColors.primary,
     shadowOpacity: 0.55,
-    shadowRadius: 24,
+    shadowRadius: tvSize(24),
     elevation: 18,
     transform: [{ scale: tvTokens.focusScale }],
   },

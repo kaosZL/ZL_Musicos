@@ -6,7 +6,7 @@ import TVText from '@/components/TV/TVText'
 import TVButton from '@/components/TV/TVButton'
 import TVSettingsPane from '@/components/TV/TVSettingsPane'
 import Focusable from '@/components/TV/Focusable'
-import { tvColors } from '@/theme/tv'
+import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { useSettingValue } from '@/store/setting/hook'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { useStatus, useUserApiList } from '@/store/userApi/hook'
@@ -215,19 +215,19 @@ function TVSettings({ componentId }: { componentId: string }) {
 }
 
 const styles: Record<string, ViewStyle | TextStyle | any> = {
-  root: { flex: 1, flexDirection: 'row', gap: 26 },
+  root: { flex: 1, flexDirection: 'row', gap: tvSize(26) },
   sourcePanel: { flex: 1 },
-  sourceContent: { paddingBottom: 20 },
-  sourceBlock: { marginBottom: 12 },
-  sourceItem: { borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.075)', borderWidth: 1, borderColor: tvColors.border, padding: 18 },
+  sourceContent: { paddingBottom: tvSize(20) },
+  sourceBlock: { marginBottom: tvSize(12) },
+  sourceItem: { borderRadius: tvSize(24), backgroundColor: 'rgba(255,255,255,0.075)', borderWidth: 1, borderColor: tvColors.border, padding: tvSize(18) },
   sourceActive: { backgroundColor: tvColors.primarySoft, borderColor: tvColors.primaryHigh },
-  sourceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
+  sourceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: tvSize(16) },
   sourceInfo: { flex: 1 },
-  userApiActions: { flexDirection: 'row', gap: 12, marginTop: 10, marginLeft: 16 },
-  importPanel: { width: 410, alignSelf: 'flex-start' },
-  input: { minHeight: 58, color: tvColors.text, backgroundColor: 'rgba(255,255,255,0.085)', borderRadius: 22, paddingHorizontal: 18, fontSize: 18, borderWidth: 1, borderColor: tvColors.border, marginBottom: 14 },
-  line: { marginTop: 9 },
-  message: { marginTop: 14 },
+  userApiActions: { flexDirection: 'row', gap: tvSize(12), marginTop: tvSize(10), marginLeft: tvSize(16) },
+  importPanel: { width: tvSize(410), alignSelf: 'flex-start' },
+  input: { minHeight: tvSize(58), color: tvColors.text, backgroundColor: 'rgba(255,255,255,0.085)', borderRadius: tvSize(22), paddingHorizontal: tvSize(18), fontSize: tvFont(18), borderWidth: 1, borderColor: tvColors.border, marginBottom: tvSize(14) },
+  line: { marginTop: tvSize(9) },
+  message: { marginTop: tvSize(14) },
 }
 
 export default memo(TVSettings)

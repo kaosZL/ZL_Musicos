@@ -46,4 +46,4 @@ const runMetroBundle = () => {
 }
 
 runMetroBundle()
-runGradle([':app:assembleDebug', '--stacktrace'])
+runGradle([':app:assembleRelease', '--stacktrace'])
