@@ -88,11 +88,11 @@ npm run tv:assemble
 构建产物位于：
 
 ```text
-android/app/build/outputs/apk/release/lx-music-mobile-v1.8.5-x86.apk
-android/app/build/outputs/apk/release/lx-music-mobile-v1.8.5-x86_64.apk
-android/app/build/outputs/apk/release/lx-music-mobile-v1.8.5-arm64-v8a.apk
-android/app/build/outputs/apk/release/lx-music-mobile-v1.8.5-armeabi-v7a.apk
-android/app/build/outputs/apk/release/lx-music-mobile-v1.8.5-universal.apk
+android/app/build/outputs/apk/release/zl-music-v1.8.6-x86.apk
+android/app/build/outputs/apk/release/zl-music-v1.8.6-x86_64.apk
+android/app/build/outputs/apk/release/zl-music-v1.8.6-arm64-v8a.apk
+android/app/build/outputs/apk/release/zl-music-v1.8.6-armeabi-v7a.apk
+android/app/build/outputs/apk/release/zl-music-v1.8.6-universal.apk
 ```
 
 夜神模拟器优先使用 `x86` 包；真机或电视盒子不确定架构时可使用 `universal` 包。
@@ -109,7 +109,7 @@ npm run tv:deploy
 
 ```bash
 C:\Data\NOX\Nox\bin\nox_adb.exe connect 127.0.0.1:62001
-C:\Data\NOX\Nox\bin\nox_adb.exe -s 127.0.0.1:62001 install -r android\app\build\outputs\apk\release\lx-music-mobile-v1.8.5-x86.apk
+C:\Data\NOX\Nox\bin\nox_adb.exe -s 127.0.0.1:62001 install -r android\app\build\outputs\apk\release\zl-music-v1.8.6-x86.apk
 C:\Data\NOX\Nox\bin\nox_adb.exe -s 127.0.0.1:62001 shell am start -n cn.toside.music.mobile/.MainActivity
 ```
 
@@ -124,7 +124,7 @@ npm run tv:lint
 ```bash
 npm run tv:lint
 npm run tv:assemble
-aapt dump badging android/app/build/outputs/apk/release/lx-music-mobile-v1.8.5-universal.apk
+aapt dump badging android/app/build/outputs/apk/release/zl-music-v1.8.6-universal.apk
 ```
 
 `aapt` 已确认 release 包没有 `application-debuggable`，并且 Wi-Fi、以太网、触摸屏等硬件特性均为 `uses-feature-not-required`。
@@ -147,9 +147,9 @@ docs/screenshots/     README 使用的 TV 截图
 
 GitHub Releases / Tags 会上传最新构建好的 APK。推荐下载：
 
-- `lx-music-mobile-v1.8.5-arm64-v8a.apk`：大多数 64 位 Android TV / 盒子。
-- `lx-music-mobile-v1.8.5-universal.apk`：不确定设备架构时使用。
-- `lx-music-mobile-v1.8.5-x86.apk`：夜神模拟器。
+- `zl-music-v1.8.6-arm64-v8a.apk`：大多数 64 位 Android TV / 盒子。
+- `zl-music-v1.8.6-universal.apk`：不确定设备架构时使用。
+- `zl-music-v1.8.6-x86.apk`：夜神模拟器。
 
 ## 致谢
 
