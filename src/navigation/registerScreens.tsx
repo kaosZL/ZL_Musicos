@@ -16,6 +16,8 @@ import {
   TVDetail,
 } from '@/screens'
 import { Provider } from '@/store/Provider'
+import TVRemoteFocusController from '@/components/TV/TVRemoteFocusController'
+import { TVFocusScopeContext } from '@/components/TV/tvFocusManager'
 
 import {
   HOME_SCREEN,
@@ -39,11 +41,15 @@ import SyncModeModal from './components/SyncModeModal'
 
 function WrappedComponent(Component: any) {
   return function inject(props: Record<string, any>) {
+    const componentId = String(props.componentId ?? 'tv-root')
     const EnhancedComponent = () => (
       <Provider>
-        <Component
-          {...props}
-        />
+        <TVFocusScopeContext.Provider value={componentId}>
+          <TVRemoteFocusController componentId={componentId} />
+          <Component
+            {...props}
+          />
+        </TVFocusScopeContext.Provider>
       </Provider>
     )
 

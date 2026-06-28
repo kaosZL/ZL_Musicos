@@ -46,6 +46,8 @@ export const getWIFIIPV4Address = UtilsModule.getWIFIIPV4Address as () => Promis
 
 export const isTVDevice = UtilsModule.isTVDevice as () => Promise<boolean>
 
+export const requestTVFocus = UtilsModule.requestTVFocus as (reactTag: number) => void
+
 export const getDeviceName = async(): Promise<string> => {
   return UtilsModule.getDeviceName().then((deviceName: string) => deviceName || 'Unknown')
 }

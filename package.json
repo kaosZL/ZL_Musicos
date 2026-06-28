@@ -1,7 +1,7 @@
 {
     "name":  "zl-music",
-    "version":  "1.8.6",
-    "versionCode":  78,
+    "version":  "1.8.7",
+    "versionCode":  79,
     "private":  true,
     "scripts":  {
                     "bundle-android":  "react-native bundle --platform android --dev true --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res",

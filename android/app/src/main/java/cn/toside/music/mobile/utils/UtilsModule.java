@@ -17,6 +17,7 @@ import android.os.Build;
 import android.util.Log;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.View;
 
 import androidx.core.app.LocaleManagerCompat;
 import androidx.core.content.FileProvider;
@@ -30,6 +31,9 @@ import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.WritableNativeArray;
+import com.facebook.react.uimanager.NativeViewHierarchyManager;
+import com.facebook.react.uimanager.UIBlock;
+import com.facebook.react.uimanager.UIManagerModule;
 
 import java.io.File;
 import java.util.Locale;
@@ -67,6 +71,26 @@ public class UtilsModule extends ReactContextBaseJavaModule {
     } catch (Exception e) {
       promise.resolve(false);
     }
+  }
+
+  @ReactMethod
+  public void requestTVFocus(int reactTag) {
+    UIManagerModule uiManager = reactContext.getNativeModule(UIManagerModule.class);
+    if (uiManager == null) return;
+
+    uiManager.addUIBlock(new UIBlock() {
+      @Override
+      public void execute(NativeViewHierarchyManager nativeViewHierarchyManager) {
+        try {
+          View view = nativeViewHierarchyManager.resolveView(reactTag);
+          view.setFocusable(true);
+          view.setFocusableInTouchMode(true);
+          view.requestFocus();
+        } catch (Exception e) {
+          Log.w("Utils", "requestTVFocus failed: " + reactTag, e);
+        }
+      }
+    });
   }
 
 
