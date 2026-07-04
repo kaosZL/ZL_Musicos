@@ -1,0 +1,39 @@
+{
+  "version": "1.8.8",
+  "versionCode": 80,
+  "tagName": "v1.8.8-tv",
+  "releaseUrl": "https://github.com/kaosZL/ZL_Musicos/releases/tag/v1.8.8-tv",
+  "body": "ZL-Music TV v1.8.8：新增设置页手动远程更新，优化 TV 端检查更新与 APK 架构匹配。",
+  "assets": [
+    {
+      "abi": "arm64-v8a",
+      "name": "zl-music-v1.8.8-arm64-v8a.apk",
+      "size": 14100016,
+      "url": "https://github.com/kaosZL/ZL_Musicos/releases/download/v1.8.8-tv/zl-music-v1.8.8-arm64-v8a.apk"
+    },
+    {
+      "abi": "armeabi-v7a",
+      "name": "zl-music-v1.8.8-armeabi-v7a.apk",
+      "size": 13093103,
+      "url": "https://github.com/kaosZL/ZL_Musicos/releases/download/v1.8.8-tv/zl-music-v1.8.8-armeabi-v7a.apk"
+    },
+    {
+      "abi": "universal",
+      "name": "zl-music-v1.8.8-universal.apk",
+      "size": 29098573,
+      "url": "https://github.com/kaosZL/ZL_Musicos/releases/download/v1.8.8-tv/zl-music-v1.8.8-universal.apk"
+    },
+    {
+      "abi": "x86",
+      "name": "zl-music-v1.8.8-x86.apk",
+      "size": 14543976,
+      "url": "https://github.com/kaosZL/ZL_Musicos/releases/download/v1.8.8-tv/zl-music-v1.8.8-x86.apk"
+    },
+    {
+      "abi": "x86_64",
+      "name": "zl-music-v1.8.8-x86_64.apk",
+      "size": 14424188,
+      "url": "https://github.com/kaosZL/ZL_Musicos/releases/download/v1.8.8-tv/zl-music-v1.8.8-x86_64.apk"
+    }
+  ]
+}

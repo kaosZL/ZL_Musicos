@@ -29,7 +29,7 @@ const handlePushedHomeScreen = async() => {
   if (settingState.setting['common.isAgreePact'] || isTVMode) {
     if (isFirstPush) {
       isFirstPush = false
-      void checkUpdate()
+      if (!isTVMode) void checkUpdate()
       void initDeeplink()
     }
   } else {
