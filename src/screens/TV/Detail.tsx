@@ -142,6 +142,7 @@ function TVDetail({ componentId, payload }: Props) {
               <TVButton
                 ref={playAllFocus.ref as any}
                 label={loading ? tvText.loading : tvText.playAll}
+                tone="dark"
                 style={styles.actionButton}
                 onPress={() => { void handlePlay(0) }}
                 onFocus={handleActionFocus}

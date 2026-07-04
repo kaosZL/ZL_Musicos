@@ -17,6 +17,7 @@
                     "tv:assemble":  "node scripts/tv-build.cjs",
                     "tv:install":  "node scripts/tv-install.cjs",
                     "tv:launch":  "node scripts/tv-launch.cjs",
+                    "tv:remote":  "node scripts/tv-remote.cjs",
                     "tv:deploy":  "node scripts/tv-install.cjs --launch",
                     "tv:devices":  "node scripts/tv-install.cjs --devices",
                     "dev":  "react-native run-android --active-arch-only",

@@ -2,6 +2,7 @@ import { forwardRef, memo, useRef, type ComponentProps, type ComponentRef, type 
 import { View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
 import Focusable from './Focusable'
 import TVText from './TVText'
+import { blurActiveTVTarget } from './tvFocusManager'
 import { tvColors, tvSize, tvTokens } from '@/theme/tv'
 
 export interface TVTabItem {
@@ -20,9 +21,12 @@ interface Props {
   onActiveTabReady?: () => void
 }
 
-const TabButton = forwardRef<any, ComponentProps<typeof Focusable> & { item: TVTabItem, active: boolean }>(({ item, active, ...props }, ref) => (
-  <Focusable ref={ref} style={[styles.tab, active ? styles.tabActive : null]} focusStyle={styles.tabFocus} onPress={item.onPress} {...props}>
-    <TVText variant="body" style={[styles.tabText, active ? styles.tabTextActive : null]}>{item.label}</TVText>
+const TabButton = forwardRef<any, ComponentProps<typeof Focusable> & { item: TVTabItem }>(({ item, ...props }, ref) => (
+  <Focusable ref={ref} style={styles.tab} focusStyle={styles.tabFocus} onPress={() => {
+    blurActiveTVTarget()
+    item.onPress()
+  }} {...props}>
+    <TVText variant="body" style={styles.tabText}>{item.label}</TVText>
   </Focusable>
 ))
 
@@ -56,7 +60,6 @@ const TVTopTabs = ({ items, activeId, subtitle, hasTVPreferredFocus, nextFocusDo
               }
             }}
             item={item}
-            active={item.id === activeId}
             hasTVPreferredFocus={hasTVPreferredFocus && index === activeIndex}
             nextFocusLeft={getHandle(index - 1) ?? undefined}
             nextFocusRight={getHandle(index + 1) ?? undefined}
@@ -98,20 +101,13 @@ const styles: Record<string, ViewStyle | TextStyle> = {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tabActive: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
-  },
   tabFocus: {
-    backgroundColor: 'rgba(255,255,255,0.24)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   tabText: {
     color: tvColors.subtext,
     fontSize: tvTokens.nav,
     fontWeight: '700',
-  },
-  tabTextActive: {
-    color: tvColors.text,
-    fontWeight: '900',
   },
 }
 

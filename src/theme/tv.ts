@@ -79,5 +79,5 @@ export const tvTokens = {
   cardTitle: tvFont(22),
   heroTitle: tvFont(56),
   railTitle: tvFont(28),
-  focusScale: 1.06,
+  focusScale: 1.025,
 } as const

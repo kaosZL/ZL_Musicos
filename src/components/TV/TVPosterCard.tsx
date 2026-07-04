@@ -1,4 +1,4 @@
-import { forwardRef, memo, type ComponentProps } from 'react'
+import { forwardRef, memo, useCallback, useState, type ComponentProps } from 'react'
 import { View, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native'
 import Image from '@/components/common/Image'
 import Focusable from './Focusable'
@@ -21,14 +21,21 @@ const sizes = {
   wide: { width: tvSize(330), height: tvSize(186) },
 }
 
-const TVPosterCard = forwardRef<any, Props>(({ title, subtitle, meta, image, size = 'medium', tint = tvColors.primary, style, ...props }, ref) => {
+const TVPosterCard = forwardRef<any, Props>(({ title, subtitle, meta, image, size = 'medium', tint = tvColors.primary, style, onTVFocusChange, ...props }, ref) => {
   const cardSize = sizes[size]
+  const [focused, setFocused] = useState(false)
+  const handleFocusChange = useCallback((nextFocused: boolean) => {
+    setFocused(nextFocused)
+    onTVFocusChange?.(nextFocused)
+  }, [onTVFocusChange])
+
   return (
-    <Focusable ref={ref} style={[styles.root, { width: cardSize.width }, typeof style === 'function' ? null : style]} focusStyle={styles.focus} {...props}>
+    <Focusable ref={ref} style={[styles.root, { width: cardSize.width }, typeof style === 'function' ? null : style]} focusStyle={styles.focus} onTVFocusChange={handleFocusChange} {...props}>
       <View style={[styles.art, cardSize, { backgroundColor: tint }]}>
         {image ? <Image url={image} style={styles.image as ImageStyle} resizeMode="cover" /> : null}
         <View style={styles.artOverlay} />
         {!image ? <TVText variant="pageTitle" style={styles.placeholder}>{title.slice(0, 1)}</TVText> : null}
+        {focused ? <View pointerEvents="none" style={styles.artFocusRing} /> : null}
       </View>
       <TVText variant="cardTitle" style={styles.title} numberOfLines={1}>{title}</TVText>
       {subtitle ? <TVText variant="caption" style={styles.subtitle} numberOfLines={1}>{subtitle}</TVText> : null}
@@ -43,7 +50,10 @@ const styles: Record<string, ViewStyle | TextStyle> = {
     padding: tvSize(8),
   },
   focus: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   art: {
     borderRadius: tvTokens.radiusLg,
@@ -64,6 +74,16 @@ const styles: Record<string, ViewStyle | TextStyle> = {
     top: 0,
     bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.12)',
+  },
+  artFocusRing: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: tvTokens.radiusLg,
+    borderWidth: tvSize(3),
+    borderColor: tvColors.primaryHigh,
   },
   placeholder: {
     fontSize: tvFont(74),

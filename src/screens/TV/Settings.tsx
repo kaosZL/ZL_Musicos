@@ -206,7 +206,7 @@ function TVSettings({ componentId }: { componentId: string }) {
 
         <TVSettingsPane title={tvText.importApi} subtitle={tvText.inputRemoteApi} style={styles.importPanel}>
           <TVTextInput ref={inputRef} value={importUrl} onChangeText={setImportUrl} placeholder="https://.../source.js" placeholderTextColor={tvColors.dimText} style={styles.input} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} nextFocusDown={importButtonFocus.getNodeHandle() ?? undefined} />
-          <TVButton ref={importButtonFocus.ref as any} label={importing ? tvText.importing : tvText.import} onPress={() => { void handleImport() }} nextFocusUp={getInputHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} />
+          <TVButton ref={importButtonFocus.ref as any} label={importing ? tvText.importing : tvText.import} tone="dark" onPress={() => { void handleImport() }} nextFocusUp={getInputHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} />
           {importMessage ? <TVText variant="caption" color={importMessage === tvText.importSuccess ? tvColors.primaryHigh : tvColors.warn} style={styles.message}>{importMessage}</TVText> : null}
         </TVSettingsPane>
       </View>

@@ -13,6 +13,7 @@ interface Props {
   firstKeyRef?: React.MutableRefObject<ComponentRef<typeof Focusable> | null>
   onFirstKeyReady?: () => void
   nextFocusUp?: number
+  topRowFocusUpTargets?: Array<number | undefined>
   nextFocusRight?: number
 }
 
@@ -28,7 +29,7 @@ const Key = forwardRef<ComponentRef<typeof Focusable>, ComponentProps<typeof Foc
   </Focusable>
 ))
 
-const TVSearchKeyboard = ({ onKeyPress, onBackspace, onClear, onSubmit, firstKeyRef, onFirstKeyReady, nextFocusUp, nextFocusRight }: Props) => {
+const TVSearchKeyboard = ({ onKeyPress, onBackspace, onClear, onSubmit, firstKeyRef, onFirstKeyReady, nextFocusUp, topRowFocusUpTargets, nextFocusRight }: Props) => {
   const keyRows = useMemo(() => [...rows, [tvText.space, tvText.backspace, tvText.clear, tvText.search]], [])
   const keyRefs = useRef<Record<string, ComponentRef<typeof Focusable> | null>>({})
   const getKeyId = (rowIndex: number, colIndex: number) => `${rowIndex}_${colIndex}`
@@ -57,6 +58,10 @@ const TVSearchKeyboard = ({ onKeyPress, onBackspace, onClear, onSubmit, firstKey
       default: return () => { onKeyPress(label) }
     }
   }
+  const getTopRowFocusUp = (colIndex: number) => {
+    if (!topRowFocusUpTargets?.length) return nextFocusUp
+    return topRowFocusUpTargets[Math.min(colIndex, topRowFocusUpTargets.length - 1)] ?? nextFocusUp
+  }
 
   return (
     <View style={styles.root}>
@@ -71,7 +76,7 @@ const TVSearchKeyboard = ({ onKeyPress, onBackspace, onClear, onSubmit, firstKey
               onPress={getKeyPress(key)}
               nextFocusLeft={getKeyHandle(rowIndex, colIndex - 1) ?? getKeyHandle(rowIndex, colIndex) ?? undefined}
               nextFocusRight={getKeyHandle(rowIndex, colIndex + 1) ?? nextFocusRight ?? getKeyHandle(rowIndex, colIndex) ?? undefined}
-              nextFocusUp={getKeyHandle(rowIndex - 1, colIndex, true) ?? nextFocusUp ?? getKeyHandle(rowIndex, colIndex) ?? undefined}
+              nextFocusUp={getKeyHandle(rowIndex - 1, colIndex, true) ?? (rowIndex === 0 ? getTopRowFocusUp(colIndex) : nextFocusUp) ?? getKeyHandle(rowIndex, colIndex) ?? undefined}
               nextFocusDown={getKeyHandle(rowIndex + 1, colIndex, true) ?? getKeyHandle(rowIndex, colIndex) ?? undefined}
             />
           ))}

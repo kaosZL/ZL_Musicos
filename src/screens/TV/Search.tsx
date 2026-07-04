@@ -147,6 +147,10 @@ function TVSearch({ componentId }: { componentId: string }) {
   const searchButtonHandle = searchButtonFocus.getNodeHandle() ?? undefined
   const firstResultHandle = firstResultFocus.getNodeHandle() ?? undefined
   const keyboardHandle = getKeyboardHandle() ?? undefined
+  const keyboardTopRowFocusUps = Array.from({ length: 10 }, (_, colIndex) => {
+    const hotIndex = Math.min(hotWords.length - 1, Math.floor(colIndex * hotWords.length / 10))
+    return getHotHandle(hotWords[hotIndex]) ?? lastHotHandle
+  })
 
   return (
     <TVAppleScaffold image={musicInfo.pic}>
@@ -156,7 +160,7 @@ function TVSearch({ componentId }: { componentId: string }) {
           <TVText variant="pageTitle" style={styles.pageTitle}>{tvText.searchTitle}</TVText>
           <View style={styles.inputRow}>
             <TVTextInput ref={inputRef} value={text} onChangeText={setText} placeholder={tvText.searchPlaceholder} placeholderTextColor={tvColors.dimText} style={styles.input} nextFocusRight={searchButtonHandle} nextFocusDown={firstHotHandle} onSubmitEditing={() => { void handleSearch() }} />
-            <TVButton ref={searchButtonFocus.ref as any} label={loading ? tvText.searching : tvText.search} onPress={() => { void handleSearch() }} hasTVPreferredFocus nextFocusLeft={getInputHandle() ?? undefined} nextFocusRight={firstResultHandle} nextFocusDown={firstHotHandle} />
+            <TVButton ref={searchButtonFocus.ref as any} label={loading ? tvText.searching : tvText.search} tone="dark" onPress={() => { void handleSearch() }} hasTVPreferredFocus nextFocusLeft={getInputHandle() ?? undefined} nextFocusRight={firstResultHandle} nextFocusDown={firstHotHandle} />
           </View>
           <TVText variant="cardTitle" style={styles.blockTitle}>{tvText.hotSearch}</TVText>
           <View style={styles.hotWrap}>
@@ -166,7 +170,7 @@ function TVSearch({ componentId }: { componentId: string }) {
               </Focusable>
             ))}
           </View>
-          <TVSearchKeyboard firstKeyRef={firstKeyboardKeyFocus} onFirstKeyReady={queueFocusRefresh} onKeyPress={handleKeyboardKey} onBackspace={() => { setText(value => value.slice(0, -1)) }} onClear={() => { setText('') }} onSubmit={() => { void handleSearch() }} nextFocusUp={lastHotHandle} nextFocusRight={firstResultHandle} />
+          <TVSearchKeyboard firstKeyRef={firstKeyboardKeyFocus} onFirstKeyReady={queueFocusRefresh} onKeyPress={handleKeyboardKey} onBackspace={() => { setText(value => value.slice(0, -1)) }} onClear={() => { setText('') }} onSubmit={() => { void handleSearch() }} nextFocusUp={lastHotHandle} topRowFocusUpTargets={keyboardTopRowFocusUps} nextFocusRight={firstResultHandle} />
         </TVGlassPanel>
         <TVGlassPanel style={styles.resultPanel}>
           <View style={styles.resultHeader}>

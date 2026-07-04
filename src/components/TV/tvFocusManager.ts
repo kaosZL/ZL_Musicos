@@ -21,6 +21,8 @@ interface FocusTarget {
   onPress?: () => void
 }
 
+type FocusStateListener = (focused: boolean) => void
+
 interface FocusRect {
   x: number
   y: number
@@ -30,6 +32,7 @@ interface FocusRect {
 
 export const TVFocusScopeContext = createContext('tv-root')
 const targets = new Map<number, FocusTarget>()
+const focusListeners = new Map<number, FocusStateListener>()
 let activeTargetId: number | null = null
 let activeScopeId: string | null = null
 let fallbackTimer: ReturnType<typeof setTimeout> | null = null
@@ -37,6 +40,12 @@ let nextTargetId = 1
 
 const centerX = (rect: FocusRect) => rect.x + rect.width / 2
 const centerY = (rect: FocusRect) => rect.y + rect.height / 2
+const getDirectionalThreshold = (from: FocusRect, to: FocusRect, direction: Direction) => {
+  const primarySize = direction === 'up' || direction === 'down'
+    ? Math.min(from.height, to.height)
+    : Math.min(from.width, to.width)
+  return Math.max(14, primarySize * 0.28)
+}
 
 const isVisibleRect = (rect: FocusRect | null): rect is FocusRect => {
   return !!rect && rect.width > 1 && rect.height > 1
@@ -48,8 +57,22 @@ const requestNativeFocus = (target: FocusTarget) => {
   target.ref?.focus?.()
 }
 
+const emitFocusState = (id: number | null, focused: boolean) => {
+  if (!id) return
+  focusListeners.get(id)?.(focused)
+}
+
+const clearActiveTarget = () => {
+  if (activeTargetId) emitFocusState(activeTargetId, false)
+  activeTargetId = null
+}
+
+export const blurActiveTVTarget = clearActiveTarget
+
 const setActiveTarget = (target: FocusTarget) => {
+  if (activeTargetId && activeTargetId !== target.id) emitFocusState(activeTargetId, false)
   activeTargetId = target.id
+  emitFocusState(target.id, true)
   requestNativeFocus(target)
 }
 
@@ -109,35 +132,36 @@ const getCandidateScore = (from: FocusRect, to: FocusRect, direction: Direction)
   const dy = toY - fromY
   const sameColumnPenalty = Math.abs(dx)
   const sameRowPenalty = Math.abs(dy)
+  const minDistance = getDirectionalThreshold(from, to, direction)
 
   switch (direction) {
     case 'up':
-      if (dy >= -2) return null
+      if (dy >= -minDistance) return null
       return Math.abs(dy) * 1000 + sameColumnPenalty
     case 'down':
-      if (dy <= 2) return null
+      if (dy <= minDistance) return null
       return Math.abs(dy) * 1000 + sameColumnPenalty
     case 'left':
-      if (dx >= -2) return null
+      if (dx >= -minDistance) return null
       return Math.abs(dx) * 1000 + sameRowPenalty
     case 'right':
-      if (dx <= 2) return null
+      if (dx <= minDistance) return null
       return Math.abs(dx) * 1000 + sameRowPenalty
   }
 }
 
 export const setActiveTVFocusScope = (scopeId: string) => {
   if (activeScopeId !== scopeId) {
+    clearActiveTarget()
     activeScopeId = scopeId
-    activeTargetId = null
   }
   scheduleTVInitialFocus()
 }
 
 export const clearActiveTVFocusScope = (scopeId: string) => {
   if (activeScopeId === scopeId) {
+    clearActiveTarget()
     activeScopeId = null
-    activeTargetId = null
   }
 }
 
@@ -159,12 +183,24 @@ export const updateTVFocusTarget = (id: number, patch: Partial<Omit<FocusTarget,
 }
 
 export const unregisterTVFocusTarget = (id: number) => {
+  if (activeTargetId === id) emitFocusState(id, false)
+  focusListeners.delete(id)
   targets.delete(id)
   if (activeTargetId === id) activeTargetId = null
 }
 
 export const notifyTVTargetFocused = (id: number) => {
+  if (activeTargetId && activeTargetId !== id) emitFocusState(activeTargetId, false)
   activeTargetId = id
+  emitFocusState(id, true)
+}
+
+export const subscribeTVTargetFocusState = (id: number, listener: FocusStateListener) => {
+  focusListeners.set(id, listener)
+  listener(activeTargetId === id)
+  return () => {
+    if (focusListeners.get(id) === listener) focusListeners.delete(id)
+  }
 }
 
 export const focusPreferredTVTarget = async() => {

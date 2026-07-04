@@ -42,6 +42,15 @@ ZL-Music TV 是基于 [lx-music-mobile 1.8.4](https://github.com/lyswhut/lx-musi
 - 适配 75 寸 4K Android TV：针对 3840x2160 大屏限制 UI 最大缩放，提升远距离可读性，并降低 4K 背景模糊开销。
 - APK Manifest 显式声明 Wi-Fi、以太网、触摸屏、faketouch、leanback 均非必需，减少电视安装器误判“不兼容”。
 
+## 本次更新：焦点与遥控体验优化
+
+- 全局 TV 焦点样式改为更清晰的高亮描边与阴影，减少大屏上选中态被背景淹没的问题。
+- 海报卡片在封面区域增加独立焦点描边，横向浏览歌单时更容易判断当前选中项。
+- 首页进入或从其他页面返回时会自动回到推荐区域，焦点移动到首页按钮、歌单卡片时会同步滚动到可视区域。
+- 优化方向键候选目标判断，减少焦点在相邻控件之间误跳、卡住或跳回自身的情况。
+- 搜索页键盘、热搜词、结果列表以及排行榜页面补齐焦点路径，遥控器上下左右切换更连贯。
+- 新增 `npm run tv:remote -- <key>` 调试命令，可在连接夜神模拟器或 Android TV 后直接发送方向键、OK、Back、播放控制等遥控按键。
+
 ## 适配设备
 
 已按用户电视信息做专项适配：
@@ -64,6 +73,14 @@ ZL-Music TV 是基于 [lx-music-mobile 1.8.4](https://github.com/lyswhut/lx-musi
 | Previous / Rewind | 播放上一首 |
 | Next / Fast Forward | 播放下一首 |
 | Menu | 打开 TV 设置 |
+
+也可以在电脑端通过 ADB 调试遥控器按键：
+
+```bash
+npm run tv:remote -- up
+npm run tv:remote -- right right ok
+npm run tv:remote -- back
+```
 
 ## 环境要求
 

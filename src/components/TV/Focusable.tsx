@@ -1,11 +1,12 @@
 import { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useRef, useState, type ComponentRef } from 'react'
 import { Pressable, type NativeSyntheticEvent, type PressableProps, type StyleProp, type TargetedEvent, type ViewStyle } from 'react-native'
 import { tvColors, tvSize, tvTokens } from '@/theme/tv'
-import { notifyTVTargetFocused, registerTVFocusTarget, scheduleTVInitialFocus, TVFocusScopeContext, unregisterTVFocusTarget, updateTVFocusTarget } from './tvFocusManager'
+import { notifyTVTargetFocused, registerTVFocusTarget, scheduleTVInitialFocus, subscribeTVTargetFocusState, TVFocusScopeContext, unregisterTVFocusTarget, updateTVFocusTarget } from './tvFocusManager'
 
 export interface FocusableProps extends PressableProps {
   focusStyle?: StyleProp<ViewStyle>
   onPress?: PressableProps['onPress']
+  onTVFocusChange?: (focused: boolean) => void
   hasTVPreferredFocus?: boolean
   nextFocusUp?: number
   nextFocusDown?: number
@@ -27,14 +28,28 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
   nextFocusRight,
   onFocus,
   onBlur,
+  onTVFocusChange,
   ...rest
 }, ref) => {
   const [focused, setFocused] = useState(false)
   const nativeRef = useRef<ComponentRef<typeof Pressable> | null>(null)
   const targetIdRef = useRef<number | null>(null)
   const focusScopeId = useContext(TVFocusScopeContext)
+  const focusedRef = useRef(false)
+  const focusChangeRef = useRef(onTVFocusChange)
 
   useImperativeHandle(ref, () => nativeRef.current!, [])
+
+  useEffect(() => {
+    focusChangeRef.current = onTVFocusChange
+  }, [onTVFocusChange])
+
+  const setTVFocused = useCallback((nextFocused: boolean) => {
+    if (focusedRef.current === nextFocused) return
+    focusedRef.current = nextFocused
+    setFocused(nextFocused)
+    focusChangeRef.current?.(nextFocused)
+  }, [])
 
   const triggerTVPress = useCallback(() => {
     if (!onPress) return
@@ -42,26 +57,28 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
   }, [onPress])
 
   const handleFocus = useCallback((event: FocusEvent) => {
-    setFocused(true)
+    setTVFocused(true)
     if (targetIdRef.current) notifyTVTargetFocused(targetIdRef.current)
     onFocus?.(event)
-  }, [onFocus])
+  }, [onFocus, setTVFocused])
 
   const handleBlur = useCallback((event: FocusEvent) => {
-    setFocused(false)
+    setTVFocused(false)
     onBlur?.(event)
-  }, [onBlur])
+  }, [onBlur, setTVFocused])
 
   useEffect(() => {
     const node = nativeRef.current
     const id = registerTVFocusTarget(focusScopeId, node, false)
     targetIdRef.current = id
+    const unsubscribe = subscribeTVTargetFocusState(id, setTVFocused)
 
     return () => {
+      unsubscribe()
       unregisterTVFocusTarget(id)
       targetIdRef.current = null
     }
-  }, [focusScopeId])
+  }, [focusScopeId, setTVFocused])
 
   useEffect(() => {
     const id = targetIdRef.current
@@ -109,16 +126,17 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
 const styles: Record<string, ViewStyle> = {
   base: {
     borderRadius: tvTokens.radius,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   focused: {
-    borderWidth: tvSize(4),
-    borderColor: tvColors.primary,
-    backgroundColor: 'rgba(138,173,255,0.16)',
-    shadowColor: tvColors.primary,
-    shadowOpacity: 0.55,
-    shadowRadius: tvSize(24),
-    elevation: 18,
-    transform: [{ scale: tvTokens.focusScale }],
+    borderColor: tvColors.primaryHigh,
+    shadowColor: tvColors.primaryHigh,
+    shadowOpacity: 0.28,
+    shadowRadius: tvSize(10),
+    shadowOffset: { width: 0, height: tvSize(3) },
+    elevation: 8,
+    zIndex: 8,
   },
 }
 
