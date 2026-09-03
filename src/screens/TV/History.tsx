@@ -10,7 +10,7 @@ import type Focusable from '@/components/TV/Focusable'
 import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { getBoardsList } from '@/core/leaderboard'
 import leaderboardState, { type BoardItem } from '@/store/leaderboard/state'
-import { pushTVDetailScreen, pushTVPlayerScreen, pushTVSettingsScreen } from '@/navigation/navigation'
+import { pushTVDetailScreen, pushTVPlayerScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
@@ -92,7 +92,6 @@ function TVHistory({ componentId }: { componentId: string }) {
       }
       openBoard()
     },
-    menu: () => { pushTVSettingsScreen(componentId) },
   })
 
   return (

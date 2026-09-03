@@ -11,7 +11,7 @@ import Focusable from '@/components/TV/Focusable'
 import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { search } from '@/core/search/music'
 import searchMusicState from '@/store/search/music/state'
-import { pushTVPlayerScreen, pushTVSettingsScreen } from '@/navigation/navigation'
+import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { setTempList } from '@/core/list'
 import { playList } from '@/core/player/player'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
@@ -65,7 +65,6 @@ function TVSearch({ componentId }: { componentId: string }) {
   useTVNavigationBack(componentId)
   useTVRemoteActions({
     playPause: () => { if (musicInfo.id) pushTVPlayerScreen(componentId) },
-    menu: () => { pushTVSettingsScreen(componentId) },
   })
 
   const getInputHandle = () => inputRef.current ? findNodeHandle(inputRef.current) : null

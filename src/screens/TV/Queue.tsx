@@ -12,7 +12,7 @@ import { usePlayerMusicInfo } from '@/store/player/hook'
 import { clearListMusics } from '@/core/list'
 import { playList } from '@/core/player/player'
 import { LIST_IDS } from '@/config/constant'
-import { pushTVPlayerScreen, pushTVSettingsScreen } from '@/navigation/navigation'
+import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
@@ -79,7 +79,6 @@ function TVQueue({ componentId }: { componentId: string }) {
       }
       if (selectedMusicInfo) void handlePlayNow(selectedIndex)
     },
-    menu: () => { pushTVSettingsScreen(componentId) },
   })
 
   return (

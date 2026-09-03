@@ -20,7 +20,7 @@ import { exitApp } from '@/utils/tools'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { useNavigationComponentDidAppear } from '@/navigation/hooks'
-import { pushTVDetailScreen, pushTVPlayerScreen, pushTVSearchScreen, pushTVSettingsScreen } from '@/navigation/navigation'
+import { pushTVDetailScreen, pushTVPlayerScreen, pushTVSearchScreen } from '@/navigation/navigation'
 import { createTVTabs, getSourceName } from './utils'
 import { dot, tvText } from './labels'
 
@@ -56,7 +56,6 @@ function TVHome({ componentId }: { componentId: string }) {
       }
       pushTVSearchScreen(componentId)
     },
-    menu: () => { pushTVSettingsScreen(componentId) },
   })
 
   const songlistSource = songlistState.sources[0]

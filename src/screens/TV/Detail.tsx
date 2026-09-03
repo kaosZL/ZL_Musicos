@@ -10,7 +10,7 @@ import type Focusable from '@/components/TV/Focusable'
 import Image from '@/components/common/Image'
 import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { pop } from '@/navigation'
-import { pushTVPlayerScreen, pushTVSettingsScreen } from '@/navigation/navigation'
+import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
@@ -57,7 +57,6 @@ function TVDetail({ componentId, payload }: Props) {
   useTVRemoteActions({
     playPause: () => { if (list.length) void handlePlay(0) },
     down: () => { if (actionFocusedRef.current) focusFirstRow() },
-    menu: () => { pushTVSettingsScreen(componentId) },
   })
 
   const image = payload.type === 'songlist' ? payload.songlist.img : null
