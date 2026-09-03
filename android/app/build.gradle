@@ -116,6 +116,7 @@ android {
         versionCode verCode
         versionName verName
         buildConfigField "boolean", "IS_TV_BUILD", "true"
+        resConfigs 'zh', 'en'
     }
 
     splits {
