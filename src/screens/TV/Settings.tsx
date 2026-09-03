@@ -85,9 +85,6 @@ function TVSettings({ componentId }: { componentId: string }) {
   const updateButtonFocus = useTVFocusRef()
   const importButtonFocus = useTVFocusRef()
   const sourceRefs = useRef<FocusRefMap>({})
-  const sourceOpAlertButtonFocus = useTVFocusRef()
-  const sourceOpRemoveButtonFocus = useTVFocusRef()
-  const [focusedSourceId, setFocusedSourceId] = useState('')
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null)
   const [qrImage, setQrImage] = useState('')
   const [lanRunning, setLanRunning] = useState(false)
@@ -349,28 +346,9 @@ function TVSettings({ componentId }: { componentId: string }) {
     }
   }
 
-  const focusedUserApi = userApiById.get(focusedSourceId)
-  const focusedSourceName = allSources.find(item => item.id === focusedSourceId)?.name ?? ''
-
-  const handleToggleAlertOp = () => {
-    if (!focusedUserApi) {
-      setImportMessage('更新提醒仅适用于用户导入的音源，请先选中用户音源')
-      return
-    }
-    if (!focusedUserApi.allowShowUpdateAlert) {
-      Alert.alert('开启更新提醒', '好处：音源接口失效后，作者发布新版时你会第一时间收到弹窗提醒，可及时更新修复。\n\n代价：偶尔会有弹窗打扰。\n\n确定要开启吗？', [
-        { text: '取消', style: 'cancel' },
-        { text: '开启', onPress: () => { void handleToggleUpdateAlert(focusedUserApi.id, true) } },
-      ])
-    } else {
-      void handleToggleUpdateAlert(focusedUserApi.id, false)
-    }
-  }
-
   const removePresetOrBuiltinSource = (id: string) => {
     updateSetting({ 'common.tvRemovedSources': [...(removedSources ?? []), id] })
     if (apiSource === id) setApiSource('')
-    setFocusedSourceId('')
     setImportMessage('已删除该音源')
   }
 
@@ -382,20 +360,38 @@ function TVSettings({ componentId }: { componentId: string }) {
     removePresetOrBuiltinSource(id)
   }
 
-  const handleRemoveFocusedSource = () => {
-    const id = focusedSourceId
-    if (!id) {
-      setImportMessage('聚合音源不可删除')
-      return
-    }
-    if (apiSource === id) {
-      Alert.alert('删除正在使用的音源', `「${focusedSourceName}」正在使用中。\n删除后将自动切换到聚合音源，当前歌曲会继续播放完，之后的搜索/播放都走聚合音源。\n\n确定删除吗？`, [
+  const confirmRemoveSource = (src: SourceItem) => {
+    if (apiSource === src.id) {
+      Alert.alert('删除正在使用的音源', `「${src.name}」正在使用中。\n删除后将自动切换到聚合音源，当前歌曲会继续播放完。确定删除吗？`, [
         { text: '取消', style: 'cancel' },
-        { text: '删除', style: 'destructive', onPress: () => { void doRemoveSource(id) } },
+        { text: '删除', style: 'destructive', onPress: () => { void doRemoveSource(src.id) } },
       ])
       return
     }
-    void doRemoveSource(id)
+    void doRemoveSource(src.id)
+  }
+
+  const showSourceActionMenu = (src: SourceItem) => {
+    if (src.id === '') return
+    const userApi = userApiById.get(src.id)
+    const buttons: Array<{ text: string, style?: 'cancel' | 'destructive', onPress?: () => void }> = [{ text: '取消', style: 'cancel' }]
+    if (userApi) {
+      buttons.push({
+        text: userApi.allowShowUpdateAlert ? '关闭更新提醒' : '开启更新提醒',
+        onPress: () => {
+          if (userApi.allowShowUpdateAlert) {
+            void handleToggleUpdateAlert(src.id, false)
+            return
+          }
+          Alert.alert('开启更新提醒', '好处：音源接口失效后，作者发布新版时你会第一时间收到弹窗提醒，可及时更新修复。\n\n代价：偶尔会有弹窗打扰。\n\n确定开启吗？', [
+            { text: '取消', style: 'cancel' },
+            { text: '开启', onPress: () => { void handleToggleUpdateAlert(src.id, true) } },
+          ])
+        },
+      })
+    }
+    buttons.push({ text: '删除音源', style: 'destructive', onPress: () => { confirmRemoveSource(src) } })
+    Alert.alert(src.name, '选择要执行的操作', buttons)
   }
 
   return (
@@ -403,6 +399,7 @@ function TVSettings({ componentId }: { componentId: string }) {
       <TVTopTabs items={createTVTabs(componentId)} activeId="settings" subtitle={tvText.settings} nextFocusDown={firstSourceFocus.getNodeHandle() ?? undefined} />
       <View style={styles.root}>
         <TVSettingsPane title={`${tvText.source}${dot}${tvText.userApi}`} subtitle={tvText.sourceSettingsDesc} style={styles.sourcePanel}>
+          <TVText variant="caption" color={tvColors.dimText} style={styles.listHint}>OK 键使用音源 · 长按 OK 键删除/管理</TVText>
           <ScrollView ref={sourceScrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.sourceContent}>
             {allSources.map((src, index) => {
               const focusKey = getFocusKey(src.id)
@@ -414,12 +411,13 @@ function TVSettings({ componentId }: { componentId: string }) {
                   <Focusable
                     ref={bindFocusRef(sourceRefs, focusKey, index === 0) as any}
                     style={[styles.sourceItem, active ? styles.sourceActive : null]}
-                    onFocus={() => { handleSourceItemFocus(focusKey); setFocusedSourceId(src.id) }}
-                    onPress={() => { setApiSource(src.id); setFocusedSourceId(src.id) }}
+                    onFocus={() => { handleSourceItemFocus(focusKey) }}
+                    onPress={() => { setApiSource(src.id) }}
+                    onLongPress={() => { showSourceActionMenu(src) }}
                     hasTVPreferredFocus={index === 0}
                     nextFocusUp={getSourceHandle(prevSourceId) ?? undefined}
                     nextFocusRight={updateButtonFocus.getNodeHandle() ?? getInputHandle() ?? importButtonFocus.getNodeHandle() ?? undefined}
-                    nextFocusDown={getSourceHandle(nextSourceId) ?? sourceOpAlertButtonFocus.getNodeHandle() ?? undefined}
+                    nextFocusDown={getSourceHandle(nextSourceId) ?? undefined}
                   >
                     <View style={styles.sourceRow}>
                       <View style={styles.sourceInfo}>
@@ -433,13 +431,6 @@ function TVSettings({ componentId }: { componentId: string }) {
               )
             })}
           </ScrollView>
-          <View style={styles.sourceOps}>
-            <TVText variant="caption" color={tvColors.subtext} numberOfLines={1}>{focusedSourceName ? `已选中：${focusedSourceName}` : '用方向键选中音源后可操作'}</TVText>
-            <View style={styles.sourceOpsRow}>
-              <TVButton ref={sourceOpAlertButtonFocus.ref as any} label={focusedUserApi?.allowShowUpdateAlert ? '关闭更新提醒' : '开启更新提醒'} tone="dark" onPress={() => { handleToggleAlertOp() }} nextFocusUp={getSourceHandle(allSources[allSources.length - 1]?.id) ?? undefined} nextFocusRight={sourceOpRemoveButtonFocus.getNodeHandle() ?? undefined} />
-              <TVButton ref={sourceOpRemoveButtonFocus.ref as any} label="删除音源" tone="ghost" onPress={() => { handleRemoveFocusedSource() }} nextFocusUp={getSourceHandle(allSources[allSources.length - 1]?.id) ?? undefined} nextFocusLeft={sourceOpAlertButtonFocus.getNodeHandle() ?? undefined} />
-            </View>
-          </View>
         </TVSettingsPane>
 
         <ScrollView ref={rightScrollRef} style={styles.rightColumn} showsVerticalScrollIndicator={false} contentContainerStyle={styles.rightContent}>
@@ -482,8 +473,7 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   sourceActive: { backgroundColor: tvColors.primarySoft, borderColor: tvColors.primaryHigh },
   sourceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: tvSize(16) },
   sourceInfo: { flex: 1 },
-  sourceOps: { gap: tvSize(8), marginTop: tvSize(4), paddingTop: tvSize(10), borderTopWidth: 1, borderTopColor: tvColors.border },
-  sourceOpsRow: { flexDirection: 'row', gap: tvSize(12) },
+  listHint: { marginBottom: tvSize(8) },
   rightColumn: { width: tvSize(430), flexShrink: 0 },
   rightContent: { gap: tvSize(18), paddingBottom: tvSize(20) },
   updatePanel: { minHeight: tvSize(270) },
