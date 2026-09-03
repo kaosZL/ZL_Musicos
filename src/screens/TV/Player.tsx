@@ -12,7 +12,6 @@ import { playNext, playPrev, togglePlay } from '@/core/player/player'
 import { useSettingValue } from '@/store/setting/hook'
 import { updateSetting } from '@/core/common'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
-import { pushTVSettingsScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { useLrcPlay, useLrcSet } from '@/plugins/lyric'
@@ -217,7 +216,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
     stop: () => { if (musicInfo.id && isPlay) togglePlay() },
     down: () => { revealControls(); setFocusToken(t => t + 1) },
     up: () => { revealControls(); setFocusToken(t => t + 1) },
-    menu: () => { pushTVSettingsScreen(componentId) },
+    menu: () => { revealControls() },
   })
 
   const activeLyricIndex = lyricPlay.line >= 0 && lyricPlay.line < lyricLines.length ? lyricPlay.line : -1
