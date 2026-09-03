@@ -440,7 +440,7 @@ public class UtilsModule extends ReactContextBaseJavaModule {
         utilsEvent.sendLanSourceEvent(action, payload));
       WritableMap params = Arguments.createMap();
       params.putString("ip", getLanIp());
-      params.putInt("port", LanImportServer.getListeningPort());
+      params.putInt("port", LanImportServer.getServerPort());
       promise.resolve(params);
     } catch (Exception e) {
       promise.reject("LAN_SERVER_ERROR", e);
@@ -449,7 +449,7 @@ public class UtilsModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void stopLanImportServer(Promise promise) {
-    LanImportServer.stop();
+    LanImportServer.stopServer();
     promise.resolve(null);
   }
 

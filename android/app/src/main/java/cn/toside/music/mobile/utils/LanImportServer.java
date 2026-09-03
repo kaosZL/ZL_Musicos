@@ -38,14 +38,14 @@ public class LanImportServer extends NanoHTTPD {
     instance.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false);
   }
 
-  public static synchronized void stop() {
+  public static synchronized void stopServer() {
     if (instance != null) {
       instance.stop();
       instance = null;
     }
   }
 
-  public static synchronized int getListeningPort() {
+  public static synchronized int getServerPort() {
     return instance == null ? 0 : instance.getListeningPort();
   }
 
