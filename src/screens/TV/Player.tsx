@@ -79,7 +79,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
   const appleLayout = useMemo(() => {
     const metrics = getTVLayoutMetrics(screenWidth, screenHeight)
     const rawScale = Math.min(screenWidth / 1144, screenHeight / 644)
-    const scale = Math.max(0.92, Math.min(rawScale, metrics.isUhd ? 1.42 : 1.22))
+    const scale = Math.max(0.92, Math.min(rawScale, metrics.scale * (1.22 / 1.2)))
     const offsetX = (screenWidth - 1144 * scale) / 2
     const offsetY = (screenHeight - 644 * scale) / 2
     const s = (value: number) => Math.round(value * scale)
@@ -166,9 +166,9 @@ function TVPlayer({ componentId }: { componentId: string }) {
       },
       controlSmall: Math.max(34, s(42)),
       controlPrimary: Math.max(42, s(52)),
-      backdropBlur: metrics.isUhd ? 22 : 34,
-      backdropInsetX: metrics.isUhd ? s(86) : s(160),
-      backdropInsetY: metrics.isUhd ? s(72) : s(130),
+      backdropBlur: 34,
+      backdropInsetX: s(160),
+      backdropInsetY: s(130),
       edgeInset: Math.max(0, offsetX),
     }
   }, [screenHeight, screenWidth])

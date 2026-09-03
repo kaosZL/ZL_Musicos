@@ -12,9 +12,13 @@ export const getTVLayoutMetrics = (width: number, height: number, pixelRatio = P
   const logicalScale = Math.min(width / TV_BASE_WIDTH, height / TV_BASE_HEIGHT)
   const isUhd = longEdge >= TV_UHD_EDGE || physicalLongEdge >= TV_UHD_EDGE || physicalShortEdge >= 1700
   const minScale = shortEdge < 650 ? 0.9 : 1
-  const maxScale = isUhd ? 1.4 : 1.2
-  const scale = Math.max(minScale, Math.min(logicalScale, maxScale))
-  const fontScale = Math.max(minScale, Math.min(scale, isUhd ? 1.32 : 1.16))
+  // 4K 等比适配：逻辑分辨率 ≤1080p 沿用旧封顶曲线（1080p 观感基准 scale=1.2）；
+  // 超过 1080p 后按 1080p 基准等比放大——任何分辨率下界面比例与 1080p 完全一致（高分屏仅更清晰，由系统密度负责渲染）。
+  // 不再按 isUhd 分叉上限（旧 1.4/1.32 会导致 4K 上布局与字体比例失衡、观感割裂）。
+  const scale = shortEdge <= 1080
+    ? Math.max(minScale, Math.min(logicalScale, 1.2))
+    : Math.max(Math.min(shortEdge / 900, 3), 1.2)
+  const fontScale = Math.max(minScale, Math.min(scale * (1.16 / 1.2), 3))
 
   return {
     width,
