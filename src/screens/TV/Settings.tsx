@@ -1,10 +1,11 @@
 import { memo, useEffect, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
-import { Alert, Image, ScrollView, TextInput, View, findNodeHandle, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native'
+import { Image, ScrollView, TextInput, View, findNodeHandle, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVText from '@/components/TV/TVText'
 import TVButton from '@/components/TV/TVButton'
 import TVSettingsPane from '@/components/TV/TVSettingsPane'
+import { showTVDialog, type TVDialogButtonConfig } from '@/components/TV/TVDialog'
 import Focusable from '@/components/TV/Focusable'
 import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { useSettingValue } from '@/store/setting/hook'
@@ -362,10 +363,14 @@ function TVSettings({ componentId }: { componentId: string }) {
 
   const confirmRemoveSource = (src: SourceItem) => {
     if (apiSource === src.id) {
-      Alert.alert('删除正在使用的音源', `「${src.name}」正在使用中。\n删除后将自动切换到聚合音源，当前歌曲会继续播放完。确定删除吗？`, [
-        { text: '取消', style: 'cancel' },
-        { text: '删除', style: 'destructive', onPress: () => { void doRemoveSource(src.id) } },
-      ])
+      showTVDialog({
+        title: '删除正在使用的音源',
+        message: `「${src.name}」正在使用中。\n删除后将自动切换到聚合音源，当前歌曲会继续播放完。确定删除吗？`,
+        buttons: [
+          { label: '取消', tone: 'dark' },
+          { label: '删除', tone: 'danger', onPress: () => { void doRemoveSource(src.id) } },
+        ],
+      })
       return
     }
     void doRemoveSource(src.id)
@@ -374,24 +379,29 @@ function TVSettings({ componentId }: { componentId: string }) {
   const showSourceActionMenu = (src: SourceItem) => {
     if (src.id === '') return
     const userApi = userApiById.get(src.id)
-    const buttons: Array<{ text: string, style?: 'cancel' | 'destructive', onPress?: () => void }> = [{ text: '取消', style: 'cancel' }]
+    const buttons: TVDialogButtonConfig[] = [{ label: '取消', tone: 'dark' }]
     if (userApi) {
       buttons.push({
-        text: userApi.allowShowUpdateAlert ? '关闭更新提醒' : '开启更新提醒',
+        label: userApi.allowShowUpdateAlert ? '关闭更新提醒' : '开启更新提醒',
+        tone: 'ghost',
         onPress: () => {
           if (userApi.allowShowUpdateAlert) {
             void handleToggleUpdateAlert(src.id, false)
             return
           }
-          Alert.alert('开启更新提醒', '好处：音源接口失效后，作者发布新版时你会第一时间收到弹窗提醒，可及时更新修复。\n\n代价：偶尔会有弹窗打扰。\n\n确定开启吗？', [
-            { text: '取消', style: 'cancel' },
-            { text: '开启', onPress: () => { void handleToggleUpdateAlert(src.id, true) } },
-          ])
+          showTVDialog({
+            title: '开启更新提醒',
+            message: '好处：音源接口失效后，作者发布新版时你会第一时间收到弹窗提醒，可及时更新修复。\n\n代价：偶尔会有弹窗打扰。确定开启吗？',
+            buttons: [
+              { label: '取消', tone: 'dark' },
+              { label: '开启', tone: 'primary', onPress: () => { void handleToggleUpdateAlert(src.id, true) } },
+            ],
+          })
         },
       })
     }
-    buttons.push({ text: '删除音源', style: 'destructive', onPress: () => { confirmRemoveSource(src) } })
-    Alert.alert(src.name, '选择要执行的操作', buttons)
+    buttons.push({ label: '删除音源', tone: 'danger', onPress: () => { confirmRemoveSource(src) } })
+    showTVDialog({ title: src.name, message: '选择要执行的操作', buttons })
   }
 
   return (

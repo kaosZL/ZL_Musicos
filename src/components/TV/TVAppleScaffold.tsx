@@ -3,6 +3,7 @@ import { ImageBackground, View, type ViewStyle } from 'react-native'
 import { defaultHeaders } from '@/components/common/Image'
 import { tvColors, tvTokens } from '@/theme/tv'
 import { useTVScale } from './useTVScale'
+import { TVDialogHost } from './TVDialog'
 
 interface Props {
   image?: string | null
@@ -34,6 +35,7 @@ const TVAppleScaffold = ({ image, immersive, style, contentStyle, children }: Pr
       <View style={[styles.topShade, { height: s(180) }]} />
       <View style={[styles.bottomShade, { height: immersive ? s(310) : s(260) }, immersive ? styles.immersiveBottomShade : null]} />
       <View style={[styles.content, contentStyle]}>{children}</View>
+      <TVDialogHost />
     </View>
   )
 }

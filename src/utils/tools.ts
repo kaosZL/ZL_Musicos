@@ -11,6 +11,8 @@ import { scaleSizeH, scaleSizeW, setSpText } from './pixelRatio'
 import { toOldMusicInfo } from './index'
 import { stringMd5 } from 'react-native-quick-md5'
 import { windowSizeTools } from '@/utils/windowSizeTools'
+import { getCachedIsTV } from '@/utils/tvMode'
+import { showTVDialog } from '@/components/TV/TVDialog'
 
 
 // https://stackoverflow.com/a/47349998
@@ -219,6 +221,16 @@ export const tipDialog = async({
   btnText = global.i18n.t('dialog_confirm'),
   bgClose = true,
 }) => {
+  if (getCachedIsTV()) {
+    return new Promise<void>(resolve => {
+      showTVDialog({
+        title: title || '提示',
+        message,
+        buttons: [{ label: btnText, tone: 'primary', onPress: () => { resolve() } }],
+        onDismiss: () => { resolve() },
+      })
+    })
+  }
   return new Promise<void>(resolve => {
     Alert.alert(title, message, [
       {
