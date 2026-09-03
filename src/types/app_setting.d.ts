@@ -22,6 +22,16 @@ declare global {
       'common.apiSource': string
 
       /**
+       * TV 已删除（隐藏）的音源 id 列表（预设/内置）
+       */
+      'common.tvRemovedSources': string[]
+
+      /**
+       * TV 更新提醒默认关闭的一次性迁移标记
+       */
+      'common.tvUpdateAlertsOffMigrated': boolean
+
+      /**
        * 音源名称类型，原名、别名
        */
       'common.sourceNameType': 'alias' | 'real'

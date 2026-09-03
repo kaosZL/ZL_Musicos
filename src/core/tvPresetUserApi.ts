@@ -4,6 +4,7 @@ import { loadScript } from '@/utils/nativeModules/userApi'
 import { setUserApiStatus } from '@/core/userApi'
 import { getCachedIsTV } from '@/utils/tvMode'
 import { updateSetting } from '@/core/common'
+import settingState from '@/store/setting/state'
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 
 export type TVPresetUserApiCandidate = typeof TV_PRESET_USER_API_CANDIDATES[number]
@@ -46,7 +47,9 @@ export const ensureTVPresetUserApi = async() => {
   if (!getCachedIsTV()) return false
   if (Platform.OS !== 'android') return false
 
+  const removedSources = settingState.setting['common.tvRemovedSources'] ?? []
   for (const [index, candidate] of TV_PRESET_USER_API_CANDIDATES.entries()) {
+    if (removedSources.includes(candidate.id)) continue
     try {
       activeCandidateIndex = index
       await loadTVPresetUserApiCandidate(candidate)
@@ -60,7 +63,9 @@ export const ensureTVPresetUserApi = async() => {
 
 export const tryNextTVPresetUserApiCandidate = async() => {
   if (!getCachedIsTV()) return false
-  const nextIndex = activeCandidateIndex + 1
+  const removedSources = settingState.setting['common.tvRemovedSources'] ?? []
+  let nextIndex = activeCandidateIndex + 1
+  while (nextIndex < TV_PRESET_USER_API_CANDIDATES.length && removedSources.includes(TV_PRESET_USER_API_CANDIDATES[nextIndex].id)) nextIndex++
   if (nextIndex >= TV_PRESET_USER_API_CANDIDATES.length) return false
   activeCandidateIndex = nextIndex
   const candidate = TV_PRESET_USER_API_CANDIDATES[nextIndex]

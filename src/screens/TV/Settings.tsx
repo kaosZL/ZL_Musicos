@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
-import { Image, ScrollView, TextInput, View, findNodeHandle, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native'
+import { Alert, Image, ScrollView, TextInput, View, findNodeHandle, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVText from '@/components/TV/TVText'
@@ -12,6 +12,7 @@ import { usePlayerMusicInfo } from '@/store/player/hook'
 import { useStatus, useUserApiList } from '@/store/userApi/hook'
 import apiSourceInfo from '@/utils/musicSdk/api-source-info'
 import { setApiSource } from '@/core/apiSource'
+import { updateSetting } from '@/core/common'
 import { httpFetch } from '@/utils/request'
 import { generateQRCodeBase64, onLanSourceEvent, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
 import { importUserApi, removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
@@ -68,6 +69,8 @@ const getUpdateErrorText = (err: unknown) => {
 
 function TVSettings({ componentId }: { componentId: string }) {
   const apiSource = useSettingValue('common.apiSource')
+  const removedSources = useSettingValue('common.tvRemovedSources')
+  const alertsMigrated = useSettingValue('common.tvUpdateAlertsOffMigrated')
   const musicInfo = usePlayerMusicInfo()
   const userApiList = useUserApiList()
   const apiStatus = useStatus()
@@ -82,8 +85,9 @@ function TVSettings({ componentId }: { componentId: string }) {
   const updateButtonFocus = useTVFocusRef()
   const importButtonFocus = useTVFocusRef()
   const sourceRefs = useRef<FocusRefMap>({})
-  const alertRefs = useRef<FocusRefMap>({})
-  const removeRefs = useRef<FocusRefMap>({})
+  const sourceOpAlertButtonFocus = useTVFocusRef()
+  const sourceOpRemoveButtonFocus = useTVFocusRef()
+  const [focusedSourceId, setFocusedSourceId] = useState('')
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null)
   const [qrImage, setQrImage] = useState('')
   const [lanRunning, setLanRunning] = useState(false)
@@ -98,19 +102,27 @@ function TVSettings({ componentId }: { componentId: string }) {
   useTVNavigationBack(componentId)
   useTVRemoteActions({ playPause: () => { if (musicInfo.id) pushTVPlayerScreen(componentId) } })
 
-  const defaultSources = useMemo<SourceItem[]>(() => apiSourceInfo.map(item => ({
+  useEffect(() => {
+    if (alertsMigrated || !userApiList.length) return
+    updateSetting({ 'common.tvUpdateAlertsOffMigrated': true })
+    for (const api of userApiList) {
+      if (api.allowShowUpdateAlert) void setUserApiAllowShowUpdateAlert(api.id, false)
+    }
+  }, [alertsMigrated, userApiList])
+
+  const defaultSources = useMemo<SourceItem[]>(() => apiSourceInfo.filter(item => !removedSources.includes(item.id)).map(item => ({
     id: item.id,
     name: getSourceName(item.id) || item.name,
     desc: item.disabled ? tvText.unavailable : tvText.builtinSource,
     status: item.disabled ? tvText.unavailable : tvText.available,
-  })), [])
+  })), [removedSources])
 
-  const presetSources = useMemo<SourceItem[]>(() => TV_PRESET_USER_API_CANDIDATES.map(item => ({
+  const presetSources = useMemo<SourceItem[]>(() => TV_PRESET_USER_API_CANDIDATES.filter(item => !removedSources.includes(item.id)).map(item => ({
     id: item.id,
     name: getSourceName(item.id),
     desc: `TV ${tvText.preset}${tvText.userApi}`,
     status: apiSource === item.id ? (apiStatus.status ? tvText.loaded : apiStatus.message === 'initing' ? tvText.loading : tvText.loadFailed) : tvText.preset,
-  })), [apiSource, apiStatus.message, apiStatus.status])
+  })), [apiSource, apiStatus.message, apiStatus.status, removedSources])
 
   const baseSources = useMemo<SourceItem[]>(() => ([
     { id: '', name: tvText.aggregateSource, desc: tvText.sourceSettingsDesc, status: tvText.available },
@@ -120,13 +132,13 @@ function TVSettings({ componentId }: { componentId: string }) {
 
   const userApiById = useMemo(() => new Map(userApiList.map(item => [item.id, item])), [userApiList])
   const allSources = useMemo<SourceItem[]>(() => [
-    ...baseSources,
     ...userApiList.map(item => ({
       id: item.id,
       name: item.name,
       desc: item.version ? `${tvText.userApi}${dot}v${item.version}` : tvText.userApi,
       status: apiSource === item.id ? (apiStatus.status ? tvText.loaded : apiStatus.message === 'initing' ? tvText.loading : tvText.loadFailed) : '',
     })),
+    ...baseSources,
   ], [apiSource, apiStatus.message, apiStatus.status, baseSources, userApiList])
 
   const bindFocusRef = (mapRef: MutableRefObject<FocusRefMap>, key: string, syncFirstSource = false) => (node: FocusNode) => {
@@ -135,8 +147,6 @@ function TVSettings({ componentId }: { componentId: string }) {
   }
   const getInputHandle = () => inputRef.current ? findNodeHandle(inputRef.current) : null
   const getSourceHandle = (id?: string | null) => getHandleFromMap(sourceRefs, id ? getFocusKey(id) : null)
-  const getAlertHandle = (id?: string | null) => getHandleFromMap(alertRefs, id ? getFocusKey(id) : null)
-  const getRemoveHandle = (id?: string | null) => getHandleFromMap(removeRefs, id ? getFocusKey(id) : null)
   const updateProgressText = useMemo(() => {
     if (updateStatus !== 'downloading' && updateStatus !== 'downloaded') return ''
     if (!updateProgress.total) return formatUpdateSize(updateProgress.current)
@@ -342,6 +352,40 @@ function TVSettings({ componentId }: { componentId: string }) {
     }
   }
 
+  const focusedUserApi = userApiById.get(focusedSourceId)
+  const focusedSourceName = allSources.find(item => item.id === focusedSourceId)?.name ?? ''
+
+  const handleToggleAlertOp = () => {
+    if (!focusedUserApi) {
+      setImportMessage('更新提醒仅适用于用户导入的音源，请先选中用户音源')
+      return
+    }
+    if (!focusedUserApi.allowShowUpdateAlert) {
+      Alert.alert('开启更新提醒', '好处：音源接口失效后，作者发布新版时你会第一时间收到弹窗提醒，可及时更新修复。\n\n代价：偶尔会有弹窗打扰。\n\n确定要开启吗？', [
+        { text: '取消', style: 'cancel' },
+        { text: '开启', onPress: () => { void handleToggleUpdateAlert(focusedUserApi.id, true) } },
+      ])
+    } else {
+      void handleToggleUpdateAlert(focusedUserApi.id, false)
+    }
+  }
+
+  const handleRemoveFocusedSource = async() => {
+    const id = focusedSourceId
+    if (!id) {
+      setImportMessage('聚合音源不可删除')
+      return
+    }
+    if (userApiById.has(id)) {
+      await handleRemove(id)
+      return
+    }
+    updateSetting({ 'common.tvRemovedSources': [...(removedSources ?? []), id] })
+    if (apiSource === id) setApiSource('')
+    setFocusedSourceId('')
+    setImportMessage('已删除该音源')
+  }
+
   return (
     <TVAppleScaffold image={musicInfo.pic}>
       <TVTopTabs items={createTVTabs(componentId)} activeId="settings" subtitle={tvText.settings} nextFocusDown={firstSourceFocus.getNodeHandle() ?? undefined} />
@@ -352,19 +396,18 @@ function TVSettings({ componentId }: { componentId: string }) {
               const focusKey = getFocusKey(src.id)
               const prevSourceId = allSources[index - 1]?.id
               const nextSourceId = allSources[index + 1]?.id
-              const userApi = userApiById.get(src.id)
               const active = apiSource === src.id
               return (
                 <View key={focusKey} style={styles.sourceBlock} onLayout={event => { sourceLayoutRef.current[focusKey] = event.nativeEvent.layout.y }}>
                   <Focusable
-                    ref={bindFocusRef(sourceRefs, focusKey, src.id === '') as any}
+                    ref={bindFocusRef(sourceRefs, focusKey, index === 0) as any}
                     style={[styles.sourceItem, active ? styles.sourceActive : null]}
-                    onFocus={() => { handleSourceItemFocus(focusKey) }}
+                    onFocus={() => { handleSourceItemFocus(focusKey); setFocusedSourceId(src.id) }}
                     onPress={() => { setApiSource(src.id) }}
-                    hasTVPreferredFocus={src.id === ''}
+                    hasTVPreferredFocus={index === 0}
                     nextFocusUp={getSourceHandle(prevSourceId) ?? undefined}
                     nextFocusRight={updateButtonFocus.getNodeHandle() ?? getInputHandle() ?? importButtonFocus.getNodeHandle() ?? undefined}
-                    nextFocusDown={userApi ? (getAlertHandle(src.id) ?? getSourceHandle(nextSourceId) ?? undefined) : (getSourceHandle(nextSourceId) ?? undefined)}
+                    nextFocusDown={getSourceHandle(nextSourceId) ?? sourceOpAlertButtonFocus.getNodeHandle() ?? undefined}
                   >
                     <View style={styles.sourceRow}>
                       <View style={styles.sourceInfo}>
@@ -374,16 +417,17 @@ function TVSettings({ componentId }: { componentId: string }) {
                       <TVText variant="caption" color={active ? tvColors.primaryHigh : tvColors.subtext}>{active ? tvText.currentUsing : src.status ?? ''}</TVText>
                     </View>
                   </Focusable>
-                  {userApi ? (
-                    <View style={styles.userApiActions}>
-                      <TVButton ref={bindFocusRef(alertRefs, focusKey) as any} label={userApi.allowShowUpdateAlert ? tvText.closeUpdateAlert : tvText.openUpdateAlert} tone="dark" onFocus={() => { handleSourceItemFocus(focusKey) }} onPress={() => { void handleToggleUpdateAlert(src.id, !userApi.allowShowUpdateAlert) }} nextFocusUp={getSourceHandle(src.id) ?? undefined} nextFocusRight={getRemoveHandle(src.id) ?? undefined} nextFocusDown={getSourceHandle(nextSourceId) ?? undefined} />
-                      <TVButton ref={bindFocusRef(removeRefs, focusKey) as any} label={tvText.delete} tone="danger" onFocus={() => { handleSourceItemFocus(focusKey) }} onPress={() => { void handleRemove(src.id) }} nextFocusUp={getSourceHandle(src.id) ?? undefined} nextFocusLeft={getAlertHandle(src.id) ?? undefined} nextFocusDown={getSourceHandle(nextSourceId) ?? undefined} />
-                    </View>
-                  ) : null}
                 </View>
               )
             })}
           </ScrollView>
+          <View style={styles.sourceOps}>
+            <TVText variant="caption" color={tvColors.subtext} numberOfLines={1}>{focusedSourceName ? `已选中：${focusedSourceName}` : '用方向键选中音源后可操作'}</TVText>
+            <View style={styles.sourceOpsRow}>
+              <TVButton ref={sourceOpAlertButtonFocus.ref as any} label={focusedUserApi?.allowShowUpdateAlert ? '关闭更新提醒' : '开启更新提醒'} tone="dark" onPress={() => { handleToggleAlertOp() }} nextFocusUp={getSourceHandle(allSources[allSources.length - 1]?.id) ?? undefined} nextFocusRight={sourceOpRemoveButtonFocus.getNodeHandle() ?? undefined} />
+              <TVButton ref={sourceOpRemoveButtonFocus.ref as any} label="删除音源" tone="ghost" onPress={() => { void handleRemoveFocusedSource() }} nextFocusUp={getSourceHandle(allSources[allSources.length - 1]?.id) ?? undefined} nextFocusLeft={sourceOpAlertButtonFocus.getNodeHandle() ?? undefined} />
+            </View>
+          </View>
         </TVSettingsPane>
 
         <ScrollView ref={rightScrollRef} style={styles.rightColumn} showsVerticalScrollIndicator={false} contentContainerStyle={styles.rightContent}>
@@ -425,7 +469,8 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   sourceActive: { backgroundColor: tvColors.primarySoft, borderColor: tvColors.primaryHigh },
   sourceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: tvSize(16) },
   sourceInfo: { flex: 1 },
-  userApiActions: { flexDirection: 'row', gap: tvSize(12), marginTop: tvSize(10), marginLeft: tvSize(16) },
+  sourceOps: { gap: tvSize(8), marginTop: tvSize(4), paddingTop: tvSize(10), borderTopWidth: 1, borderTopColor: tvColors.border },
+  sourceOpsRow: { flexDirection: 'row', gap: tvSize(12) },
   rightColumn: { width: tvSize(430), flexShrink: 0 },
   rightContent: { gap: tvSize(18), paddingBottom: tvSize(20) },
   updatePanel: { minHeight: tvSize(270) },
