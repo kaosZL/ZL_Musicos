@@ -10,7 +10,7 @@ import TVSearchKeyboard from '@/components/TV/TVSearchKeyboard'
 import Focusable from '@/components/TV/Focusable'
 import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { search } from '@/core/search/music'
-import { matchHotArtists } from '@/config/hotArtists'
+import { matchHotSearch, matchExactPinyin, type HotSearchItem } from '@/config/hotSongs'
 import searchMusicState from '@/store/search/music/state'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { setTempList } from '@/core/list'
@@ -100,8 +100,8 @@ function TVSearch({ componentId }: { componentId: string }) {
   const handleSearch = async(targetPage = 1, keywordOverride?: string) => {
     let keyword = (keywordOverride ?? text).trim()
     if (keywordOverride == null && /^[a-zA-Z]+$/.test(keyword)) {
-      const exact = matchHotArtists(keyword, 1).find(s => s.pinyin === keyword.toLowerCase())
-      if (exact) keyword = exact.name
+      const exact = matchExactPinyin(keyword)
+      if (exact) keyword = exact.keyword
     }
     if (!keyword) {
       setResults([])
@@ -146,17 +146,17 @@ function TVSearch({ componentId }: { componentId: string }) {
 
   const handleKeyboardKey = (key: string) => { setText(value => `${value}${key}`) }
   const hasMore = !!pageInfo.maxPage && pageInfo.page < pageInfo.maxPage
-  const suggestions = matchHotArtists(text)
+  const suggestions: HotSearchItem[] = matchHotSearch(text)
   const showSuggest = suggestions.length > 0
-  const displayWords = showSuggest ? suggestions.map(s => s.name) : hotWords
-  const firstHotHandle = getHotHandle(displayWords[0]) ?? undefined
-  const lastHotHandle = getHotHandle(displayWords[displayWords.length - 1]) ?? firstHotHandle
+  const displayItems: HotSearchItem[] = showSuggest ? suggestions : hotWords.map(word => ({ keyword: word, label: word, pinyin: word, abbr: word }))
+  const firstHotHandle = getHotHandle(displayItems[0]?.label) ?? undefined
+  const lastHotHandle = getHotHandle(displayItems[displayItems.length - 1]?.label) ?? firstHotHandle
   const searchButtonHandle = searchButtonFocus.getNodeHandle() ?? undefined
   const firstResultHandle = firstResultFocus.getNodeHandle() ?? undefined
   const keyboardHandle = getKeyboardHandle() ?? undefined
   const keyboardTopRowFocusUps = Array.from({ length: 10 }, (_, colIndex) => {
-    const hotIndex = Math.min(displayWords.length - 1, Math.floor(colIndex * displayWords.length / 10))
-    return getHotHandle(displayWords[hotIndex]) ?? lastHotHandle
+    const hotIndex = Math.min(displayItems.length - 1, Math.floor(colIndex * displayItems.length / 10))
+    return getHotHandle(displayItems[hotIndex]?.label) ?? lastHotHandle
   })
 
   return (
@@ -171,9 +171,9 @@ function TVSearch({ componentId }: { componentId: string }) {
           </View>
           <TVText variant="cardTitle" style={styles.blockTitle}>{showSuggest ? '猜你想搜' : tvText.hotSearch}</TVText>
           <View style={styles.hotWrap}>
-            {displayWords.map((word, index) => (
-              <Focusable key={word} ref={bindHotRef(word) as any} style={showSuggest ? [styles.hotItem, styles.suggestItem] : styles.hotItem} onPress={() => { void handleSearch(1, word) }} nextFocusLeft={getHotHandle(displayWords[index - 1]) ?? undefined} nextFocusRight={getHotHandle(displayWords[index + 1]) ?? firstResultHandle} nextFocusUp={getInputHandle() ?? searchButtonHandle} nextFocusDown={keyboardHandle}>
-                <TVText variant="body">{word}</TVText>
+            {displayItems.map((item, index) => (
+              <Focusable key={item.label} ref={bindHotRef(item.label) as any} style={showSuggest ? [styles.hotItem, styles.suggestItem] : styles.hotItem} onPress={() => { void handleSearch(1, item.keyword) }} nextFocusLeft={getHotHandle(displayItems[index - 1]?.label) ?? undefined} nextFocusRight={getHotHandle(displayItems[index + 1]?.label) ?? firstResultHandle} nextFocusUp={getInputHandle() ?? searchButtonHandle} nextFocusDown={keyboardHandle}>
+                <TVText variant="body">{item.label}</TVText>
               </Focusable>
             ))}
           </View>
