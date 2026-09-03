@@ -91,6 +91,7 @@ function TVSettings({ componentId }: { componentId: string }) {
   const lanButtonFocus = useTVFocusRef()
   const lanHandlerRef = useRef<((action: string, payload: string) => void) | null>(null)
   const sourceScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
+  const rightScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
   const sourceLayoutRef = useRef<Record<string, number>>({})
   useTVFocusRefresh()
 
@@ -304,6 +305,7 @@ function TVSettings({ componentId }: { componentId: string }) {
       setQrImage(qr)
       setLanRunning(true)
       pushLanSourcesSnapshot()
+      setTimeout(() => { rightScrollRef.current?.scrollToEnd({ animated: true }) }, 300)
     } catch (err: unknown) {
       setLanMessage(err instanceof Error ? err.message : '启动失败')
     }
@@ -384,7 +386,7 @@ function TVSettings({ componentId }: { componentId: string }) {
           </ScrollView>
         </TVSettingsPane>
 
-        <View style={styles.rightColumn}>
+        <ScrollView ref={rightScrollRef} style={styles.rightColumn} showsVerticalScrollIndicator={false} contentContainerStyle={styles.rightContent}>
           <TVSettingsPane title={tvText.appUpdate} subtitle={tvText.appUpdateDesc} style={styles.updatePanel}>
             <View style={styles.updateMeta}>
               <TVText variant="caption" color={tvColors.subtext} numberOfLines={1}>{tvText.currentVersion}{dot}v{TV_CURRENT_VERSION}</TVText>
@@ -408,7 +410,7 @@ function TVSettings({ componentId }: { componentId: string }) {
               </View>
             ) : null}
           </TVSettingsPane>
-        </View>
+        </ScrollView>
       </View>
     </TVAppleScaffold>
   )
@@ -424,7 +426,8 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   sourceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: tvSize(16) },
   sourceInfo: { flex: 1 },
   userApiActions: { flexDirection: 'row', gap: tvSize(12), marginTop: tvSize(10), marginLeft: tvSize(16) },
-  rightColumn: { width: tvSize(430), gap: tvSize(18) },
+  rightColumn: { width: tvSize(430), flexShrink: 0 },
+  rightContent: { gap: tvSize(18), paddingBottom: tvSize(20) },
   updatePanel: { minHeight: tvSize(270) },
   updateMeta: { gap: tvSize(8), marginBottom: tvSize(18) },
   importPanel: { flex: 1 },
