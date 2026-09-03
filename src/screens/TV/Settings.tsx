@@ -462,7 +462,8 @@ function TVSettings({ componentId }: { componentId: string }) {
             {qrImage ? (
               <View style={styles.qrWrap}>
                 <Image source={{ uri: qrImage }} style={styles.qrImage} />
-                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>手机扫码打开导入页，粘贴源链接或脚本</TVText>
+                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>手机扫码打开导入页，粘贴源链接或脚本导入</TVText>
+                <TVText variant="caption" color={tvColors.warn} style={styles.line}>⚠ 请确保手机与电视连接同一局域网（WiFi）</TVText>
               </View>
             ) : null}
           </TVSettingsPane>
