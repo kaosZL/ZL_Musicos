@@ -8,6 +8,8 @@ import { windowSizeTools } from '@/utils/windowSizeTools'
 import { listenLaunchEvent } from './navigation/regLaunchedEvent'
 import { tipDialog } from './utils/tools'
 import { resolveIsTV, getCachedIsTV } from '@/utils/tvMode'
+import { AppState } from 'react-native'
+import { pause } from '@/core/player/player'
 
 listenLaunchEvent()
 
@@ -15,6 +17,13 @@ void Promise.all([getFontSize(), windowSizeTools.init(), resolveIsTV()]).then(as
   global.lx.fontSize = fontSize
   bootLog('Font size setting loaded.')
   bootLog(`TV mode: ${getCachedIsTV()}`)
+
+  if (getCachedIsTV()) {
+    AppState.addEventListener('change', state => {
+      if (state === 'background' && global.lx.playerStatus.isInitialized) void pause()
+    })
+    bootLog('TV background auto-pause enabled.')
+  }
 
   let isInited = false
   let handlePushedHomeScreen: () => void | Promise<void>
