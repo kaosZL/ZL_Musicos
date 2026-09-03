@@ -403,7 +403,7 @@ function TVSettings({ componentId }: { componentId: string }) {
                     ref={bindFocusRef(sourceRefs, focusKey, index === 0) as any}
                     style={[styles.sourceItem, active ? styles.sourceActive : null]}
                     onFocus={() => { handleSourceItemFocus(focusKey); setFocusedSourceId(src.id) }}
-                    onPress={() => { setApiSource(src.id) }}
+                    onPress={() => { setApiSource(src.id); setFocusedSourceId(src.id) }}
                     hasTVPreferredFocus={index === 0}
                     nextFocusUp={getSourceHandle(prevSourceId) ?? undefined}
                     nextFocusRight={updateButtonFocus.getNodeHandle() ?? getInputHandle() ?? importButtonFocus.getNodeHandle() ?? undefined}
