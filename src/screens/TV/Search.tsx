@@ -170,13 +170,13 @@ function TVSearch({ componentId }: { componentId: string }) {
             <TVButton ref={searchButtonFocus.ref as any} label={loading ? tvText.searching : tvText.search} tone="dark" onPress={() => { void handleSearch() }} hasTVPreferredFocus nextFocusLeft={getInputHandle() ?? undefined} nextFocusRight={firstResultHandle} nextFocusDown={firstHotHandle} />
           </View>
           <TVText variant="cardTitle" style={styles.blockTitle}>{showSuggest ? '猜你想搜' : tvText.hotSearch}</TVText>
-          <View style={styles.hotWrap}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hotWrap} contentContainerStyle={styles.hotContent}>
             {displayItems.map((item, index) => (
               <Focusable key={item.label} ref={bindHotRef(item.label) as any} style={showSuggest ? [styles.hotItem, styles.suggestItem] : styles.hotItem} onPress={() => { void handleSearch(1, item.keyword) }} nextFocusLeft={getHotHandle(displayItems[index - 1]?.label) ?? undefined} nextFocusRight={getHotHandle(displayItems[index + 1]?.label) ?? firstResultHandle} nextFocusUp={getInputHandle() ?? searchButtonHandle} nextFocusDown={keyboardHandle}>
                 <TVText variant="body">{item.label}</TVText>
               </Focusable>
             ))}
-          </View>
+          </ScrollView>
           <TVSearchKeyboard firstKeyRef={firstKeyboardKeyFocus} onFirstKeyReady={queueFocusRefresh} onKeyPress={handleKeyboardKey} onBackspace={() => { setText(value => value.slice(0, -1)) }} onClear={() => { setText('') }} onSubmit={() => { void handleSearch() }} nextFocusUp={lastHotHandle} topRowFocusUpTargets={keyboardTopRowFocusUps} nextFocusRight={firstResultHandle} />
         </TVGlassPanel>
         <TVGlassPanel style={styles.resultPanel}>
@@ -216,7 +216,8 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   inputRow: { flexDirection: 'row', gap: tvSize(12), marginTop: tvSize(12) },
   input: { flex: 1, minHeight: tvSize(46), color: tvColors.text, backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: tvSize(20), paddingHorizontal: tvSize(16), fontSize: tvFont(17), borderWidth: 1, borderColor: tvColors.border },
   blockTitle: { marginTop: tvSize(12), fontSize: tvFont(20) },
-  hotWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: tvSize(8), marginTop: tvSize(8), marginBottom: tvSize(12) },
+  hotWrap: { marginTop: tvSize(8), marginBottom: tvSize(12), minHeight: tvSize(40), flexGrow: 0 },
+  hotContent: { flexDirection: 'row', gap: tvSize(8), alignItems: 'center', minHeight: tvSize(40), paddingRight: tvSize(8) },
   hotItem: { minHeight: tvSize(32), borderRadius: 999, paddingHorizontal: tvSize(13), alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: tvColors.border },
   suggestItem: { backgroundColor: 'rgba(122,162,247,0.16)', borderColor: tvColors.primaryHigh },
   resultPanel: { flex: 1, paddingHorizontal: tvSize(30), paddingVertical: tvSize(26), backgroundColor: 'rgba(10,13,21,0.96)' },

@@ -27,13 +27,16 @@ export const loadTVPresetUserApiCandidate = async(candidate: TVPresetUserApiCand
 
   createPendingApiInit()
   setUserApiStatus(false, 'initing')
+  // 解析脚本头部元信息，与用户导入路径保持一致（不再写死 version='preset'）
+  const header = /^\/\*[\S|\s]+?\*\//.exec(script)?.[0] ?? ''
+  const parsedName = /@name\s*(.+)/.exec(header)?.[1]?.trim()
+  const parsedVersion = /@version\s*(\S+)/.exec(header)?.[1]?.trim()
+  const parsedAuthor = /@author\s*(.+)/.exec(header)?.[1]?.trim()
   loadScript({
     id: candidate.id,
-    name: candidate.name,
-    description: 'Built-in TV preset source',
-    version: 'preset',
-    author: candidate.author,
-    homepage: candidate.homepage,
+    name: parsedName || candidate.name,
+    version: parsedVersion || '1',
+    author: parsedAuthor || candidate.author,
     allowShowUpdateAlert: false,
     script,
   })

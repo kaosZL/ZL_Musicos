@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
-import { Image, ScrollView, TextInput, View, findNodeHandle, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native'
+import { Image, ScrollView, View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVText from '@/components/TV/TVText'
@@ -37,14 +37,6 @@ interface SourceItem {
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
 type TVUpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'error'
-type TVTextInputProps = TextInputProps & {
-  nextFocusUp?: number
-  nextFocusDown?: number
-  nextFocusLeft?: number
-  nextFocusRight?: number
-}
-const TVTextInput = TextInput as React.ComponentType<TVTextInputProps & { ref?: React.Ref<ComponentRef<typeof TextInput>> }>
-
 const DEFAULT_SOURCE_FOCUS_KEY = '__default__'
 const getFocusKey = (id: string) => id || DEFAULT_SOURCE_FOCUS_KEY
 const getHandleFromMap = (mapRef: MutableRefObject<FocusRefMap>, key?: string | null) => {
@@ -75,8 +67,6 @@ function TVSettings({ componentId }: { componentId: string }) {
   const musicInfo = usePlayerMusicInfo()
   const userApiList = useUserApiList()
   const apiStatus = useStatus()
-  const [importUrl, setImportUrl] = useState('')
-  const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState('')
   const [updateStatus, setUpdateStatus] = useState<TVUpdateStatus>('idle')
   const [updateInfo, setUpdateInfo] = useState<TVUpdateInfo | null>(null)
@@ -84,9 +74,7 @@ function TVSettings({ componentId }: { componentId: string }) {
   const [updateMessage, setUpdateMessage] = useState('')
   const firstSourceFocus = useTVFocusRef()
   const updateButtonFocus = useTVFocusRef()
-  const importButtonFocus = useTVFocusRef()
   const sourceRefs = useRef<FocusRefMap>({})
-  const inputRef = useRef<ComponentRef<typeof TextInput>>(null)
   const [qrImage, setQrImage] = useState('')
   const [lanRunning, setLanRunning] = useState(false)
   const [lanMessage, setLanMessage] = useState('')
@@ -143,7 +131,6 @@ function TVSettings({ componentId }: { componentId: string }) {
     mapRef.current[key] = node
     if (syncFirstSource) firstSourceFocus.ref.current = node as any
   }
-  const getInputHandle = () => inputRef.current ? findNodeHandle(inputRef.current) : null
   const getSourceHandle = (id?: string | null) => getHandleFromMap(sourceRefs, id ? getFocusKey(id) : null)
   const updateProgressText = useMemo(() => {
     if (updateStatus !== 'downloading' && updateStatus !== 'downloaded') return ''
@@ -241,26 +228,6 @@ function TVSettings({ componentId }: { componentId: string }) {
         return
       default:
         await handleCheckUpdate()
-    }
-  }
-
-  const handleImport = async() => {
-    const url = importUrl.trim()
-    if (!/^https?:\/\//.test(url)) {
-      setImportMessage(tvText.invalidUrl)
-      return
-    }
-    setImporting(true)
-    setImportMessage('')
-    try {
-      const script = await httpFetch(url).promise.then(resp => resp.body) as string
-      await importUserApi(script)
-      setImportMessage(tvText.importSuccess)
-      setImportUrl('')
-    } catch (err: unknown) {
-      setImportMessage(err instanceof Error ? err.message : tvText.removeFailed)
-    } finally {
-      setImporting(false)
     }
   }
 
@@ -406,7 +373,7 @@ function TVSettings({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={musicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="settings" subtitle={tvText.settings} nextFocusDown={firstSourceFocus.getNodeHandle() ?? undefined} />
+      <TVTopTabs items={createTVTabs(componentId)} activeId="settings" subtitle={tvText.settings} nextFocusDown={lanButtonFocus.getNodeHandle() ?? firstSourceFocus.getNodeHandle() ?? undefined} />
       <View style={styles.root}>
         <TVSettingsPane title={`${tvText.source}${dot}${tvText.userApi}`} subtitle={tvText.sourceSettingsDesc} style={styles.sourcePanel}>
           <TVText variant="caption" color={tvColors.dimText} style={styles.listHint}>OK 键使用音源 · 长按 OK 键删除/管理</TVText>
@@ -426,7 +393,7 @@ function TVSettings({ componentId }: { componentId: string }) {
                     onLongPress={() => { showSourceActionMenu(src) }}
                     hasTVPreferredFocus={index === 0}
                     nextFocusUp={getSourceHandle(prevSourceId) ?? undefined}
-                    nextFocusRight={updateButtonFocus.getNodeHandle() ?? getInputHandle() ?? importButtonFocus.getNodeHandle() ?? undefined}
+                    nextFocusRight={updateButtonFocus.getNodeHandle() ?? lanButtonFocus.getNodeHandle() ?? undefined}
                     nextFocusDown={getSourceHandle(nextSourceId) ?? undefined}
                   >
                     <View style={styles.sourceRow}>
@@ -451,15 +418,13 @@ function TVSettings({ componentId }: { componentId: string }) {
               {updateInfo ? <TVText variant="caption" color={tvColors.subtext} numberOfLines={1}>{tvText.updatePackage}{dot}{updateInfo.asset.abi}{dot}{formatUpdateSize(updateInfo.asset.size)}</TVText> : null}
               {updateProgressText ? <TVText variant="caption" color={tvColors.subtext} numberOfLines={1}>{tvText.downloadProgress}{dot}{updateProgressText}</TVText> : null}
             </View>
-            <TVButton ref={updateButtonFocus.ref as any} label={updateButtonLabel} tone={updateStatus === 'available' || updateStatus === 'downloaded' ? 'primary' : 'dark'} onPress={() => { void handleUpdatePress() }} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} nextFocusDown={getInputHandle() ?? importButtonFocus.getNodeHandle() ?? undefined} />
+            <TVButton ref={updateButtonFocus.ref as any} label={updateButtonLabel} tone={updateStatus === 'available' || updateStatus === 'downloaded' ? 'primary' : 'dark'} onPress={() => { void handleUpdatePress() }} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} nextFocusDown={lanButtonFocus.getNodeHandle() ?? undefined} />
             <TVText variant="caption" color={updateStatus === 'error' ? tvColors.warn : tvColors.primaryHigh} style={styles.message}>{updateMessage || tvText.installConfirmTip}</TVText>
           </TVSettingsPane>
 
           <TVSettingsPane title={tvText.importApi} subtitle={tvText.inputRemoteApi} style={styles.importPanel}>
-            <TVTextInput ref={inputRef} value={importUrl} onChangeText={setImportUrl} placeholder="https://.../source.js" placeholderTextColor={tvColors.dimText} style={styles.input} nextFocusUp={updateButtonFocus.getNodeHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} nextFocusDown={importButtonFocus.getNodeHandle() ?? undefined} />
-            <TVButton ref={importButtonFocus.ref as any} label={importing ? tvText.importing : tvText.import} tone="dark" onPress={() => { void handleImport() }} nextFocusUp={getInputHandle() ?? updateButtonFocus.getNodeHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} />
             {importMessage ? <TVText variant="caption" color={importMessage === tvText.importSuccess ? tvColors.primaryHigh : tvColors.warn} style={styles.message}>{importMessage}</TVText> : null}
-            <TVButton ref={lanButtonFocus.ref as any} label={lanRunning ? '关闭二维码' : '手机扫码导入'} tone={lanRunning ? 'danger' : 'dark'} onPress={() => { void (lanRunning ? handleCloseLanImport() : handleOpenLanImport()) }} nextFocusUp={importButtonFocus.getNodeHandle() ?? updateButtonFocus.getNodeHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} />
+            <TVButton ref={lanButtonFocus.ref as any} label={lanRunning ? '关闭二维码' : '手机扫码导入'} tone={lanRunning ? 'danger' : 'dark'} onPress={() => { void (lanRunning ? handleCloseLanImport() : handleOpenLanImport()) }} nextFocusUp={updateButtonFocus.getNodeHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} />
             {qrImage ? (
               <View style={styles.qrWrap}>
                 <Image source={{ uri: qrImage }} style={styles.qrImage} />
@@ -489,7 +454,6 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   updatePanel: { minHeight: tvSize(270) },
   updateMeta: { gap: tvSize(8), marginBottom: tvSize(18) },
   importPanel: { flex: 1 },
-  input: { minHeight: tvSize(58), color: tvColors.text, backgroundColor: 'rgba(255,255,255,0.085)', borderRadius: tvSize(22), paddingHorizontal: tvSize(18), fontSize: tvFont(18), borderWidth: 1, borderColor: tvColors.border, marginBottom: tvSize(14) },
   line: { marginTop: tvSize(9) },
   message: { marginTop: tvSize(14) },
   qrWrap: { alignItems: 'center', gap: tvSize(12), marginTop: tvSize(14) },
