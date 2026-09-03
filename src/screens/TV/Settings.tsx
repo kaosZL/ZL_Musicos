@@ -332,10 +332,7 @@ function TVSettings({ componentId }: { componentId: string }) {
     try {
       const removedIsActive = apiSource === id
       await removeUserApi([id])
-      if (removedIsActive) {
-        const fallbackId = apiSourceInfo.find(item => !item.disabled)?.id ?? userApiList.find(item => item.id !== id)?.id ?? ''
-        setApiSource(fallbackId)
-      }
+      if (removedIsActive) setApiSource('')
       setImportMessage(tvText.removeSuccess)
     } catch (err: unknown) {
       setImportMessage(err instanceof Error ? err.message : tvText.removeFailed)
@@ -370,20 +367,35 @@ function TVSettings({ componentId }: { componentId: string }) {
     }
   }
 
-  const handleRemoveFocusedSource = async() => {
+  const removePresetOrBuiltinSource = (id: string) => {
+    updateSetting({ 'common.tvRemovedSources': [...(removedSources ?? []), id] })
+    if (apiSource === id) setApiSource('')
+    setFocusedSourceId('')
+    setImportMessage('已删除该音源')
+  }
+
+  const doRemoveSource = async(id: string) => {
+    if (userApiById.has(id)) {
+      await handleRemove(id)
+      return
+    }
+    removePresetOrBuiltinSource(id)
+  }
+
+  const handleRemoveFocusedSource = () => {
     const id = focusedSourceId
     if (!id) {
       setImportMessage('聚合音源不可删除')
       return
     }
-    if (userApiById.has(id)) {
-      await handleRemove(id)
+    if (apiSource === id) {
+      Alert.alert('删除正在使用的音源', `「${focusedSourceName}」正在使用中。\n删除后将自动切换到聚合音源，当前歌曲会继续播放完，之后的搜索/播放都走聚合音源。\n\n确定删除吗？`, [
+        { text: '取消', style: 'cancel' },
+        { text: '删除', style: 'destructive', onPress: () => { void doRemoveSource(id) } },
+      ])
       return
     }
-    updateSetting({ 'common.tvRemovedSources': [...(removedSources ?? []), id] })
-    if (apiSource === id) setApiSource('')
-    setFocusedSourceId('')
-    setImportMessage('已删除该音源')
+    void doRemoveSource(id)
   }
 
   return (
@@ -425,7 +437,7 @@ function TVSettings({ componentId }: { componentId: string }) {
             <TVText variant="caption" color={tvColors.subtext} numberOfLines={1}>{focusedSourceName ? `已选中：${focusedSourceName}` : '用方向键选中音源后可操作'}</TVText>
             <View style={styles.sourceOpsRow}>
               <TVButton ref={sourceOpAlertButtonFocus.ref as any} label={focusedUserApi?.allowShowUpdateAlert ? '关闭更新提醒' : '开启更新提醒'} tone="dark" onPress={() => { handleToggleAlertOp() }} nextFocusUp={getSourceHandle(allSources[allSources.length - 1]?.id) ?? undefined} nextFocusRight={sourceOpRemoveButtonFocus.getNodeHandle() ?? undefined} />
-              <TVButton ref={sourceOpRemoveButtonFocus.ref as any} label="删除音源" tone="ghost" onPress={() => { void handleRemoveFocusedSource() }} nextFocusUp={getSourceHandle(allSources[allSources.length - 1]?.id) ?? undefined} nextFocusLeft={sourceOpAlertButtonFocus.getNodeHandle() ?? undefined} />
+              <TVButton ref={sourceOpRemoveButtonFocus.ref as any} label="删除音源" tone="ghost" onPress={() => { handleRemoveFocusedSource() }} nextFocusUp={getSourceHandle(allSources[allSources.length - 1]?.id) ?? undefined} nextFocusLeft={sourceOpAlertButtonFocus.getNodeHandle() ?? undefined} />
             </View>
           </View>
         </TVSettingsPane>
