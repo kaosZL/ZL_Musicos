@@ -39,6 +39,14 @@ import java.io.File;
 import java.util.Locale;
 import java.util.Objects;
 
+import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.util.Base64;
+import java.io.ByteArrayOutputStream;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
+
 public class UtilsModule extends ReactContextBaseJavaModule {
   private final ReactApplicationContext reactContext;
 
@@ -423,6 +431,81 @@ public class UtilsModule extends ReactContextBaseJavaModule {
         promise.reject("ERROR", e);
       }
     }).start();
+  }
+
+  @ReactMethod
+  public void startLanImportServer(int port, Promise promise) {
+    try {
+      LanImportServer.start(port > 0 ? port : 9527, reactContext.getApplicationContext(), (action, payload) ->
+        utilsEvent.sendLanSourceEvent(action, payload));
+      WritableMap params = Arguments.createMap();
+      params.putString("ip", getLanIp());
+      params.putInt("port", LanImportServer.getListeningPort());
+      promise.resolve(params);
+    } catch (Exception e) {
+      promise.reject("LAN_SERVER_ERROR", e);
+    }
+  }
+
+  @ReactMethod
+  public void stopLanImportServer(Promise promise) {
+    LanImportServer.stop();
+    promise.resolve(null);
+  }
+
+  @ReactMethod
+  public void pushLanSources(String sourcesJson, Promise promise) {
+    LanImportServer.setSources(sourcesJson);
+    promise.resolve(null);
+  }
+
+  @ReactMethod
+  public void generateQRCodeBase64(String text, int size, Promise promise) {
+    try {
+      BitMatrix matrix = new QRCodeWriter()
+        .encode(text, BarcodeFormat.QR_CODE, size, size);
+      Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565);
+      int[] pixels = new int[size * size];
+      for (int x = 0; x < size; x++) {
+        for (int y = 0; y < size; y++) {
+          pixels[y * size + x] = matrix.get(x, y) ? Color.BLACK : Color.WHITE;
+        }
+      }
+      bmp.setPixels(pixels, 0, size, 0, 0, size, size);
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      bmp.compress(Bitmap.CompressFormat.PNG, 100, out);
+      bmp.recycle();
+      promise.resolve("data:image/png;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP));
+    } catch (Exception e) {
+      promise.reject("QR_ERROR", e);
+    }
+  }
+
+  private String getLanIp() {
+    try {
+      WifiManager wifiManager = (WifiManager) reactContext.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+      WifiInfo wifiInfo = wifiManager == null ? null : wifiManager.getConnectionInfo();
+      int ip = wifiInfo == null ? 0 : wifiInfo.getIpAddress();
+      if (ip != 0) {
+        return (ip & 0xff) + "." + ((ip >> 8) & 0xff) + "." + ((ip >> 16) & 0xff) + "." + ((ip >> 24) & 0xff);
+      }
+    } catch (Exception ignored) {
+    }
+    try {
+      java.util.Enumeration<java.net.NetworkInterface> interfaces = java.net.NetworkInterface.getNetworkInterfaces();
+      while (interfaces.hasMoreElements()) {
+        java.net.NetworkInterface networkInterface = interfaces.nextElement();
+        java.util.Enumeration<java.net.InetAddress> addresses = networkInterface.getInetAddresses();
+        while (addresses.hasMoreElements()) {
+          java.net.InetAddress address = addresses.nextElement();
+          if (!address.isLoopbackAddress() && address instanceof java.net.Inet4Address) {
+            return address.getHostAddress();
+          }
+        }
+      }
+    } catch (Exception ignored) {
+    }
+    return "0.0.0.0";
   }
 }
 

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>ZL-Music 音源导入</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0d1117; color: #e6edf3; padding: 20px; max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .tip { color: #8b949e; font-size: 13px; margin-bottom: 18px; }
+  section { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  h2 { font-size: 16px; margin-bottom: 12px; color: #79c0ff; }
+  label { display: block; font-size: 13px; color: #8b949e; margin: 10px 0 6px; }
+  input, textarea { width: 100%; background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.16); border-radius: 10px; color: #e6edf3; padding: 12px; font-size: 14px; outline: none; }
+  textarea { min-height: 110px; font-family: monospace; resize: vertical; }
+  input:focus, textarea:focus { border-color: #79c0ff; }
+  button { background: #1f6feb; border: none; color: #fff; font-size: 15px; padding: 12px 18px; border-radius: 10px; margin-top: 12px; width: 100%; }
+  button:active { opacity: 0.8; }
+  button.ghost { background: rgba(255,255,255,0.12); }
+  button.danger { background: #b62324; }
+  .msg { font-size: 13px; margin-top: 10px; color: #7ee787; min-height: 18px; }
+  .msg.err { color: #ffa198; }
+  .item { background: rgba(255,255,255,0.05); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+  .item .name { font-size: 15px; font-weight: 600; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 8px; margin-left: 6px; background: #1f6feb33; color: #79c0ff; }
+  .badge.active { background: #23863633; color: #7ee787; }
+  .item .ops { display: flex; gap: 8px; margin-top: 10px; }
+  .item .ops button { width: auto; flex: 1; margin-top: 0; padding: 9px 0; font-size: 13px; }
+  .empty { color: #8b949e; font-size: 14px; text-align: center; padding: 14px 0; }
+</style>
+</head>
+<body>
+<h1>ZL-Music 音源导入</h1>
+<p class="tip">请确保手机与电视/盒子处于同一局域网 · 提交后电视端立即生效</p>
+
+<section>
+  <h2>导入新音源</h2>
+  <label>方式一：音源脚本链接（以 .js 结尾的地址）</label>
+  <input id="srcUrl" placeholder="https://example.com/source.js" autocapitalize="off" autocorrect="off">
+  <label>方式二：直接粘贴音源脚本内容</label>
+  <textarea id="srcScript" placeholder="// 粘贴完整音源 JS 脚本"></textarea>
+  <button onclick="doImport()">导入到电视</button>
+  <p id="importMsg" class="msg"></p>
+</section>
+
+<section>
+  <h2>已装音源</h2>
+  <div id="list"><p class="empty">加载中…</p></div>
+</section>
+
+<script>
+function showMsg(text, isErr) {
+  const el = document.getElementById('importMsg')
+  el.textContent = text
+  el.className = isErr ? 'msg err' : 'msg'
+}
+
+async function doImport() {
+  const url = document.getElementById('srcUrl').value.trim()
+  const script = document.getElementById('srcScript').value
+  if (!url && !script.trim()) return showMsg('请填写链接或粘贴脚本', true)
+  try {
+    const r = await fetch('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(url ? { url } : { script }) })
+    const d = await r.json()
+    if (d.ok) {
+      document.getElementById('srcUrl').value = ''
+      document.getElementById('srcScript').value = ''
+      showMsg(d.message || '已提交')
+      refresh()
+    } else {
+      showMsg(d.message || '提交失败', true)
+    }
+  } catch (e) {
+    showMsg('网络错误，请重试', true)
+  }
+}
+
+async function refresh() {
+  try {
+    const r = await fetch('/api/sources')
+    const d = await r.json()
+    render(d.sources || [])
+  } catch (e) { /* 静默 */ }
+}
+
+async function removeSource(id, name) {
+  if (!confirm('确定删除「' + name + '」吗？')) return
+  await fetch('/api/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+  refresh()
+}
+
+async function activate(id) {
+  await fetch('/api/activate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+  refresh()
+}
+
+function render(sources) {
+  const list = document.getElementById('list')
+  if (!sources.length) { list.innerHTML = '<p class="empty">暂无音源，先在上面导入一个吧</p>'; return }
+  list.innerHTML = ''
+  sources.forEach(s => {
+    const div = document.createElement('div')
+    div.className = 'item'
+    const activeBadge = s.active ? '<span class="badge active">使用中</span>' : ''
+    div.innerHTML = '<div class="name">' + escapeHtml(s.name) + activeBadge + '</div>'
+    if (s.isUser) {
+      const ops = document.createElement('div')
+      ops.className = 'ops'
+      if (!s.active) {
+        const btnUse = document.createElement('button')
+        btnUse.className = 'ghost'
+        btnUse.textContent = '设为音源'
+        btnUse.onclick = () => activate(s.id)
+        ops.appendChild(btnUse)
+      }
+      const btnDel = document.createElement('button')
+      btnDel.className = 'danger'
+      btnDel.textContent = '删除'
+      btnDel.onclick = () => removeSource(s.id, s.name)
+      ops.appendChild(btnDel)
+      div.appendChild(ops)
+    }
+    list.appendChild(div)
+  })
+}
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+}
+
+refresh()
+setInterval(refresh, 5000)
+</script>
+</body>
+</html>

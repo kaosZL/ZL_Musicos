@@ -1,5 +1,5 @@
-import { memo, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
-import { ScrollView, TextInput, View, findNodeHandle, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native'
+import { memo, useEffect, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
+import { Image, ScrollView, TextInput, View, findNodeHandle, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVText from '@/components/TV/TVText'
@@ -13,6 +13,7 @@ import { useStatus, useUserApiList } from '@/store/userApi/hook'
 import apiSourceInfo from '@/utils/musicSdk/api-source-info'
 import { setApiSource } from '@/core/apiSource'
 import { httpFetch } from '@/utils/request'
+import { generateQRCodeBase64, onLanSourceEvent, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
 import { importUserApi, removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
@@ -84,6 +85,11 @@ function TVSettings({ componentId }: { componentId: string }) {
   const alertRefs = useRef<FocusRefMap>({})
   const removeRefs = useRef<FocusRefMap>({})
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null)
+  const [qrImage, setQrImage] = useState('')
+  const [lanRunning, setLanRunning] = useState(false)
+  const [lanMessage, setLanMessage] = useState('')
+  const lanButtonFocus = useTVFocusRef()
+  const lanHandlerRef = useRef<((action: string, payload: string) => void) | null>(null)
   const sourceScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
   const sourceLayoutRef = useRef<Record<string, number>>({})
   useTVFocusRefresh()
@@ -249,6 +255,66 @@ function TVSettings({ componentId }: { componentId: string }) {
     }
   }
 
+  const pushLanSourcesSnapshot = () => {
+    try {
+      pushLanSources(JSON.stringify({
+        sources: allSources.map(src => ({ id: src.id, name: src.name, active: apiSource === src.id, isUser: userApiById.has(src.id) })),
+      }))
+    } catch (err: unknown) {
+      // 快照推送失败静默忽略
+    }
+  }
+
+  const handleLanSourceEvent = async(action: string, payload: string) => {
+    try {
+      if (action === 'import') {
+        const data = JSON.parse(payload || '{}') as { url?: string, script?: string }
+        let script = data.script ?? ''
+        if (!script && data.url) script = await httpFetch(data.url).promise.then(resp => resp.body) as string
+        if (!script.trim()) {
+          setLanMessage('手机提交的内容为空')
+          return
+        }
+        await importUserApi(script)
+        setLanMessage('手机导入成功')
+      } else if (action === 'remove') {
+        const data = JSON.parse(payload || '{}') as { id?: string }
+        if (data.id) await handleRemove(data.id)
+      } else if (action === 'activate') {
+        const data = JSON.parse(payload || '{}') as { id?: string }
+        if (data.id) setApiSource(data.id)
+      }
+    } catch (err: unknown) {
+      setLanMessage(err instanceof Error ? err.message : '手机操作失败')
+    }
+  }
+  lanHandlerRef.current = (action: string, payload: string) => { void handleLanSourceEvent(action, payload) }
+
+  useEffect(() => {
+    if (!lanRunning) return
+    pushLanSourcesSnapshot()
+    return onLanSourceEvent((event) => { void lanHandlerRef.current?.(event.action, event.payload) })
+  }, [lanRunning, allSources, apiSource, userApiById])
+
+  const handleOpenLanImport = async() => {
+    setLanMessage('')
+    try {
+      const { ip, port } = await startLanImportServer(9527)
+      const qr = await generateQRCodeBase64(`http://${ip}:${port}`, 560)
+      setQrImage(qr)
+      setLanRunning(true)
+      pushLanSourcesSnapshot()
+    } catch (err: unknown) {
+      setLanMessage(err instanceof Error ? err.message : '启动失败')
+    }
+  }
+
+  const handleCloseLanImport = () => {
+    stopLanImportServer()
+    setLanRunning(false)
+    setQrImage('')
+  }
+
   const handleRemove = async(id: string) => {
     setImportMessage('')
     try {
@@ -334,6 +400,13 @@ function TVSettings({ componentId }: { componentId: string }) {
             <TVTextInput ref={inputRef} value={importUrl} onChangeText={setImportUrl} placeholder="https://.../source.js" placeholderTextColor={tvColors.dimText} style={styles.input} nextFocusUp={updateButtonFocus.getNodeHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} nextFocusDown={importButtonFocus.getNodeHandle() ?? undefined} />
             <TVButton ref={importButtonFocus.ref as any} label={importing ? tvText.importing : tvText.import} tone="dark" onPress={() => { void handleImport() }} nextFocusUp={getInputHandle() ?? updateButtonFocus.getNodeHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} />
             {importMessage ? <TVText variant="caption" color={importMessage === tvText.importSuccess ? tvColors.primaryHigh : tvColors.warn} style={styles.message}>{importMessage}</TVText> : null}
+            <TVButton ref={lanButtonFocus.ref as any} label={lanRunning ? '关闭二维码' : '手机扫码导入'} tone={lanRunning ? 'danger' : 'dark'} onPress={() => { void (lanRunning ? handleCloseLanImport() : handleOpenLanImport()) }} nextFocusUp={importButtonFocus.getNodeHandle() ?? updateButtonFocus.getNodeHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} />
+            {qrImage ? (
+              <View style={styles.qrWrap}>
+                <Image source={{ uri: qrImage }} style={styles.qrImage} />
+                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>手机扫码打开导入页，粘贴源链接或脚本</TVText>
+              </View>
+            ) : null}
           </TVSettingsPane>
         </View>
       </View>
@@ -358,6 +431,8 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   input: { minHeight: tvSize(58), color: tvColors.text, backgroundColor: 'rgba(255,255,255,0.085)', borderRadius: tvSize(22), paddingHorizontal: tvSize(18), fontSize: tvFont(18), borderWidth: 1, borderColor: tvColors.border, marginBottom: tvSize(14) },
   line: { marginTop: tvSize(9) },
   message: { marginTop: tvSize(14) },
+  qrWrap: { alignItems: 'center', gap: tvSize(12), marginTop: tvSize(14) },
+  qrImage: { width: tvSize(320), height: tvSize(320), backgroundColor: '#FFFFFF', borderRadius: tvSize(16) },
 }
 
 export default memo(TVSettings)

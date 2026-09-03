@@ -11,6 +11,7 @@ public class UtilsEvent {
   public static final String SCREEN_STATE = "screen-state";
   public static final String SCREEN_SIZE_CHANGED = "screen-size-changed";
   public static final String TV_REMOTE_EVENT = "tv-remote-event";
+  public static final String LAN_SOURCE_EVENT = "lan-source-event";
 
   private static ReactApplicationContext sharedReactContext;
 
@@ -38,5 +39,17 @@ public class UtilsEvent {
     sharedReactContext
       .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
       .emit(TV_REMOTE_EVENT, params);
+  }
+
+  public static void sendLanSourceEvent(String action, String payload) {
+    if (sharedReactContext == null || !sharedReactContext.hasActiveCatalystInstance()) return;
+
+    WritableMap params = Arguments.createMap();
+    params.putString("action", action);
+    params.putString("payload", payload == null ? "" : payload);
+
+    sharedReactContext
+      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+      .emit(LAN_SOURCE_EVENT, params);
   }
 }

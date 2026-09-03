@@ -136,3 +136,23 @@ export const requestIgnoreBatteryOptimization = async() => new Promise<boolean>(
     resolve(false)
   })
 })
+
+export const startLanImportServer = (port: number) => UtilsModule.startLanImportServer(port) as Promise<{ ip: string, port: number }>
+
+export const stopLanImportServer = () => UtilsModule.stopLanImportServer() as Promise<void>
+
+export const generateQRCodeBase64 = (text: string, size = 560) => UtilsModule.generateQRCodeBase64(text, size) as Promise<string>
+
+export const pushLanSources = (sourcesJson: string) => UtilsModule.pushLanSources(sourcesJson) as Promise<void>
+
+export const onLanSourceEvent = (handler: (event: { action: string, payload: string }) => void): (() => void) => {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+  const eventEmitter = new NativeEventEmitter(UtilsModule)
+  const eventListener = eventEmitter.addListener('lan-source-event', event => {
+    handler(event as { action: string, payload: string })
+  })
+
+  return () => {
+    eventListener.remove()
+  }
+}
