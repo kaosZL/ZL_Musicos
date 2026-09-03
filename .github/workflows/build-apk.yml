@@ -30,15 +30,15 @@ jobs:
       - name: Bundle JS (重新编译，覆盖仓库里的旧 bundle)
         run: npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
 
-      - name: Build debug APK
+      - name: Build release APK (minify + debug签名，体积减半)
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ZL_Musicos-debug-apk-${{ github.ref_name }}
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/release/*.apk
           retention-days: 30
