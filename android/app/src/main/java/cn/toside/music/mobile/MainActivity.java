@@ -101,6 +101,7 @@ public class MainActivity extends NavigationActivity {
       case KeyEvent.KEYCODE_NUMPAD_ENTER:
       case KeyEvent.KEYCODE_BUTTON_A:
       case KeyEvent.KEYCODE_BUTTON_SELECT:
+      case KeyEvent.KEYCODE_MENU:
         return true;
       default:
         return false;
