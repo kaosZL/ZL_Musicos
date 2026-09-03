@@ -10,6 +10,7 @@ import TVSearchKeyboard from '@/components/TV/TVSearchKeyboard'
 import Focusable from '@/components/TV/Focusable'
 import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { search } from '@/core/search/music'
+import { matchHotArtists } from '@/config/hotArtists'
 import searchMusicState from '@/store/search/music/state'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { setTempList } from '@/core/list'
@@ -97,14 +98,18 @@ function TVSearch({ componentId }: { componentId: string }) {
   }, [source, text, syncPageInfo])
 
   const handleSearch = async(targetPage = 1, keywordOverride?: string) => {
-    const keyword = (keywordOverride ?? text).trim()
+    let keyword = (keywordOverride ?? text).trim()
+    if (keywordOverride == null && /^[a-zA-Z]+$/.test(keyword)) {
+      const exact = matchHotArtists(keyword, 1).find(s => s.pinyin === keyword.toLowerCase())
+      if (exact) keyword = exact.name
+    }
     if (!keyword) {
       setResults([])
       setError('')
       setPageInfo({ page: 0, maxPage: 0, total: 0 })
       return
     }
-    if (keywordOverride != null) setText(keywordOverride)
+    if (keyword !== text.trim()) setText(keyword)
     if (targetPage > 1) setLoadingMore(true)
     else setLoading(true)
     setError('')
@@ -141,14 +146,17 @@ function TVSearch({ componentId }: { componentId: string }) {
 
   const handleKeyboardKey = (key: string) => { setText(value => `${value}${key}`) }
   const hasMore = !!pageInfo.maxPage && pageInfo.page < pageInfo.maxPage
-  const firstHotHandle = getHotHandle(hotWords[0]) ?? undefined
-  const lastHotHandle = getHotHandle(hotWords[hotWords.length - 1]) ?? firstHotHandle
+  const suggestions = matchHotArtists(text)
+  const showSuggest = suggestions.length > 0
+  const displayWords = showSuggest ? suggestions.map(s => s.name) : hotWords
+  const firstHotHandle = getHotHandle(displayWords[0]) ?? undefined
+  const lastHotHandle = getHotHandle(displayWords[displayWords.length - 1]) ?? firstHotHandle
   const searchButtonHandle = searchButtonFocus.getNodeHandle() ?? undefined
   const firstResultHandle = firstResultFocus.getNodeHandle() ?? undefined
   const keyboardHandle = getKeyboardHandle() ?? undefined
   const keyboardTopRowFocusUps = Array.from({ length: 10 }, (_, colIndex) => {
-    const hotIndex = Math.min(hotWords.length - 1, Math.floor(colIndex * hotWords.length / 10))
-    return getHotHandle(hotWords[hotIndex]) ?? lastHotHandle
+    const hotIndex = Math.min(displayWords.length - 1, Math.floor(colIndex * displayWords.length / 10))
+    return getHotHandle(displayWords[hotIndex]) ?? lastHotHandle
   })
 
   return (
@@ -161,10 +169,10 @@ function TVSearch({ componentId }: { componentId: string }) {
             <TVTextInput ref={inputRef} value={text} onChangeText={setText} placeholder={tvText.searchPlaceholder} placeholderTextColor={tvColors.dimText} style={styles.input} nextFocusRight={searchButtonHandle} nextFocusDown={firstHotHandle} onSubmitEditing={() => { void handleSearch() }} />
             <TVButton ref={searchButtonFocus.ref as any} label={loading ? tvText.searching : tvText.search} tone="dark" onPress={() => { void handleSearch() }} hasTVPreferredFocus nextFocusLeft={getInputHandle() ?? undefined} nextFocusRight={firstResultHandle} nextFocusDown={firstHotHandle} />
           </View>
-          <TVText variant="cardTitle" style={styles.blockTitle}>{tvText.hotSearch}</TVText>
+          <TVText variant="cardTitle" style={styles.blockTitle}>{showSuggest ? '猜你想搜' : tvText.hotSearch}</TVText>
           <View style={styles.hotWrap}>
-            {hotWords.map((word, index) => (
-              <Focusable key={word} ref={bindHotRef(word) as any} style={styles.hotItem} onPress={() => { void handleSearch(1, word) }} nextFocusLeft={getHotHandle(hotWords[index - 1]) ?? undefined} nextFocusRight={getHotHandle(hotWords[index + 1]) ?? firstResultHandle} nextFocusUp={getInputHandle() ?? searchButtonHandle} nextFocusDown={keyboardHandle}>
+            {displayWords.map((word, index) => (
+              <Focusable key={word} ref={bindHotRef(word) as any} style={showSuggest ? [styles.hotItem, styles.suggestItem] : styles.hotItem} onPress={() => { void handleSearch(1, word) }} nextFocusLeft={getHotHandle(displayWords[index - 1]) ?? undefined} nextFocusRight={getHotHandle(displayWords[index + 1]) ?? firstResultHandle} nextFocusUp={getInputHandle() ?? searchButtonHandle} nextFocusDown={keyboardHandle}>
                 <TVText variant="body">{word}</TVText>
               </Focusable>
             ))}
@@ -210,6 +218,7 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   blockTitle: { marginTop: tvSize(12), fontSize: tvFont(20) },
   hotWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: tvSize(8), marginTop: tvSize(8), marginBottom: tvSize(12) },
   hotItem: { minHeight: tvSize(32), borderRadius: 999, paddingHorizontal: tvSize(13), alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: tvColors.border },
+  suggestItem: { backgroundColor: 'rgba(122,162,247,0.16)', borderColor: tvColors.primaryHigh },
   resultPanel: { flex: 1, paddingHorizontal: tvSize(30), paddingVertical: tvSize(26), backgroundColor: 'rgba(10,13,21,0.96)' },
   resultHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: tvSize(18) },
   resultContent: { paddingBottom: tvSize(20) },
