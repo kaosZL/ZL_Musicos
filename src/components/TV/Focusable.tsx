@@ -40,6 +40,14 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
   const focusedRef = useRef(false)
   const focusChangeRef = useRef(onTVFocusChange)
   const longPressFiredRef = useRef(false)
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
+    }
+  }, [])
 
   useImperativeHandle(ref, () => nativeRef.current!, [])
 
@@ -60,16 +68,35 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
       longPressFiredRef.current = false
       return
     }
-    ;(onPress as unknown as () => void)()
-  }, [onPress])
+    // 如果有 onLongPress，延迟执行 onPress 给长按检测留时间
+    if (onLongPress) {
+      if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
+      pressTimerRef.current = setTimeout(() => {
+        pressTimerRef.current = null
+        if (!longPressFiredRef.current) {
+          ;(onPress as unknown as () => void)()
+        }
+      }, 300)
+    } else {
+      ;(onPress as unknown as () => void)()
+    }
+  }, [onPress, onLongPress])
 
   const handleLongPress = useCallback(() => {
     longPressFiredRef.current = true
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current)
+      pressTimerRef.current = null
+    }
     onLongPress?.()
   }, [onLongPress])
 
   const handlePressIn = useCallback(() => {
     longPressFiredRef.current = false
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current)
+      pressTimerRef.current = null
+    }
   }, [])
 
   const handleFocus = useCallback((event: FocusEvent) => {
