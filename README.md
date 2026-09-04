@@ -8,27 +8,31 @@ ZL-Music TV 是基于 [lx-music-mobile 1.8.4](https://github.com/lyswhut/lx-musi
 
 ### 首页
 
-![TV 首页](docs/screenshots/tv-home.png)
+![首页](docs/screenshots/首页.png)
+
+### 首页 · 沉浸模式
+
+![首页2](docs/screenshots/首页2.png)
 
 ### 排行榜
 
-![TV 排行榜](docs/screenshots/tv-ranking.png)
+![排行榜](docs/screenshots/排行榜.png)
 
-### 榜单详情
+### 搜索界面
 
-![TV 榜单详情](docs/screenshots/tv-ranking-detail.png)
+![搜索界面](docs/screenshots/搜索界面.png)
 
-### 搜索
+### 播放详情页
 
-![TV 搜索](docs/screenshots/tv-search.png)
+![播放详情页](docs/screenshots/播放详情页.png)
+
+### 播放列表
+
+![播放列表](docs/screenshots/播放列表.png)
 
 ### 设置
 
-![TV 设置](docs/screenshots/tv-settings.png)
-
-### 播放页
-
-![TV 播放页](docs/screenshots/tv-player.png)
+![设置](docs/screenshots/设置.png)
 
 ## 主要特性
 
