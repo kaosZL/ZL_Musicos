@@ -7,6 +7,7 @@ import TVButton from '@/components/TV/TVButton'
 import TVMusicRow from '@/components/TV/TVMusicRow'
 import TVGlassPanel from '@/components/TV/TVGlassPanel'
 import type Focusable from '@/components/TV/Focusable'
+import { Alert } from 'react-native'
 import { showTVDialog } from '@/components/TV/TVDialog'
 import { tvColors } from '@/theme/tv'
 import { usePlayerMusicInfo } from '@/store/player/hook'
@@ -91,25 +92,25 @@ function TVQueue({ componentId }: { componentId: string }) {
   }
 
   const handleRemoveMusic = (item: LX.Music.MusicInfo, index: number) => {
-    showTVDialog({
-      title: '从播放列表删除',
-      message: `确定删除「${item.name ?? '未知歌曲'}」吗？`,
-      buttons: [
-        { label: '取消', tone: 'dark' },
-        { label: '删除', tone: 'danger', onPress: () => { void removeListMusics(LIST_IDS.TEMP, [item.id]) } },
-      ],
-    })
+    Alert.alert(
+      '从播放列表删除',
+      `确定删除「${item.name ?? '未知歌曲'}」吗？`,
+      [
+        { text: '取消', style: 'cancel' },
+        { text: '删除', style: 'destructive', onPress: () => { void removeListMusics(LIST_IDS.TEMP, [item.id]) } },
+      ]
+    )
   }
 
   const handleClear = () => {
-    showTVDialog({
-      title: '清空播放列表',
-      message: `确定清空全部 ${fetchedMusicList.length} 首歌曲吗？`,
-      buttons: [
-        { label: '取消', tone: 'dark' },
-        { label: '清空', tone: 'danger', onPress: () => { void clearListMusics([LIST_IDS.TEMP]) } },
-      ],
-    })
+    Alert.alert(
+      '清空播放列表',
+      `确定清空全部 ${fetchedMusicList.length} 首歌曲吗？`,
+      [
+        { text: '取消', style: 'cancel' },
+        { text: '清空', style: 'destructive', onPress: () => { void clearListMusics([LIST_IDS.TEMP]) } },
+      ]
+    )
   }
 
   const handleCyclePlayMode = () => {
