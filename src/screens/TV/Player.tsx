@@ -221,17 +221,19 @@ function TVPlayer({ componentId }: { componentId: string }) {
     menu: () => { revealControls() },
   })
 
-  // 左右方向键快进/快退（长按连跳；控制条按钮有焦点时不触发）
+  // 左右方向键：长按才快进/快退 5s；短按由焦点系统处理
   useEffect(() => {
     return onTVRemoteEvent(({ eventType, eventKeyAction }) => {
-      if (eventKeyAction !== 1 && eventKeyAction !== 2) return
       if (eventType !== 'left' && eventType !== 'right') return
       if (!musicInfo.id) return
+      // eventKeyAction: 0=DOWN, 1=UP, 2=REPEAT(长按产生的重复事件)
+      // 只在长按的重复事件时触发快进快退（短按不触发）
+      if (eventKeyAction !== 2) return
       if (controlFocusCountRef.current > 0) return
       revealControls()
       const current = progress.nowPlayTime || 0
       const max = progress.maxPlayTime || 0
-      const delta = eventType === 'right' ? 10 : -10
+      const delta = eventType === 'right' ? 5 : -5
       const target = Math.max(0, Math.min(max, current + delta))
       void setCurrentTime(target)
     })
