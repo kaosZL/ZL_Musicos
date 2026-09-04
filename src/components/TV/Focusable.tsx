@@ -6,6 +6,7 @@ import { notifyTVTargetFocused, registerTVFocusTarget, scheduleTVInitialFocus, s
 export interface FocusableProps extends PressableProps {
   focusStyle?: StyleProp<ViewStyle>
   onPress?: PressableProps['onPress']
+  onLongPress?: PressableProps['onLongPress']
   onTVFocusChange?: (focused: boolean) => void
   hasTVPreferredFocus?: boolean
   nextFocusUp?: number
@@ -21,6 +22,7 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
   focusStyle,
   children,
   onPress,
+  onLongPress,
   hasTVPreferredFocus,
   nextFocusUp,
   nextFocusDown,
@@ -37,6 +39,7 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
   const focusScopeId = useContext(TVFocusScopeContext)
   const focusedRef = useRef(false)
   const focusChangeRef = useRef(onTVFocusChange)
+  const longPressFiredRef = useRef(false)
 
   useImperativeHandle(ref, () => nativeRef.current!, [])
 
@@ -53,8 +56,21 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
 
   const triggerTVPress = useCallback(() => {
     if (!onPress) return
+    if (longPressFiredRef.current) {
+      longPressFiredRef.current = false
+      return
+    }
     ;(onPress as unknown as () => void)()
   }, [onPress])
+
+  const handleLongPress = useCallback(() => {
+    longPressFiredRef.current = true
+    onLongPress?.()
+  }, [onLongPress])
+
+  const handlePressIn = useCallback(() => {
+    longPressFiredRef.current = false
+  }, [])
 
   const handleFocus = useCallback((event: FocusEvent) => {
     setTVFocused(true)
@@ -107,7 +123,9 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
       nextFocusDown={nextFocusDown}
       nextFocusLeft={nextFocusLeft}
       nextFocusRight={nextFocusRight}
-      onPress={onPress}
+      onPress={onPress ? triggerTVPress : undefined}
+      onLongPress={onLongPress ? handleLongPress : undefined}
+      onPressIn={handlePressIn}
       onFocus={handleFocus}
       onBlur={handleBlur}
       style={state => [
