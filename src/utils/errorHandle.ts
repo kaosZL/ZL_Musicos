@@ -3,6 +3,8 @@ import { Alert } from 'react-native'
 import { setJSExceptionHandler, setNativeExceptionHandler } from 'react-native-exception-handler'
 import { log } from '@/utils/log'
 import { toast } from './tools'
+import { getCachedIsTV } from '@/utils/tvMode'
+import { showTVDialog } from '@/components/TV/TVDialog'
 
 const errorHandler = (e: Error, isFatal: boolean) => {
   const excludedErrors = [
@@ -11,6 +13,14 @@ const errorHandler = (e: Error, isFatal: boolean) => {
   if (isFatal) {
     if (excludedErrors.some((excludedError) => e.message.includes(excludedError))) {
       toast('应用遇到了错误，如果你有固定的复现方式，请截图并在 GitHub 反馈（并附上具体的操作步骤，以及“设置-错误日志”的内容）')
+    } else if (getCachedIsTV()) {
+      showTVDialog({
+        title: '💥 应用遇到错误',
+        message: `以下是错误信息，请截图并在 GitHub 反馈。现在应用可能会出现异常，若出现异常请尝试强制结束应用后重新启动。\n\nError: ${isFatal ? 'Fatal: ' : ''}${e.name} ${e.message}`,
+        buttons: [
+          { label: '关闭', tone: 'dark' },
+        ],
+      })
     } else {
       Alert.alert(
         '💥Unexpected error occurred💥',

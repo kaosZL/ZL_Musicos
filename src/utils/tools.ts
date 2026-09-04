@@ -185,6 +185,9 @@ export const handleReadFile = async<T = unknown>(path: string): Promise<T> => {
   return data
 }
 
+import { getCachedIsTV } from '@/utils/tvMode'
+import { showTVDialog } from '@/components/TV/TVDialog'
+
 export const confirmDialog = async({
   title = '',
   message = '',
@@ -192,6 +195,19 @@ export const confirmDialog = async({
   confirmButtonText = global.i18n.t('dialog_confirm'),
   bgClose = true,
 }) => {
+  if (getCachedIsTV()) {
+    return new Promise<boolean>(resolve => {
+      showTVDialog({
+        title: title || '确认',
+        message,
+        buttons: [
+          { label: cancelButtonText, tone: 'dark', onPress: () => { resolve(false) } },
+          { label: confirmButtonText, tone: 'primary', onPress: () => { resolve(true) } },
+        ],
+        onDismiss: () => { resolve(false) },
+      })
+    })
+  }
   return new Promise<boolean>(resolve => {
     Alert.alert(title, message, [
       {
@@ -258,6 +274,10 @@ export const checkNotificationPermission = async() => {
   if (isHide != null) return
   const enabled = await isNotificationsEnabled()
   if (enabled) return
+  if (getCachedIsTV()) {
+    // TV 端跳过通知权限弹窗（电视不需要通知）
+    return
+  }
   return new Promise<void>((resolve) => {
     Alert.alert(
       global.i18n.t('notifications_check_title'),
@@ -300,6 +320,10 @@ export const checkIgnoringBatteryOptimization = async() => {
   if (isHide != null) return
   const enabled = await isIgnoringBatteryOptimization()
   if (enabled) return
+  if (getCachedIsTV()) {
+    // TV 端跳过电池优化弹窗（电视常驻不弹）
+    return
+  }
   return new Promise<void>((resolve) => {
     Alert.alert(
       global.i18n.t('ignoring_battery_optimization_check_title'),
