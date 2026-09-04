@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
-import { FlatList, TextInput, View, findNodeHandle, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native'
+import { FlatList, ScrollView, TextInput, View, findNodeHandle, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVText from '@/components/TV/TVText'
