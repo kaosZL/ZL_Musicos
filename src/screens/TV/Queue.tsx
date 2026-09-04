@@ -8,7 +8,7 @@ import TVMusicRow from '@/components/TV/TVMusicRow'
 import TVGlassPanel from '@/components/TV/TVGlassPanel'
 import type Focusable from '@/components/TV/Focusable'
 import { Alert } from 'react-native'
-import { showTVDialog } from '@/components/TV/TVDialog'
+import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
 import { tvColors } from '@/theme/tv'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { useSettingValue } from '@/store/setting/hook'
@@ -47,6 +47,7 @@ function TVQueue({ componentId }: { componentId: string }) {
   const firstQueueFocus = useTVFocusRef()
   const listRef = useRef<FlatList<LX.Music.MusicInfo>>(null)
   const queueRefs = useRef<FocusRefMap>({})
+  const [localDialog, setLocalDialog] = useState<TVDialogRequest | null>(null)
   useTVFocusRefresh()
 
   useTVNavigationBack(componentId)
@@ -91,26 +92,30 @@ function TVQueue({ componentId }: { componentId: string }) {
     pushTVPlayerScreen(componentId)
   }
 
+  const showLocalDialog = (request: TVDialogRequest) => {
+    setLocalDialog(request)
+  }
+
   const handleRemoveMusic = (item: LX.Music.MusicInfo, index: number) => {
-    Alert.alert(
-      '从播放列表删除',
-      `确定删除「${item.name ?? '未知歌曲'}」吗？`,
-      [
-        { text: '取消', style: 'cancel' },
-        { text: '删除', style: 'destructive', onPress: () => { void removeListMusics(LIST_IDS.TEMP, [item.id]) } },
-      ]
-    )
+    showLocalDialog({
+      title: '从播放列表删除',
+      message: `确定删除「${item.name ?? '未知歌曲'}」吗？`,
+      buttons: [
+        { label: '取消', tone: 'dark' },
+        { label: '删除', tone: 'danger', onPress: () => { void removeListMusics(LIST_IDS.TEMP, [item.id]) } },
+      ],
+    })
   }
 
   const handleClear = () => {
-    Alert.alert(
-      '清空播放列表',
-      `确定清空全部 ${fetchedMusicList.length} 首歌曲吗？`,
-      [
-        { text: '取消', style: 'cancel' },
-        { text: '清空', style: 'destructive', onPress: () => { void clearListMusics([LIST_IDS.TEMP]) } },
-      ]
-    )
+    showLocalDialog({
+      title: '清空播放列表',
+      message: `确定清空全部 ${fetchedMusicList.length} 首歌曲吗？`,
+      buttons: [
+        { label: '取消', tone: 'dark' },
+        { label: '清空', tone: 'danger', onPress: () => { void clearListMusics([LIST_IDS.TEMP]) } },
+      ],
+    })
   }
 
   const handleCyclePlayMode = () => {
@@ -183,6 +188,22 @@ function TVQueue({ componentId }: { componentId: string }) {
           />
         </TVGlassPanel>
       </View>
+      <TVDialog
+        visible={!!localDialog}
+        title={localDialog?.title ?? ''}
+        message={localDialog?.message}
+        buttons={localDialog?.buttons?.map(btn => ({
+          ...btn,
+          onPress: () => {
+            setLocalDialog(null)
+            btn.onPress?.()
+          },
+        })) ?? []}
+        onDismiss={() => {
+          localDialog?.onDismiss?.()
+          setLocalDialog(null)
+        }}
+      />
     </TVAppleScaffold>
   )
 }
