@@ -1,5 +1,5 @@
 import { popToRoot } from '@/navigation'
-import { pushTVHistoryScreen, pushTVSearchScreen, pushTVSettingsScreen } from '@/navigation/navigation'
+import { pushTVHistoryScreen, pushTVQueueScreen, pushTVSearchScreen, pushTVSettingsScreen } from '@/navigation/navigation'
 import type { TVTabItem } from '@/components/TV/TVTopTabs'
 import { dot, tvText } from './labels'
 
@@ -24,6 +24,7 @@ export const createTVTabs = (componentId: string): TVTabItem[] => [
   { id: 'home', label: tvText.recommend, onPress: () => { void popToRoot(componentId) } },
   { id: 'new', label: tvText.charts, onPress: () => { pushTVHistoryScreen(componentId) } },
   { id: 'search', label: tvText.search, onPress: () => { pushTVSearchScreen(componentId) } },
+  { id: 'queue', label: '播放列表', onPress: () => { pushTVQueueScreen(componentId) } },
   { id: 'settings', label: tvText.settings, onPress: () => { pushTVSettingsScreen(componentId) } },
 ]
 

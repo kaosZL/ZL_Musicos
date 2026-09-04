@@ -7,12 +7,15 @@ import TVButton from '@/components/TV/TVButton'
 import TVMusicRow from '@/components/TV/TVMusicRow'
 import TVGlassPanel from '@/components/TV/TVGlassPanel'
 import type Focusable from '@/components/TV/Focusable'
+import { showTVDialog } from '@/components/TV/TVDialog'
 import { tvColors } from '@/theme/tv'
 import { usePlayerMusicInfo } from '@/store/player/hook'
-import { clearListMusics } from '@/core/list'
+import { useSettingValue } from '@/store/setting/hook'
+import { clearListMusics, removeListMusics } from '@/core/list'
 import { playList } from '@/core/player/player'
-import { LIST_IDS } from '@/config/constant'
+import { LIST_IDS, MUSIC_TOGGLE_MODE_LIST } from '@/config/constant'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
+import { updateSetting } from '@/core/common'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
@@ -25,11 +28,20 @@ type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
 const ITEM_SIZE = 78
 
+const PLAY_MODE_LABELS: Record<string, string> = {
+  listLoop: '列表循环',
+  random: '随机播放',
+  list: '顺序播放',
+  singleLoop: '单曲循环',
+  none: '播完停止',
+}
+
 function TVQueue({ componentId }: { componentId: string }) {
   const currentMusicInfo = usePlayerMusicInfo()
   const fetchedMusicList = useTVFetchedMusicList()
+  const playMode = useSettingValue('player.togglePlayMethod')
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const playNowFocus = useTVFocusRef()
+  const playModeFocus = useTVFocusRef()
   const clearFocus = useTVFocusRef()
   const firstQueueFocus = useTVFocusRef()
   const listRef = useRef<FlatList<LX.Music.MusicInfo>>(null)
@@ -37,6 +49,18 @@ function TVQueue({ componentId }: { componentId: string }) {
   useTVFocusRefresh()
 
   useTVNavigationBack(componentId)
+
+  // 进入页面时自动滚动到当前播放歌曲
+  useEffect(() => {
+    if (!fetchedMusicList.length || !currentMusicInfo.id) return
+    const playingIndex = fetchedMusicList.findIndex(m => m.id === currentMusicInfo.id)
+    if (playingIndex >= 0) {
+      setSelectedIndex(playingIndex)
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToOffset({ offset: Math.max(0, playingIndex * ITEM_SIZE - ITEM_SIZE * 2), animated: false })
+      })
+    }
+  }, [currentMusicInfo.id, fetchedMusicList])
 
   useEffect(() => {
     if (!fetchedMusicList.length) {
@@ -66,10 +90,35 @@ function TVQueue({ componentId }: { componentId: string }) {
     pushTVPlayerScreen(componentId)
   }
 
-  const handleClear = () => {
-    void clearListMusics([LIST_IDS.TEMP])
-    setSelectedIndex(0)
+  const handleRemoveMusic = (item: LX.Music.MusicInfo, index: number) => {
+    showTVDialog({
+      title: '从播放列表删除',
+      message: `确定删除「${item.name ?? '未知歌曲'}」吗？`,
+      buttons: [
+        { label: '取消', tone: 'dark' },
+        { label: '删除', tone: 'danger', onPress: () => { void removeListMusics(LIST_IDS.TEMP, [item.id]) } },
+      ],
+    })
   }
+
+  const handleClear = () => {
+    showTVDialog({
+      title: '清空播放列表',
+      message: `确定清空全部 ${fetchedMusicList.length} 首歌曲吗？`,
+      buttons: [
+        { label: '取消', tone: 'dark' },
+        { label: '清空', tone: 'danger', onPress: () => { void clearListMusics([LIST_IDS.TEMP]) } },
+      ],
+    })
+  }
+
+  const handleCyclePlayMode = () => {
+    const currentIndex = MUSIC_TOGGLE_MODE_LIST.indexOf(playMode)
+    const nextIndex = (currentIndex + 1) % MUSIC_TOGGLE_MODE_LIST.length
+    updateSetting({ 'player.togglePlayMethod': MUSIC_TOGGLE_MODE_LIST[nextIndex] })
+  }
+
+  const playModeLabel = PLAY_MODE_LABELS[playMode] ?? '列表循环'
 
   useTVRemoteActions({
     playPause: () => {
@@ -83,17 +132,17 @@ function TVQueue({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={currentMusicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="queue" nextFocusDown={firstQueueFocus.getNodeHandle() ?? playNowFocus.getNodeHandle() ?? undefined} />
+      <TVTopTabs items={createTVTabs(componentId)} activeId="queue" nextFocusDown={firstQueueFocus.getNodeHandle() ?? playModeFocus.getNodeHandle() ?? undefined} />
       <View style={styles.root}>
         <TVGlassPanel style={styles.listPanel}>
           <View style={styles.header}>
             <View>
-              <TVText variant="pageTitle" style={styles.title}>{tvText.playlist}</TVText>
-              <TVText variant="body" style={styles.subtitle}>{fetchedMusicList.length} {tvText.songs} · {selectedMusicInfo ? getSourceName(selectedMusicInfo.source) : tvText.aggregateSource}</TVText>
+              <TVText variant="pageTitle" style={styles.title}>播放列表</TVText>
+              <TVText variant="body" style={styles.subtitle}>{fetchedMusicList.length} 首 · {playModeLabel}</TVText>
             </View>
             <View style={styles.actions}>
-              <TVButton ref={playNowFocus.ref as any} label={selectedMusicInfo ? tvText.playNow : tvText.nowPlaying} onPress={() => { void handlePlayNow(selectedIndex) }} tone={selectedMusicInfo ? 'primary' : 'dark'} hasTVPreferredFocus nextFocusRight={clearFocus.getNodeHandle() ?? undefined} />
-              <TVButton ref={clearFocus.ref as any} label={tvText.clearList} onPress={handleClear} tone={fetchedMusicList.length ? 'ghost' : 'dark'} nextFocusLeft={playNowFocus.getNodeHandle() ?? undefined} />
+              <TVButton ref={playModeFocus.ref as any} label={`模式: ${playModeLabel}`} tone="dark" onPress={handleCyclePlayMode} hasTVPreferredFocus nextFocusRight={clearFocus.getNodeHandle() ?? undefined} />
+              <TVButton ref={clearFocus.ref as any} label={tvText.clearList} tone={fetchedMusicList.length ? 'ghost' : 'dark'} onPress={handleClear} nextFocusLeft={playModeFocus.getNodeHandle() ?? undefined} />
             </View>
           </View>
           <FlatList
@@ -104,10 +153,14 @@ function TVQueue({ componentId }: { componentId: string }) {
             removeClippedSubviews={false}
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={<TVText variant="meta">{tvText.emptyQueueHint}</TVText>}
+            ListHeaderComponent={fetchedMusicList.length ? (
+              <TVText variant="caption" color={tvColors.dimText} style={styles.hint}>OK 播放歌曲 · 长按 OK 从列表删除</TVText>
+            ) : null}
             renderItem={({ item, index }) => {
               const itemKey = getQueueItemKey(item, index)
               const prevKey = fetchedMusicList[index - 1] ? getQueueItemKey(fetchedMusicList[index - 1], index - 1) : null
               const nextKey = fetchedMusicList[index + 1] ? getQueueItemKey(fetchedMusicList[index + 1], index + 1) : null
+              const isCurrentPlaying = currentMusicInfo.id === item.id
               return (
                 <TVMusicRow
                   ref={bindQueueRef(itemKey, index === 0) as any}
@@ -115,13 +168,13 @@ function TVQueue({ componentId }: { componentId: string }) {
                   title={item.name ?? tvText.unknownSong}
                   subtitle={getMusicSubtitle(item)}
                   meta={item.interval ?? getSourceName(item.source)}
-                  badge={currentMusicInfo.id === item.id ? tvText.nowPlaying : undefined}
+                  badge={isCurrentPlaying ? '▶ 正在播放' : undefined}
                   lazyMusicInfo={item}
-                  active={selectedIndex === index}
+                  active={isCurrentPlaying || selectedIndex === index}
                   onFocus={() => { handleQueueFocus(index) }}
                   onPress={() => { void handlePlayNow(index) }}
-                  nextFocusUp={index === 0 ? playNowFocus.getNodeHandle() ?? undefined : getQueueHandle(prevKey) ?? undefined}
-                  nextFocusRight={playNowFocus.getNodeHandle() ?? undefined}
+                  onLongPress={() => { handleRemoveMusic(item, index) }}
+                  nextFocusUp={index === 0 ? playModeFocus.getNodeHandle() ?? undefined : getQueueHandle(prevKey) ?? undefined}
                   nextFocusDown={getQueueHandle(nextKey) ?? undefined}
                 />
               )
@@ -136,10 +189,11 @@ function TVQueue({ componentId }: { componentId: string }) {
 const styles: Record<string, ViewStyle | TextStyle | any> = {
   root: { flex: 1 },
   listPanel: { flex: 1, paddingHorizontal: 34, paddingVertical: 30 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, gap: 24 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, gap: 24 },
   title: { fontSize: 48, lineHeight: 56 },
   subtitle: { marginTop: 8, color: tvColors.subtext },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  hint: { marginBottom: 12, textAlign: 'center' },
   listContent: { paddingBottom: 28 },
 }
 
