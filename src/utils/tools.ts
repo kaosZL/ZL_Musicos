@@ -185,9 +185,6 @@ export const handleReadFile = async<T = unknown>(path: string): Promise<T> => {
   return data
 }
 
-import { getCachedIsTV } from '@/utils/tvMode'
-import { showTVDialog } from '@/components/TV/TVDialog'
-
 export const confirmDialog = async({
   title = '',
   message = '',
