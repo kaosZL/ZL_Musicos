@@ -19,6 +19,9 @@ import { getListDetail as getBoardListDetail } from '@/core/leaderboard'
 import { getListDetail as getSonglistDetail } from '@/core/songlist'
 import { handlePlay as handleBoardPlay } from '@/screens/Home/Views/Leaderboard/listAction'
 import { handlePlay as handleSonglistPlay } from '@/screens/SonglistDetail/listAction'
+import { setTempList } from '@/core/list'
+import { playList } from '@/core/player/player'
+import { LIST_IDS } from '@/config/constant'
 import type { TVDetailPayload } from './types'
 import { dot, tvText } from './labels'
 import { createTVTabs, getSourceName } from './utils'
@@ -112,6 +115,13 @@ function TVDetail({ componentId, payload }: Props) {
     pushTVPlayerScreen(componentId)
   }
 
+  // 单曲播放：只把这一首加入播放列表
+  const handleSinglePlay = async(item: LX.Music.MusicInfoOnline, index: number) => {
+    await setTempList(`detail_single__${item.id}`, [item])
+    void playList(LIST_IDS.TEMP, 0)
+    pushTVPlayerScreen(componentId)
+  }
+
   const statsText = loading
     ? tvText.loadingSongs
     : error
@@ -194,7 +204,7 @@ function TVDetail({ componentId, payload }: Props) {
                   badge={index < 3 ? tvText.hotChart : undefined}
                   hasTVPreferredFocus={preferFirstRow && index === 0}
                   onFocus={() => { handleFocus(index) }}
-                  onPress={() => { void handlePlay(index) }}
+                  onPress={() => { void handleSinglePlay(item, index) }}
                   nextFocusUp={index === 0 ? playAllFocus.getNodeHandle() ?? undefined : getRowHandle(prevKey) ?? undefined}
                   nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
                   nextFocusDown={getRowHandle(nextKey) ?? undefined}
