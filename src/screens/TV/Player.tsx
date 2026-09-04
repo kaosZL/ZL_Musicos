@@ -9,11 +9,13 @@ import TVNowPlayingDock from '@/components/TV/TVNowPlayingDock'
 import { getTVLayoutMetrics, tvColors, tvSize } from '@/theme/tv'
 import { useIsPlay, usePlayerMusicInfo, useProgress } from '@/store/player/hook'
 import { playNext, playPrev, togglePlay } from '@/core/player/player'
+import { setCurrentTime } from '@/plugins/player/utils'
 import { useSettingValue } from '@/store/setting/hook'
 import { updateSetting } from '@/core/common'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
+import { onTVRemoteEvent } from '@/utils/nativeModules/utils'
 import { useLrcPlay, useLrcSet } from '@/plugins/lyric'
 import { MUSIC_TOGGLE_MODE, MUSIC_TOGGLE_MODE_LIST } from '@/config/constant'
 import { tvText } from './labels'
@@ -218,6 +220,21 @@ function TVPlayer({ componentId }: { componentId: string }) {
     up: () => { revealControls(); setFocusToken(t => t + 1) },
     menu: () => { revealControls() },
   })
+
+  // 左右方向键快进/快退（长按连跳）
+  useEffect(() => {
+    return onTVRemoteEvent(({ eventType, eventKeyAction }) => {
+      if (eventKeyAction !== 1 && eventKeyAction !== 2) return
+      if (eventType !== 'left' && eventType !== 'right') return
+      if (!musicInfo.id) return
+      revealControls()
+      const current = progress.nowPlayTime || 0
+      const max = progress.maxPlayTime || 0
+      const delta = eventType === 'right' ? 10 : -10
+      const target = Math.max(0, Math.min(max, current + delta))
+      void setCurrentTime(target)
+    })
+  }, [musicInfo.id, progress.nowPlayTime, progress.maxPlayTime, revealControls])
 
   const activeLyricIndex = lyricPlay.line >= 0 && lyricPlay.line < lyricLines.length ? lyricPlay.line : -1
   const fallbackLyric = isDisplayLyric(lyricPlay.text) ? lyricPlay.text.trim() : (musicInfo.id ? tvText.loading : tvText.chooseSongFirst)
