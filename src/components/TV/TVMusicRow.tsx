@@ -94,6 +94,12 @@ const styles: Record<string, ViewStyle | any> = {
   focus: {
     backgroundColor: tvColors.glassHigh,
     borderColor: tvColors.primaryHigh,
+    borderWidth: 2,
+    shadowColor: tvColors.primaryHigh,
+    shadowOpacity: 0.4,
+    shadowRadius: tvSize(12),
+    shadowOffset: { width: 0, height: tvSize(3) },
+    elevation: 8,
   },
   active: {
     backgroundColor: tvColors.surfaceRed,

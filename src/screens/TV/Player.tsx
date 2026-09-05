@@ -221,21 +221,44 @@ function TVPlayer({ componentId }: { componentId: string }) {
     menu: () => { revealControls() },
   })
 
-  // 左右方向键：长按才快进/快退 5s；短按由焦点系统处理
+  // 播放页遥控直控（对齐 Apple Music TV 交互）：
+  // 控制栏未呼出/焦点不在控制按钮上时——OK=播放/暂停，左右短按=上一首/下一首，左右长按=快退/快进 5s
+  // 焦点在控制栏按钮上时（controlFocusCountRef > 0）不拦截，交给按钮本身处理
+  const seekRepeatFiredRef = useRef({ left: false, right: false })
   useEffect(() => {
     return onTVRemoteEvent(({ eventType, eventKeyAction }) => {
-      if (eventType !== 'left' && eventType !== 'right') return
+      const isSeekKey = eventType === 'left' || eventType === 'right'
+      const isSelectKey = eventType === 'select'
+      if (!isSeekKey && !isSelectKey) return
       if (!musicInfo.id) return
-      // eventKeyAction: 0=DOWN, 1=UP, 2=REPEAT(长按产生的重复事件)
-      // 只在长按的重复事件时触发快进快退（短按不触发）
-      if (eventKeyAction !== 2) return
       if (controlFocusCountRef.current > 0) return
-      revealControls()
-      const current = progress.nowPlayTime || 0
-      const max = progress.maxPlayTime || 0
-      const delta = eventType === 'right' ? 5 : -5
-      const target = Math.max(0, Math.min(max, current + delta))
-      void setCurrentTime(target)
+      // eventKeyAction: 0=DOWN, 1=UP, 2=REPEAT(长按产生的重复事件)
+      if (isSelectKey) {
+        if (eventKeyAction === 1) togglePlay()
+        return
+      }
+      const dir = eventType === 'left' ? 'left' : 'right'
+      if (eventKeyAction === 2) {
+        // 长按重复：连续快进/快退 5s
+        seekRepeatFiredRef.current[dir] = true
+        revealControls()
+        const current = progress.nowPlayTime || 0
+        const max = progress.maxPlayTime || 0
+        const delta = eventType === 'right' ? 5 : -5
+        const target = Math.max(0, Math.min(max, current + delta))
+        void setCurrentTime(target)
+      } else if (eventKeyAction === 0) {
+        // 按下：重置本次长按标记
+        seekRepeatFiredRef.current[dir] = false
+      } else if (eventKeyAction === 1) {
+        // 松开：长按后的松开不切歌；短按直接切歌
+        if (seekRepeatFiredRef.current[dir]) {
+          seekRepeatFiredRef.current[dir] = false
+          return
+        }
+        if (eventType === 'left') void playPrev()
+        else void playNext()
+      }
     })
   }, [musicInfo.id, progress.nowPlayTime, progress.maxPlayTime, revealControls])
 
