@@ -225,6 +225,9 @@ function TVPlayer({ componentId }: { componentId: string }) {
   // 控制栏未呼出/焦点不在控制按钮上时——OK=播放/暂停，左右短按=上一首/下一首，左右长按=快退/快进 5s
   // 焦点在控制栏按钮上时（controlFocusCountRef > 0）不拦截，交给按钮本身处理
   const seekRepeatFiredRef = useRef({ left: false, right: false })
+  // 进度读 ref，避免播放中每秒重挂遥控事件订阅
+  const progressRef = useRef(progress)
+  progressRef.current = progress
   useEffect(() => {
     return onTVRemoteEvent(({ eventType, eventKeyAction }) => {
       const isSeekKey = eventType === 'left' || eventType === 'right'
@@ -242,8 +245,8 @@ function TVPlayer({ componentId }: { componentId: string }) {
         // 长按重复：连续快进/快退 5s
         seekRepeatFiredRef.current[dir] = true
         revealControls()
-        const current = progress.nowPlayTime || 0
-        const max = progress.maxPlayTime || 0
+        const current = progressRef.current.nowPlayTime || 0
+        const max = progressRef.current.maxPlayTime || 0
         const delta = eventType === 'right' ? 5 : -5
         const target = Math.max(0, Math.min(max, current + delta))
         void setCurrentTime(target)
@@ -260,7 +263,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
         else void playNext()
       }
     })
-  }, [musicInfo.id, progress.nowPlayTime, progress.maxPlayTime, revealControls])
+  }, [musicInfo.id, revealControls])
 
   const activeLyricIndex = lyricPlay.line >= 0 && lyricPlay.line < lyricLines.length ? lyricPlay.line : -1
   const fallbackLyric = isDisplayLyric(lyricPlay.text) ? lyricPlay.text.trim() : (musicInfo.id ? tvText.loading : tvText.chooseSongFirst)
