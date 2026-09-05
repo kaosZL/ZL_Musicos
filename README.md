@@ -34,6 +34,8 @@ ZL-Music TV 是基于 [lx-music-mobile 1.8.4](https://github.com/lyswhut/lx-musi
 
 ![设置](docs/screenshots/设置.png)
 
+> 📋 各版本更新日志请查看 [Releases](https://github.com/kaosZL/ZL_Musicos/releases)
+
 ## 主要特性
 
 - **手机扫码导入音源**：电视端显示二维码，手机扫码（同一局域网）即可在手机浏览器里粘贴音源链接或脚本导入，告别遥控器输 URL。
@@ -46,18 +48,6 @@ ZL-Music TV 是基于 [lx-music-mobile 1.8.4](https://github.com/lyswhut/lx-musi
 - 播放页 Apple Music TV 风格沉浸式布局：左侧封面、右侧歌词、底部进度条、右下角圆形控制按钮。
 - APK 体积优化：release 混淆构建 + 架构精简，包体积从 180MB 降至约 55MB（-69%）。
 
-## 本次更新（v1.8.8）
-
-- 新增：手机扫码导入音源（局域网内嵌 HTTP 服务 + 二维码 + 手机端导入页，支持列表管理 / 删除 / 切换音源）。
-- 新增：音源长按 OK 操作菜单；更新提醒默认全部关闭，开启时弹窗说明利弊；新导入音源置顶显示。
-- 新增：搜索拼音联想（歌手 + 歌曲双词典，全拼 / 首字母 / 自动纠偏）。
-- 新增：TV 统一风格弹窗组件，替换全部原生 AlertDialog。
-- 新增：GitHub Actions 云构建——push 到 master / dev 自动产出 release APK，Artifacts 直接下载。
-- 优化：4K 等比适配，任意分辨率观感与 1080p 一致。
-- 优化：TV 切后台自动暂停播放。
-- 调整：菜单键不再跳转设置页（播放页呼出控制条，其他页面无动作）。
-- 调整：预置音源精简为「聚合 API + 野草（最新版，jsdelivr 镜像自更新）」。
-- 调整：CI 产物仅保留 arm64-v8a / x86_64 / universal 三种架构。
 
 ## 适配设备
 
