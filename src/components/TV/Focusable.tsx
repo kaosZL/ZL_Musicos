@@ -176,11 +176,13 @@ const styles: Record<string, ViewStyle> = {
   },
   focused: {
     borderColor: tvColors.primaryHigh,
+    borderWidth: 2,
+    transform: [{ scale: 1.03 }],
     shadowColor: tvColors.primaryHigh,
-    shadowOpacity: 0.28,
-    shadowRadius: tvSize(10),
+    shadowOpacity: 0.5,
+    shadowRadius: tvSize(14),
     shadowOffset: { width: 0, height: tvSize(3) },
-    elevation: 8,
+    elevation: 10,
     zIndex: 8,
   },
 }

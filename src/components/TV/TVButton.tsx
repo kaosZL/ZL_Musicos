@@ -27,7 +27,7 @@ const TVButtonBase = forwardRef<any, Props>(({ label, tone = 'primary', style, f
   <Focusable
     ref={ref}
     style={[styles.root, getToneStyle(tone), style]}
-    focusStyle={focusStyle}
+    focusStyle={focusStyle ?? styles.focusDefault}
     onPress={onPress}
     hasTVPreferredFocus={hasTVPreferredFocus}
     {...rest}
@@ -71,6 +71,11 @@ const styles: Record<string, ViewStyle | TextStyle> = {
   warning: {
     backgroundColor: 'rgba(241,195,109,0.16)',
     borderColor: 'rgba(241,195,109,0.40)',
+  },
+  focusDefault: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderColor: tvColors.text,
+    transform: [{ scale: 1.05 }],
   },
   text: {
     fontWeight: '900',
