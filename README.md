@@ -157,12 +157,12 @@ docs/screenshots/     README 使用的 TV 截图
 
 沿用原项目协议，详见 [LICENSE](LICENSE)。
 
-## 🐍 贡献贪吃蛇
+## ⭐ Star History
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/kaosZL/kaosZL/output/github-contribution-grid-snake-dark.svg" />
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/kaosZL/kaosZL/output/github-contribution-grid-snake.svg" />
-  <img width="100%" alt="contribution snake" src="https://raw.githubusercontent.com/kaosZL/kaosZL/output/github-contribution-grid-snake.svg" />
+  <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=kaosZL/ZL_Musicos&type=Date&theme=dark" />
+  <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=kaosZL/ZL_Musicos&type=Date" />
+  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=kaosZL/ZL_Musicos&type=Date" />
 </picture>
 
 <img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0:111113,100:1F1F23&height=60&section=footer" />
