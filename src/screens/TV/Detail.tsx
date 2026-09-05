@@ -47,6 +47,8 @@ function TVDetail({ componentId, payload }: Props) {
   const backFocus = useTVFocusRef()
   const firstRowFocus = useTVFocusRef()
   const queueFocusRefresh = useTVFocusRefresh()
+  const activeTabFocus = useRef<FocusNode>(null)
+  const getActiveTabHandle = () => (activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null)
   const actionFocusedRef = useRef(false)
 
   const focusFirstRow = useCallback(() => {
@@ -130,7 +132,7 @@ function TVDetail({ componentId, payload }: Props) {
 
   return (
     <TVAppleScaffold image={image} immersive contentStyle={styles.scaffoldContent}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId={payload.type === 'board' ? 'new' : 'home'} subtitle={tvText.detailSubtitle} nextFocusDown={playAllFocus.getNodeHandle() ?? undefined} />
+      <TVTopTabs items={createTVTabs(componentId)} activeId={payload.type === 'board' ? 'new' : 'home'} subtitle={tvText.detailSubtitle} nextFocusDown={playAllFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus} onActiveTabReady={queueFocusRefresh} />
       <View style={styles.root}>
         <View style={styles.stage}>
           <View style={styles.coverStage}>
@@ -157,6 +159,7 @@ function TVDetail({ componentId, payload }: Props) {
                 onFocus={handleActionFocus}
                 onBlur={handleActionBlur}
                 hasTVPreferredFocus
+                nextFocusUp={getActiveTabHandle() ?? undefined}
                 nextFocusRight={backFocus.getNodeHandle() ?? undefined}
                 nextFocusDown={firstRowFocus.getNodeHandle() ?? undefined}
               />
@@ -168,6 +171,7 @@ function TVDetail({ componentId, payload }: Props) {
                 onPress={() => { void pop(componentId) }}
                 onFocus={handleActionFocus}
                 onBlur={handleActionBlur}
+                nextFocusUp={getActiveTabHandle() ?? undefined}
                 nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
                 nextFocusRight={firstRowFocus.getNodeHandle() ?? undefined}
                 nextFocusDown={firstRowFocus.getNodeHandle() ?? undefined}
@@ -205,7 +209,7 @@ function TVDetail({ componentId, payload }: Props) {
                   hasTVPreferredFocus={preferFirstRow && index === 0}
                   onFocus={() => { handleFocus(index) }}
                   onPress={() => { void handleSinglePlay(item, index) }}
-                  nextFocusUp={index === 0 ? playAllFocus.getNodeHandle() ?? undefined : getRowHandle(prevKey) ?? undefined}
+                  nextFocusUp={index === 0 ? getActiveTabHandle() ?? playAllFocus.getNodeHandle() ?? undefined : getRowHandle(prevKey) ?? undefined}
                   nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
                   nextFocusDown={getRowHandle(nextKey) ?? undefined}
                 />

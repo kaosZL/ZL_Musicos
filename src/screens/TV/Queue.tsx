@@ -45,6 +45,9 @@ function TVQueue({ componentId }: { componentId: string }) {
   const playModeFocus = useTVFocusRef()
   const clearFocus = useTVFocusRef()
   const firstQueueFocus = useTVFocusRef()
+  const activeTabFocus = useRef<FocusNode>(null)
+  const tabRefresh = useTVFocusRefresh()
+  const getActiveTabHandle = () => (activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null)
   const listRef = useRef<FlatList<LX.Music.MusicInfo>>(null)
   const queueRefs = useRef<FocusRefMap>({})
   const [localDialog, setLocalDialog] = useState<TVDialogRequest | null>(null)
@@ -138,7 +141,7 @@ function TVQueue({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={currentMusicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="queue" nextFocusDown={firstQueueFocus.getNodeHandle() ?? playModeFocus.getNodeHandle() ?? undefined} />
+      <TVTopTabs items={createTVTabs(componentId)} activeId="queue" nextFocusDown={firstQueueFocus.getNodeHandle() ?? playModeFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus} onActiveTabReady={tabRefresh} />
       <View style={styles.root}>
         <TVGlassPanel style={styles.listPanel}>
           <View style={styles.header}>
@@ -147,8 +150,8 @@ function TVQueue({ componentId }: { componentId: string }) {
               <TVText variant="body" style={styles.subtitle}>{fetchedMusicList.length} 首 · {playModeLabel}</TVText>
             </View>
             <View style={styles.actions}>
-              <TVButton ref={playModeFocus.ref as any} label={`模式: ${playModeLabel}`} tone="dark" onPress={handleCyclePlayMode} hasTVPreferredFocus nextFocusRight={clearFocus.getNodeHandle() ?? undefined} />
-              <TVButton ref={clearFocus.ref as any} label={tvText.clearList} tone={fetchedMusicList.length ? 'ghost' : 'dark'} onPress={handleClear} nextFocusLeft={playModeFocus.getNodeHandle() ?? undefined} />
+              <TVButton ref={playModeFocus.ref as any} label={`模式: ${playModeLabel}`} tone="dark" onPress={handleCyclePlayMode} hasTVPreferredFocus nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusRight={clearFocus.getNodeHandle() ?? undefined} />
+              <TVButton ref={clearFocus.ref as any} label={tvText.clearList} tone={fetchedMusicList.length ? 'ghost' : 'dark'} onPress={handleClear} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusLeft={playModeFocus.getNodeHandle() ?? undefined} />
             </View>
           </View>
           <FlatList
