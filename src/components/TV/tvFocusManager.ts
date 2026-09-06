@@ -206,7 +206,13 @@ export const subscribeTVTargetFocusState = (id: number, listener: FocusStateList
 
 export const focusPreferredTVTarget = async() => {
   const measured = await measureTargets()
-  const target = measured.find(item => item.preferred) ?? measured[0]
+  // 取最后一个 preferred 目标（最近注册的——弹窗按钮比页面按钮晚注册，
+  // 这样弹窗打开时初始焦点落在弹窗按钮而非背景按钮）
+  let target: FocusTarget | null = null
+  for (const t of measured) {
+    if (t.preferred) target = t
+  }
+  if (!target) target = measured[0]
   if (!target) return false
   setActiveTarget(target)
   return true

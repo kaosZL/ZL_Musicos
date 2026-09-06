@@ -1,7 +1,6 @@
 import { memo, useEffect, useRef, useState, type ComponentRef } from 'react'
 import { BackHandler, View, findNodeHandle, type ViewStyle } from 'react-native'
 import TVButton from './TVButton'
-import { requestTVFocus } from '@/utils/nativeModules/utils'
 import TVText from './TVText'
 import { tvColors, tvSize } from '@/theme/tv'
 
@@ -43,31 +42,23 @@ interface TVDialogProps {
 const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps) => {
   // 不使用 Modal：独立原生窗口里焦点引擎的测量与移动都不可靠，
   // 且引擎 260ms 初始焦点调度会把焦点抢回背景里更早注册的首选按钮。
-  // 改为同窗口的绝对定位覆盖层，焦点系统正常工作：
-  // 左右键显式接线在按钮间切换、上下键自锁防逃逸、
-  // 打开时 80ms 抢先聚焦第一个按钮、350ms 再补一次躲开调度器抢焦点
+  // 改为同窗口的绝对定位覆盖层，焦点系统正常工作。
+  // focusPreferredTVTarget 已改为取最后注册的 preferred 目标，
+  // 弹窗按钮恢复 hasTVPreferredFocus 让引擎调度器直接聚焦弹窗第一个按钮
   const buttonRefs = useRef<Array<ComponentRef<typeof TVButton> | null>>([])
+  const onDismissRef = useRef(onDismiss)
+  onDismissRef.current = onDismiss
   const [, setReady] = useState(false)
   useEffect(() => { setReady(true) }, [])
   const getButtonHandle = (index: number) => {
     const node = buttonRefs.current[index]
     return node ? findNodeHandle(node) : null
   }
-  const focusFirst = () => {
-    const handle = getButtonHandle(0)
-    if (handle) requestTVFocus(handle)
-  }
   useEffect(() => {
     if (!visible) return
-    const early = setTimeout(focusFirst, 80)
-    const recover = setTimeout(focusFirst, 350)
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => { onDismiss?.(); return true })
-    return () => {
-      clearTimeout(early)
-      clearTimeout(recover)
-      sub.remove()
-    }
-  }, [visible, onDismiss])
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { onDismissRef.current?.(); return true })
+    return () => { sub.remove() }
+  }, [visible])
   if (!visible) return null
   return (
     <View style={styles.backdrop}>
@@ -81,6 +72,7 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
               ref={(node: ComponentRef<typeof TVButton> | null) => { buttonRefs.current[index] = node }}
               label={button.label}
               tone={button.tone ?? (index === 0 ? 'dark' : 'primary')}
+              hasTVPreferredFocus={index === 0}
               focusStyle={styles.buttonFocus}
               nextFocusLeft={getButtonHandle(index > 0 ? index - 1 : index) ?? undefined}
               nextFocusRight={getButtonHandle(index < buttons.length - 1 ? index + 1 : index) ?? undefined}
