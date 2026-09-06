@@ -19,7 +19,7 @@ import { getListDetail as getBoardListDetail } from '@/core/leaderboard'
 import { getListDetail as getSonglistDetail } from '@/core/songlist'
 import { handlePlay as handleBoardPlay } from '@/screens/Home/Views/Leaderboard/listAction'
 import { handlePlay as handleSonglistPlay } from '@/screens/SonglistDetail/listAction'
-import { setTempList } from '@/core/list'
+import { getListMusics, setTempList } from '@/core/list'
 import { playList } from '@/core/player/player'
 import { LIST_IDS } from '@/config/constant'
 import type { TVDetailPayload } from './types'
@@ -117,10 +117,15 @@ function TVDetail({ componentId, payload }: Props) {
     pushTVPlayerScreen(componentId)
   }
 
-  // 单曲播放：只把这一首加入播放列表
-  const handleSinglePlay = async(item: LX.Music.MusicInfoOnline, index: number) => {
-    await setTempList(`detail_single__${item.id}`, [item])
-    void playList(LIST_IDS.TEMP, 0)
+  // 单曲播放：追加这一首到播放列表（已在列表则直接跳播），不覆盖已有歌曲
+  const handleSinglePlay = async(item: LX.Music.MusicInfoOnline) => {
+    const currentList = await getListMusics(LIST_IDS.TEMP)
+    let playIndex = currentList.findIndex(m => m.id === item.id)
+    if (playIndex < 0) {
+      await setTempList(`append_single__${item.id}`, [...currentList, item] as LX.Music.MusicInfoOnline[])
+      playIndex = currentList.length
+    }
+    await playList(LIST_IDS.TEMP, playIndex)
     pushTVPlayerScreen(componentId)
   }
 
@@ -208,7 +213,7 @@ function TVDetail({ componentId, payload }: Props) {
                   badge={index < 3 ? tvText.hotChart : undefined}
                   hasTVPreferredFocus={preferFirstRow && index === 0}
                   onFocus={() => { handleFocus(index) }}
-                  onPress={() => { void handleSinglePlay(item, index) }}
+                  onPress={() => { void handleSinglePlay(item) }}
                   nextFocusUp={index === 0 ? getActiveTabHandle() ?? playAllFocus.getNodeHandle() ?? undefined : getRowHandle(prevKey) ?? undefined}
                   nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
                   nextFocusDown={getRowHandle(nextKey) ?? undefined}

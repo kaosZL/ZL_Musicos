@@ -51,7 +51,6 @@ function TVQueue({ componentId }: { componentId: string }) {
   const listRef = useRef<FlatList<LX.Music.MusicInfo>>(null)
   const queueRefs = useRef<FocusRefMap>({})
   const [localDialog, setLocalDialog] = useState<TVDialogRequest | null>(null)
-  useTVFocusRefresh()
 
   useTVNavigationBack(componentId)
 

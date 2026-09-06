@@ -13,7 +13,7 @@ import { search } from '@/core/search/music'
 import { matchHotSearch, matchExactPinyin, type HotSearchItem } from '@/config/hotSongs'
 import searchMusicState from '@/store/search/music/state'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
-import { setTempList } from '@/core/list'
+import { getListMusics, setTempList } from '@/core/list'
 import { playList } from '@/core/player/player'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
@@ -58,6 +58,7 @@ function TVSearch({ componentId }: { componentId: string }) {
   const firstResultFocus = useTVFocusRef()
   const firstKeyboardKeyFocus = useRef<FocusNode>(null)
   const loadMoreFocus = useTVFocusRef()
+  const playAllFocus = useTVFocusRef()
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null)
   const listRef = useRef<FlatList<LX.Music.MusicInfoOnline>>(null)
   const resultRefs = useRef<FocusRefMap>({})
@@ -127,10 +128,32 @@ function TVSearch({ componentId }: { componentId: string }) {
     }
   }
 
-  const handleOpenPlayer = async(targetMusicInfo: LX.Music.MusicInfoOnline, index: number) => {
-    const nextList = results.length ? results : [targetMusicInfo]
-    await setTempList(`tv_search__${source}__${text.trim() || targetMusicInfo.id}`, nextList)
-    await playList(LIST_IDS.TEMP, Math.max(0, index))
+  // 单击歌曲：追加到播放列表末尾（已在列表则直接跳播该首），不覆盖已有歌曲
+  // 注：不用 addListMusics（对 TEMP 列表是替换语义），用「读列表→合并→setTempList」保证追加
+  const handleOpenPlayer = async(targetMusicInfo: LX.Music.MusicInfoOnline) => {
+    const currentList = await getListMusics(LIST_IDS.TEMP)
+    let playIndex = currentList.findIndex(m => m.id === targetMusicInfo.id)
+    if (playIndex < 0) {
+      await setTempList(`append_single__${targetMusicInfo.id}`, [...currentList, targetMusicInfo] as LX.Music.MusicInfoOnline[])
+      playIndex = currentList.length
+    }
+    await playList(LIST_IDS.TEMP, playIndex)
+    pushTVPlayerScreen(componentId)
+  }
+
+  // 播放全部：把搜索结果里还没有的歌追加进播放列表，从第一首结果开始播
+  const handlePlayAll = async() => {
+    if (!results.length) return
+    const currentList = await getListMusics(LIST_IDS.TEMP)
+    const currentIds = new Set(currentList.map(m => m.id))
+    const missing = results.filter(m => !currentIds.has(m.id))
+    let playIndex = currentList.findIndex(m => m.id === results[0].id)
+    if (missing.length) {
+      await setTempList(`append_all__${Date.now()}`, [...currentList, ...missing] as LX.Music.MusicInfoOnline[])
+      if (playIndex < 0) playIndex = currentList.length
+    }
+    if (playIndex < 0) playIndex = 0
+    await playList(LIST_IDS.TEMP, playIndex)
     pushTVPlayerScreen(componentId)
   }
 
@@ -185,6 +208,9 @@ function TVSearch({ componentId }: { componentId: string }) {
               <TVText variant="sectionTitle">{tvText.searchResult}</TVText>
               <TVText variant="caption" style={styles.line}>{loading ? tvText.searching : `${results.length} ${tvText.songs}${pageInfo.total ? ` / \u5171 ${pageInfo.total}` : ''}${pageInfo.page ? ` / \u7b2c ${pageInfo.page}/${pageInfo.maxPage || pageInfo.page} \u9875` : ''}`}</TVText>
             </View>
+            {results.length ? (
+              <TVButton ref={playAllFocus.ref as any} label={tvText.playAll} tone="dark" onPress={() => { void handlePlayAll() }} nextFocusLeft={searchButtonHandle} nextFocusDown={firstResultHandle} />
+            ) : null}
           </View>
           {error ? <TVText variant="caption" color={tvColors.warn} style={styles.error}>{error}</TVText> : null}
           <FlatList
@@ -200,7 +226,7 @@ function TVSearch({ componentId }: { componentId: string }) {
               const itemKey = getResultKey(item)
               const prevKey = results[index - 1] ? getResultKey(results[index - 1]) : null
               const nextKey = results[index + 1] ? getResultKey(results[index + 1]) : null
-              return <TVMusicRow ref={bindResultRef(itemKey, index === 0) as any} hasTVPreferredFocus={index === 0 && !!results.length} index={index} title={item.name} subtitle={getMusicSubtitle(item)} meta={item.interval} onFocus={() => { handleResultFocus(index) }} onPress={() => { void handleOpenPlayer(item, index) }} nextFocusLeft={searchButtonHandle} nextFocusUp={index === 0 ? searchButtonHandle : (getResultHandle(prevKey) ?? undefined)} nextFocusDown={getResultHandle(nextKey) ?? (hasMore && index === results.length - 1 ? loadMoreFocus.getNodeHandle() ?? undefined : undefined)} />
+              return <TVMusicRow ref={bindResultRef(itemKey, index === 0) as any} hasTVPreferredFocus={index === 0 && !!results.length} index={index} title={item.name} subtitle={getMusicSubtitle(item)} meta={item.interval} onFocus={() => { handleResultFocus(index) }} onPress={() => { void handleOpenPlayer(item) }} nextFocusLeft={searchButtonHandle} nextFocusUp={index === 0 ? playAllFocus.getNodeHandle() ?? searchButtonHandle : (getResultHandle(prevKey) ?? undefined)} nextFocusDown={getResultHandle(nextKey) ?? (hasMore && index === results.length - 1 ? loadMoreFocus.getNodeHandle() ?? undefined : undefined)} />
             }}
           />
         </TVGlassPanel>

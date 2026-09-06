@@ -46,7 +46,7 @@ const styles: Record<string, ViewStyle | TextStyle> = {
     borderRadius: tvTokens.radiusPill,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 2,
   },
   inner: {
     alignItems: 'center',
@@ -75,7 +75,6 @@ const styles: Record<string, ViewStyle | TextStyle> = {
   focusDefault: {
     backgroundColor: 'rgba(255,255,255,0.16)',
     borderColor: tvColors.text,
-    transform: [{ scale: 1.05 }],
   },
   text: {
     fontWeight: '900',

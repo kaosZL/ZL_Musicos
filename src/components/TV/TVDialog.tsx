@@ -1,7 +1,9 @@
-import { memo, useEffect, useState } from 'react'
-import { Modal, View, type ViewStyle } from 'react-native'
+import { memo, useEffect, useRef, useState, type ComponentRef } from 'react'
+import { BackHandler, View, findNodeHandle, type ViewStyle } from 'react-native'
 import TVButton from './TVButton'
 import TVText from './TVText'
+import { onTVRemoteEvent, requestTVFocus } from '@/utils/nativeModules/utils'
+import { setTVDialogActive } from './tvFocusManager'
 import { tvColors, tvSize } from '@/theme/tv'
 
 export interface TVDialogButtonConfig {
@@ -39,8 +41,65 @@ interface TVDialogProps {
   onDismiss?: () => void
 }
 
-const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps) => (
-  <Modal transparent visible={visible} animationType="fade" onRequestClose={() => { onDismiss?.() }}>
+const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps) => {
+  // 弹窗完全自主处理按键（控制器通过 isTVDialogActive() 让路）：
+  // - 打开时 100ms 直接聚焦第一个按钮（requestTVFocus，不依赖引擎调度）
+  // - 左右键按索引切按钮（requestTVFocus 驱动原生焦点切换 → 视觉高亮）
+  // - OK 键直接执行当前按钮动作（不走引擎的 pressActiveTVTarget）
+  // - 返回键关闭弹窗
+  const buttonRefs = useRef<Array<ComponentRef<typeof TVButton> | null>>([])
+  const focusedIndexRef = useRef(0)
+  const buttonsRef = useRef(buttons)
+  buttonsRef.current = buttons
+  const onDismissRef = useRef(onDismiss)
+  onDismissRef.current = onDismiss
+
+  const focusButton = (index: number) => {
+    const total = buttonsRef.current.length
+    const next = Math.max(0, Math.min(total - 1, index))
+    focusedIndexRef.current = next
+    const node = buttonRefs.current[next]
+    const handle = node ? findNodeHandle(node) : null
+    if (handle) requestTVFocus(handle)
+  }
+
+  useEffect(() => {
+    if (!visible) return
+    setTVDialogActive(true)
+    focusedIndexRef.current = 0
+
+    const focusTimer = setTimeout(() => focusButton(0), 100)
+
+    const unsub = onTVRemoteEvent(({ eventType, eventKeyAction }) => {
+      if (eventKeyAction !== 0) return
+      if (eventType === 'left') {
+        focusButton(focusedIndexRef.current - 1)
+      } else if (eventType === 'right') {
+        focusButton(focusedIndexRef.current + 1)
+      } else if (eventType === 'select') {
+        const btn = buttonsRef.current[focusedIndexRef.current]
+        if (btn) {
+          onDismissRef.current?.()
+          btn.onPress?.()
+        }
+      }
+    })
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onDismissRef.current?.()
+      return true
+    })
+
+    return () => {
+      setTVDialogActive(false)
+      clearTimeout(focusTimer)
+      unsub()
+      backSub.remove()
+    }
+  }, [visible])
+
+  if (!visible) return null
+  return (
     <View style={styles.backdrop}>
       <View style={styles.card}>
         <TVText variant="cardTitle" style={styles.title}>{title}</TVText>
@@ -49,11 +108,13 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
           {buttons.map((button, index) => (
             <TVButton
               key={`${button.label}_${index}`}
+              ref={(node: ComponentRef<typeof TVButton> | null) => { buttonRefs.current[index] = node }}
               label={button.label}
               tone={button.tone ?? (index === 0 ? 'dark' : 'primary')}
-              hasTVPreferredFocus={index === 0}
+              focusStyle={styles.buttonFocus}
+              onTVFocusChange={focused => { if (focused) focusedIndexRef.current = index }}
               onPress={() => {
-                onDismiss?.()
+                onDismissRef.current?.()
                 button.onPress?.()
               }}
             />
@@ -61,8 +122,8 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
         </View>
       </View>
     </View>
-  </Modal>
-)
+  )
+}
 
 /** 挂在 TVAppleScaffold 根部，承接全局弹窗 */
 export const TVDialogHost = memo(() => {
@@ -91,15 +152,21 @@ export const TVDialogHost = memo(() => {
 
 const styles: Record<string, ViewStyle> = {
   backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(2,3,8,0.62)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(2,3,8,0.72)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 999,
+    elevation: 24,
   },
   card: {
     width: tvSize(620),
     maxWidth: '86%',
-    backgroundColor: 'rgba(18,20,30,0.96)',
+    backgroundColor: 'rgba(18,20,30,0.98)',
     borderRadius: tvSize(28),
     borderWidth: 1,
     borderColor: tvColors.border,
@@ -120,6 +187,16 @@ const styles: Record<string, ViewStyle> = {
     flexWrap: 'wrap',
     gap: tvSize(12),
     marginTop: tvSize(8),
+  },
+  buttonFocus: {
+    backgroundColor: 'rgba(255,255,255,0.24)',
+    borderColor: '#FFFFFF',
+    shadowColor: '#FFFFFF',
+    shadowOpacity: 0.9,
+    shadowRadius: tvSize(20),
+    shadowOffset: { width: 0, height: tvSize(3) },
+    elevation: 12,
+    transform: [{ scale: 1.05 }],
   },
 }
 

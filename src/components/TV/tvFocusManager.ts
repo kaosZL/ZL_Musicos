@@ -19,6 +19,7 @@ interface FocusTarget {
   nextFocusLeft?: number
   nextFocusRight?: number
   onPress?: () => void
+  onLongPress?: () => void
 }
 
 type FocusStateListener = (focused: boolean) => void
@@ -205,7 +206,13 @@ export const subscribeTVTargetFocusState = (id: number, listener: FocusStateList
 
 export const focusPreferredTVTarget = async() => {
   const measured = await measureTargets()
-  const target = measured.find(item => item.preferred) ?? measured[0]
+  // 取最后一个 preferred 目标（最近注册的——弹窗按钮比页面按钮晚注册，
+  // 这样弹窗打开时初始焦点落在弹窗按钮而非背景按钮）
+  let target: FocusTarget | null = null
+  for (const t of measured) {
+    if (t.preferred) target = t
+  }
+  if (!target) target = measured[0]
   if (!target) return false
   setActiveTarget(target)
   return true
@@ -253,3 +260,22 @@ export const pressActiveTVTarget = () => {
   if (activeScopeId && active?.scopeId !== activeScopeId) return
   active?.onPress?.()
 }
+
+/** 当前聚焦目标是否具备长按能力 */
+export const activeTargetHasLongPress = () => {
+  const active = activeTargetId ? targets.get(activeTargetId) : null
+  if (activeScopeId && active?.scopeId !== activeScopeId) return false
+  return !!active?.onLongPress
+}
+
+/** 触发当前聚焦目标的长按动作 */
+export const longPressActiveTVTarget = () => {
+  const active = activeTargetId ? targets.get(activeTargetId) : null
+  if (activeScopeId && active?.scopeId !== activeScopeId) return
+  active?.onLongPress?.()
+}
+
+/** 弹窗激活标记：弹窗打开时控制器让路，弹窗自己处理按键 */
+let tvDialogActive = false
+export const setTVDialogActive = (active: boolean) => { tvDialogActive = active }
+export const isTVDialogActive = () => tvDialogActive
