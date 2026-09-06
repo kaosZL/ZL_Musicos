@@ -171,12 +171,11 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
 const styles: Record<string, ViewStyle> = {
   base: {
     borderRadius: tvTokens.radius,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: 'transparent',
   },
   focused: {
     borderColor: tvColors.primaryHigh,
-    borderWidth: 2,
     transform: [{ scale: 1.03 }],
     shadowColor: tvColors.primaryHigh,
     shadowOpacity: 0.5,

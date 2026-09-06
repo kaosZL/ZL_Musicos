@@ -1,5 +1,5 @@
-import { memo, useEffect, useState } from 'react'
-import { Modal, View, type ViewStyle } from 'react-native'
+import { memo, useEffect, useRef, useState, type ComponentRef } from 'react'
+import { Modal, View, findNodeHandle, type ViewStyle } from 'react-native'
 import TVButton from './TVButton'
 import TVText from './TVText'
 import { tvColors, tvSize } from '@/theme/tv'
@@ -39,7 +39,16 @@ interface TVDialogProps {
   onDismiss?: () => void
 }
 
-const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps) => (
+const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps) => {
+  // 弹窗按钮显式左右接线：Modal 内几何焦点搜索不可靠，用确定的 nextFocus 保证左右移动可控
+  const buttonRefs = useRef<Array<ComponentRef<typeof TVButton> | null>>([])
+  const [, setReady] = useState(false)
+  useEffect(() => { setReady(true) }, [])
+  const getButtonHandle = (index: number) => {
+    const node = buttonRefs.current[index]
+    return node ? findNodeHandle(node) : null
+  }
+  return (
   <Modal transparent visible={visible} animationType="fade" onRequestClose={() => { onDismiss?.() }}>
     <View style={styles.backdrop}>
       <View style={styles.card}>
@@ -49,9 +58,12 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
           {buttons.map((button, index) => (
             <TVButton
               key={`${button.label}_${index}`}
+              ref={(node: ComponentRef<typeof TVButton> | null) => { buttonRefs.current[index] = node }}
               label={button.label}
               tone={button.tone ?? (index === 0 ? 'dark' : 'primary')}
               hasTVPreferredFocus={index === 0}
+              nextFocusLeft={index > 0 ? getButtonHandle(index - 1) ?? undefined : undefined}
+              nextFocusRight={index < buttons.length - 1 ? getButtonHandle(index + 1) ?? undefined : undefined}
               onPress={() => {
                 onDismiss?.()
                 button.onPress?.()
@@ -62,7 +74,8 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
       </View>
     </View>
   </Modal>
-)
+  )
+}
 
 /** 挂在 TVAppleScaffold 根部，承接全局弹窗 */
 export const TVDialogHost = memo(() => {

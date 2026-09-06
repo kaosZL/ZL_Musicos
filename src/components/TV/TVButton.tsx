@@ -46,7 +46,7 @@ const styles: Record<string, ViewStyle | TextStyle> = {
     borderRadius: tvTokens.radiusPill,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 2,
   },
   inner: {
     alignItems: 'center',
