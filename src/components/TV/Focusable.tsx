@@ -40,13 +40,10 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
   const focusedRef = useRef(false)
   const focusChangeRef = useRef(onTVFocusChange)
   const longPressFiredRef = useRef(false)
-  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // 清理定时器
   useEffect(() => {
-    return () => {
-      if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
-    }
+    return () => {}
   }, [])
 
   useImperativeHandle(ref, () => nativeRef.current!, [])
@@ -68,35 +65,18 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
       longPressFiredRef.current = false
       return
     }
-    // 如果有 onLongPress，延迟执行 onPress 给长按检测留时间
-    if (onLongPress) {
-      if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
-      pressTimerRef.current = setTimeout(() => {
-        pressTimerRef.current = null
-        if (!longPressFiredRef.current) {
-          ;(onPress as unknown as () => void)()
-        }
-      }, 300)
-    } else {
-      ;(onPress as unknown as () => void)()
-    }
-  }, [onPress, onLongPress])
+    // 长按检测已由 TVRemoteFocusController 通过 repeat 事件处理
+    // 这里直接触发短按（无延迟）
+    ;(onPress as unknown as () => void)()
+  }, [onPress])
 
   const handleLongPress = useCallback(() => {
     longPressFiredRef.current = true
-    if (pressTimerRef.current) {
-      clearTimeout(pressTimerRef.current)
-      pressTimerRef.current = null
-    }
     onLongPress?.()
   }, [onLongPress])
 
   const handlePressIn = useCallback(() => {
     longPressFiredRef.current = false
-    if (pressTimerRef.current) {
-      clearTimeout(pressTimerRef.current)
-      pressTimerRef.current = null
-    }
   }, [])
 
   const handleFocus = useCallback((event: FocusEvent) => {
@@ -135,6 +115,7 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
       nextFocusLeft,
       nextFocusRight,
       onPress: onPress ? triggerTVPress : undefined,
+      onLongPress: onLongPress ? handleLongPress : undefined,
     })
     if (hasTVPreferredFocus) scheduleTVInitialFocus()
   }, [focusScopeId, hasTVPreferredFocus, nextFocusDown, nextFocusLeft, nextFocusRight, nextFocusUp, onPress, triggerTVPress])

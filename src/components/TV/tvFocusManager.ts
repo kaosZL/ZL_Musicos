@@ -19,6 +19,7 @@ interface FocusTarget {
   nextFocusLeft?: number
   nextFocusRight?: number
   onPress?: () => void
+  onLongPress?: () => void
 }
 
 type FocusStateListener = (focused: boolean) => void
@@ -252,4 +253,18 @@ export const pressActiveTVTarget = () => {
   const active = activeTargetId ? targets.get(activeTargetId) : null
   if (activeScopeId && active?.scopeId !== activeScopeId) return
   active?.onPress?.()
+}
+
+/** 当前聚焦目标是否具备长按能力 */
+export const activeTargetHasLongPress = () => {
+  const active = activeTargetId ? targets.get(activeTargetId) : null
+  if (activeScopeId && active?.scopeId !== activeScopeId) return false
+  return !!active?.onLongPress
+}
+
+/** 触发当前聚焦目标的长按动作 */
+export const longPressActiveTVTarget = () => {
+  const active = activeTargetId ? targets.get(activeTargetId) : null
+  if (activeScopeId && active?.scopeId !== activeScopeId) return
+  active?.onLongPress?.()
 }

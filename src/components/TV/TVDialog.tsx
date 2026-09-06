@@ -81,7 +81,6 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
               ref={(node: ComponentRef<typeof TVButton> | null) => { buttonRefs.current[index] = node }}
               label={button.label}
               tone={button.tone ?? (index === 0 ? 'dark' : 'primary')}
-              hasTVPreferredFocus={index === 0}
               focusStyle={styles.buttonFocus}
               nextFocusLeft={getButtonHandle(index > 0 ? index - 1 : index) ?? undefined}
               nextFocusRight={getButtonHandle(index < buttons.length - 1 ? index + 1 : index) ?? undefined}
