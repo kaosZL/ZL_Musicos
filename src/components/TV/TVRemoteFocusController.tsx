@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { getCachedIsTV } from '@/utils/tvMode'
 import { onTVRemoteEvent } from '@/utils/nativeModules/utils'
-import { activeTargetHasLongPress, clearActiveTVFocusScope, focusPreferredTVTarget, isActiveTVFocusScope, longPressActiveTVTarget, moveTVFocus, pressActiveTVTarget, setActiveTVFocusScope } from './tvFocusManager'
+import { activeTargetHasLongPress, clearActiveTVFocusScope, isActiveTVFocusScope, isTVDialogActive, longPressActiveTVTarget, moveTVFocus, pressActiveTVTarget, setActiveTVFocusScope } from './tvFocusManager'
 import { useNavigationComponentDidAppear, useNavigationComponentDidDisappear } from '@/navigation/hooks'
 
 const KEY_ACTION_DOWN = 0
@@ -32,6 +32,9 @@ const TVRemoteFocusController = ({ componentId }: { componentId: string }) => {
 
     const unsubscribe = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
       if (!activeRef.current || !isActiveTVFocusScope(componentId)) return
+
+      // 弹窗激活时控制器完全让路：弹窗自己处理左右/OK/返回
+      if (isTVDialogActive()) return
 
       // select 键三阶段处理（原生按键被 Activity 消费，Pressable 的 onLongPress 永远不触发）：
       // DOWN(rc=0)=按下 & 无长按目标时立即短按 / DOWN(rc>0)=长按(repeat) / UP=无 repeat 时短按

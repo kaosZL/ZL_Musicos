@@ -2,6 +2,8 @@ import { memo, useEffect, useRef, useState, type ComponentRef } from 'react'
 import { BackHandler, View, findNodeHandle, type ViewStyle } from 'react-native'
 import TVButton from './TVButton'
 import TVText from './TVText'
+import { onTVRemoteEvent, requestTVFocus } from '@/utils/nativeModules/utils'
+import { setTVDialogActive } from './tvFocusManager'
 import { tvColors, tvSize } from '@/theme/tv'
 
 export interface TVDialogButtonConfig {
@@ -40,25 +42,62 @@ interface TVDialogProps {
 }
 
 const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps) => {
-  // 不使用 Modal：独立原生窗口里焦点引擎的测量与移动都不可靠，
-  // 且引擎 260ms 初始焦点调度会把焦点抢回背景里更早注册的首选按钮。
-  // 改为同窗口的绝对定位覆盖层，焦点系统正常工作。
-  // focusPreferredTVTarget 已改为取最后注册的 preferred 目标，
-  // 弹窗按钮恢复 hasTVPreferredFocus 让引擎调度器直接聚焦弹窗第一个按钮
+  // 弹窗完全自主处理按键（控制器通过 isTVDialogActive() 让路）：
+  // - 打开时 100ms 直接聚焦第一个按钮（requestTVFocus，不依赖引擎调度）
+  // - 左右键按索引切按钮（requestTVFocus 驱动原生焦点切换 → 视觉高亮）
+  // - OK 键直接执行当前按钮动作（不走引擎的 pressActiveTVTarget）
+  // - 返回键关闭弹窗
   const buttonRefs = useRef<Array<ComponentRef<typeof TVButton> | null>>([])
+  const focusedIndexRef = useRef(0)
+  const buttonsRef = useRef(buttons)
+  buttonsRef.current = buttons
   const onDismissRef = useRef(onDismiss)
   onDismissRef.current = onDismiss
-  const [, setReady] = useState(false)
-  useEffect(() => { setReady(true) }, [])
-  const getButtonHandle = (index: number) => {
-    const node = buttonRefs.current[index]
-    return node ? findNodeHandle(node) : null
+
+  const focusButton = (index: number) => {
+    const total = buttonsRef.current.length
+    const next = Math.max(0, Math.min(total - 1, index))
+    focusedIndexRef.current = next
+    const node = buttonRefs.current[next]
+    const handle = node ? findNodeHandle(node) : null
+    if (handle) requestTVFocus(handle)
   }
+
   useEffect(() => {
     if (!visible) return
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => { onDismissRef.current?.(); return true })
-    return () => { sub.remove() }
+    setTVDialogActive(true)
+    focusedIndexRef.current = 0
+
+    const focusTimer = setTimeout(() => focusButton(0), 100)
+
+    const unsub = onTVRemoteEvent(({ eventType, eventKeyAction }) => {
+      if (eventKeyAction !== 0) return
+      if (eventType === 'left') {
+        focusButton(focusedIndexRef.current - 1)
+      } else if (eventType === 'right') {
+        focusButton(focusedIndexRef.current + 1)
+      } else if (eventType === 'select') {
+        const btn = buttonsRef.current[focusedIndexRef.current]
+        if (btn) {
+          onDismissRef.current?.()
+          btn.onPress?.()
+        }
+      }
+    })
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onDismissRef.current?.()
+      return true
+    })
+
+    return () => {
+      setTVDialogActive(false)
+      clearTimeout(focusTimer)
+      unsub()
+      backSub.remove()
+    }
   }, [visible])
+
   if (!visible) return null
   return (
     <View style={styles.backdrop}>
@@ -72,14 +111,10 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
               ref={(node: ComponentRef<typeof TVButton> | null) => { buttonRefs.current[index] = node }}
               label={button.label}
               tone={button.tone ?? (index === 0 ? 'dark' : 'primary')}
-              hasTVPreferredFocus={index === 0}
               focusStyle={styles.buttonFocus}
-              nextFocusLeft={getButtonHandle(index > 0 ? index - 1 : index) ?? undefined}
-              nextFocusRight={getButtonHandle(index < buttons.length - 1 ? index + 1 : index) ?? undefined}
-              nextFocusUp={getButtonHandle(index) ?? undefined}
-              nextFocusDown={getButtonHandle(index) ?? undefined}
+              onTVFocusChange={focused => { if (focused) focusedIndexRef.current = index }}
               onPress={() => {
-                onDismiss?.()
+                onDismissRef.current?.()
                 button.onPress?.()
               }}
             />

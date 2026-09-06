@@ -274,3 +274,8 @@ export const longPressActiveTVTarget = () => {
   if (activeScopeId && active?.scopeId !== activeScopeId) return
   active?.onLongPress?.()
 }
+
+/** 弹窗激活标记：弹窗打开时控制器让路，弹窗自己处理按键 */
+let tvDialogActive = false
+export const setTVDialogActive = (active: boolean) => { tvDialogActive = active }
+export const isTVDialogActive = () => tvDialogActive

@@ -138,8 +138,8 @@ function TVHome({ componentId }: { componentId: string }) {
       <ScrollView ref={contentScrollRef} showsVerticalScrollIndicator={false}>
         <View onLayout={event => { sectionOffsetRef.current.hero = event.nativeEvent.layout.y }}>
           <TVHeroShelf kicker={tvText.todayRecommend} title={heroTitle} subtitle={heroSubtitle} image={musicInfo.pic}>
-            <TVButton ref={playFocus.ref as any} label={musicInfo.id ? (isPlay ? tvText.pause : tvText.continuePlay) : tvText.searchSong} tone="dark" onFocus={() => { scrollToHero() }} onTVFocusChange={handleHeroFocusChange} onPress={() => {
-              if (musicInfo.id) { togglePlay(); pushTVPlayerScreen(componentId); return }
+            <TVButton ref={playFocus.ref as any} label={musicInfo.id ? '查看详情' : tvText.searchSong} tone="dark" onFocus={() => { scrollToHero() }} onTVFocusChange={handleHeroFocusChange} onPress={() => {
+              if (musicInfo.id) { pushTVPlayerScreen(componentId); return }
               pushTVSearchScreen(componentId)
             }} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusRight={searchFocus.getNodeHandle() ?? undefined} nextFocusDown={firstCardFocus.getNodeHandle() ?? undefined} />
             <TVButton ref={searchFocus.ref as any} label={tvText.search} tone="dark" onFocus={() => { scrollToHero() }} onTVFocusChange={handleHeroFocusChange} onPress={() => { pushTVSearchScreen(componentId) }} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusLeft={playFocus.getNodeHandle() ?? undefined} nextFocusDown={firstCardFocus.getNodeHandle() ?? undefined} />
