@@ -13,7 +13,7 @@ import { search } from '@/core/search/music'
 import { matchHotSearch, matchExactPinyin, type HotSearchItem } from '@/config/hotSongs'
 import searchMusicState from '@/store/search/music/state'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
-import { addListMusics, getListMusics } from '@/core/list'
+import { getListMusics, setTempList } from '@/core/list'
 import { playList } from '@/core/player/player'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
@@ -129,11 +129,12 @@ function TVSearch({ componentId }: { componentId: string }) {
   }
 
   // 单击歌曲：追加到播放列表末尾（已在列表则直接跳播该首），不覆盖已有歌曲
+  // 注：不用 addListMusics（对 TEMP 列表是替换语义），用「读列表→合并→setTempList」保证追加
   const handleOpenPlayer = async(targetMusicInfo: LX.Music.MusicInfoOnline) => {
     const currentList = await getListMusics(LIST_IDS.TEMP)
     let playIndex = currentList.findIndex(m => m.id === targetMusicInfo.id)
     if (playIndex < 0) {
-      await addListMusics(LIST_IDS.TEMP, [targetMusicInfo], 'bottom')
+      await setTempList(`append_single__${targetMusicInfo.id}`, [...currentList, targetMusicInfo] as LX.Music.MusicInfoOnline[])
       playIndex = currentList.length
     }
     await playList(LIST_IDS.TEMP, playIndex)
@@ -146,9 +147,12 @@ function TVSearch({ componentId }: { componentId: string }) {
     const currentList = await getListMusics(LIST_IDS.TEMP)
     const currentIds = new Set(currentList.map(m => m.id))
     const missing = results.filter(m => !currentIds.has(m.id))
-    if (missing.length) await addListMusics(LIST_IDS.TEMP, missing, 'bottom')
     let playIndex = currentList.findIndex(m => m.id === results[0].id)
-    if (playIndex < 0) playIndex = currentList.length
+    if (missing.length) {
+      await setTempList(`append_all__${Date.now()}`, [...currentList, ...missing] as LX.Music.MusicInfoOnline[])
+      if (playIndex < 0) playIndex = currentList.length
+    }
+    if (playIndex < 0) playIndex = 0
     await playList(LIST_IDS.TEMP, playIndex)
     pushTVPlayerScreen(componentId)
   }

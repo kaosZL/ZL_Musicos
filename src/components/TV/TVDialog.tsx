@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState, type ComponentRef } from 'react'
-import { Modal, View, findNodeHandle, type ViewStyle } from 'react-native'
+import { BackHandler, View, findNodeHandle, type ViewStyle } from 'react-native'
 import TVButton from './TVButton'
-import { onTVRemoteEvent, requestTVFocus } from '@/utils/nativeModules/utils'
+import { requestTVFocus } from '@/utils/nativeModules/utils'
 import TVText from './TVText'
 import { tvColors, tvSize } from '@/theme/tv'
 
@@ -41,38 +41,35 @@ interface TVDialogProps {
 }
 
 const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps) => {
-  // 弹窗内焦点自主保障：Modal 内焦点引擎的几何测量不可靠，
-  // 左右键直接按索引移动焦点（requestTVFocus），OK 走现有按钮激活链路
+  // 不使用 Modal：独立原生窗口里焦点引擎的测量与移动都不可靠，
+  // 且引擎 260ms 初始焦点调度会把焦点抢回背景里更早注册的首选按钮。
+  // 改为同窗口的绝对定位覆盖层，焦点系统正常工作：
+  // 左右键显式接线在按钮间切换、上下键自锁防逃逸、
+  // 打开时 80ms 抢先聚焦第一个按钮、350ms 再补一次躲开调度器抢焦点
   const buttonRefs = useRef<Array<ComponentRef<typeof TVButton> | null>>([])
-  const focusedIndexRef = useRef(0)
-  const buttonsRef = useRef(buttons)
-  buttonsRef.current = buttons
   const [, setReady] = useState(false)
   useEffect(() => { setReady(true) }, [])
   const getButtonHandle = (index: number) => {
     const node = buttonRefs.current[index]
     return node ? findNodeHandle(node) : null
   }
-  const focusButton = (index: number) => {
-    const total = buttonsRef.current.length
-    const next = Math.max(0, Math.min(total - 1, index))
-    focusedIndexRef.current = next
-    const handle = getButtonHandle(next)
+  const focusFirst = () => {
+    const handle = getButtonHandle(0)
     if (handle) requestTVFocus(handle)
   }
   useEffect(() => {
     if (!visible) return
-    focusedIndexRef.current = 0
-    const timer = setTimeout(() => { focusButton(0) }, 80)
-    const unsubscribe = onTVRemoteEvent(({ eventType, eventKeyAction }) => {
-      if (eventKeyAction !== 0) return
-      if (eventType === 'left') focusButton(focusedIndexRef.current - 1)
-      else if (eventType === 'right') focusButton(focusedIndexRef.current + 1)
-    })
-    return () => { clearTimeout(timer); unsubscribe() }
-  }, [visible])
+    const early = setTimeout(focusFirst, 80)
+    const recover = setTimeout(focusFirst, 350)
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { onDismiss?.(); return true })
+    return () => {
+      clearTimeout(early)
+      clearTimeout(recover)
+      sub.remove()
+    }
+  }, [visible, onDismiss])
+  if (!visible) return null
   return (
-  <Modal transparent visible={visible} animationType="fade" onRequestClose={() => { onDismiss?.() }}>
     <View style={styles.backdrop}>
       <View style={styles.card}>
         <TVText variant="cardTitle" style={styles.title}>{title}</TVText>
@@ -86,9 +83,10 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
               tone={button.tone ?? (index === 0 ? 'dark' : 'primary')}
               hasTVPreferredFocus={index === 0}
               focusStyle={styles.buttonFocus}
-              onTVFocusChange={focused => { if (focused) focusedIndexRef.current = index }}
-              nextFocusLeft={index > 0 ? getButtonHandle(index - 1) ?? undefined : undefined}
-              nextFocusRight={index < buttons.length - 1 ? getButtonHandle(index + 1) ?? undefined : undefined}
+              nextFocusLeft={getButtonHandle(index > 0 ? index - 1 : index) ?? undefined}
+              nextFocusRight={getButtonHandle(index < buttons.length - 1 ? index + 1 : index) ?? undefined}
+              nextFocusUp={getButtonHandle(index) ?? undefined}
+              nextFocusDown={getButtonHandle(index) ?? undefined}
               onPress={() => {
                 onDismiss?.()
                 button.onPress?.()
@@ -98,7 +96,6 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
         </View>
       </View>
     </View>
-  </Modal>
   )
 }
 
@@ -129,15 +126,21 @@ export const TVDialogHost = memo(() => {
 
 const styles: Record<string, ViewStyle> = {
   backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(2,3,8,0.62)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(2,3,8,0.72)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 999,
+    elevation: 24,
   },
   card: {
     width: tvSize(620),
     maxWidth: '86%',
-    backgroundColor: 'rgba(18,20,30,0.96)',
+    backgroundColor: 'rgba(18,20,30,0.98)',
     borderRadius: tvSize(28),
     borderWidth: 1,
     borderColor: tvColors.border,
