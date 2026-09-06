@@ -96,12 +96,12 @@ npm install
 npm run tv:assemble
 ```
 
-构建产物位于（v1.8.8，三种架构）：
+构建产物位于（三种架构）：
 
 ```text
-android/app/build/outputs/apk/release/zl-music-v1.8.8-arm64-v8a.apk
-android/app/build/outputs/apk/release/zl-music-v1.8.8-x86_64.apk
-android/app/build/outputs/apk/release/zl-music-v1.8.8-universal.apk
+android/app/build/outputs/apk/release/zl-music-<版本>-arm64-v8a.apk
+android/app/build/outputs/apk/release/zl-music-<版本>-x86_64.apk
+android/app/build/outputs/apk/release/zl-music-<版本>-universal.apk
 ```
 
 应用包名：`cn.toside.music.mobile`
@@ -120,7 +120,7 @@ npm run tv:remote -- right right ok
 npm run tv:remote -- back
 adb shell input keyevent 82   # 模拟 Menu 键
 adb connect 127.0.0.1:62001
-adb -s 127.0.0.1:62001 install -r android/app/build/outputs/apk/release/zl-music-v1.8.8-x86_64.apk
+adb -s 127.0.0.1:62001 install -r android/app/build/outputs/apk/release/zl-music-<版本>-x86_64.apk
 ```
 
 **CI 云构建**：每次 push 到 master / dev 自动构建 release APK（R8 混淆 + debug 签名，可直接安装），[Actions](https://github.com/kaosZL/ZL_Musicos/actions) 页面最新成功构建底部 Artifacts 下载。
