@@ -13,7 +13,7 @@ import { search } from '@/core/search/music'
 import { matchHotSearch, matchExactPinyin, type HotSearchItem } from '@/config/hotSongs'
 import searchMusicState from '@/store/search/music/state'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
-import { setTempList } from '@/core/list'
+import { addListMusics, getListMusics } from '@/core/list'
 import { playList } from '@/core/player/player'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
@@ -128,18 +128,28 @@ function TVSearch({ componentId }: { componentId: string }) {
     }
   }
 
-  // 单击歌曲：只把这一首加入播放列表
+  // 单击歌曲：追加到播放列表末尾（已在列表则直接跳播该首），不覆盖已有歌曲
   const handleOpenPlayer = async(targetMusicInfo: LX.Music.MusicInfoOnline) => {
-    await setTempList(`tv_search_single__${targetMusicInfo.id}`, [targetMusicInfo])
-    await playList(LIST_IDS.TEMP, 0)
+    const currentList = await getListMusics(LIST_IDS.TEMP)
+    let playIndex = currentList.findIndex(m => m.id === targetMusicInfo.id)
+    if (playIndex < 0) {
+      await addListMusics(LIST_IDS.TEMP, [targetMusicInfo], 'bottom')
+      playIndex = currentList.length
+    }
+    await playList(LIST_IDS.TEMP, playIndex)
     pushTVPlayerScreen(componentId)
   }
 
-  // 播放全部：把当前搜索结果整体加入播放列表
+  // 播放全部：把搜索结果里还没有的歌追加进播放列表，从第一首结果开始播
   const handlePlayAll = async() => {
     if (!results.length) return
-    await setTempList(`tv_search_all__${source}__${text.trim() || 'all'}`, results)
-    await playList(LIST_IDS.TEMP, 0)
+    const currentList = await getListMusics(LIST_IDS.TEMP)
+    const currentIds = new Set(currentList.map(m => m.id))
+    const missing = results.filter(m => !currentIds.has(m.id))
+    if (missing.length) await addListMusics(LIST_IDS.TEMP, missing, 'bottom')
+    let playIndex = currentList.findIndex(m => m.id === results[0].id)
+    if (playIndex < 0) playIndex = currentList.length
+    await playList(LIST_IDS.TEMP, playIndex)
     pushTVPlayerScreen(componentId)
   }
 

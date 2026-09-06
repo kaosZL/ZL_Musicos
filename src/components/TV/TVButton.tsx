@@ -75,7 +75,6 @@ const styles: Record<string, ViewStyle | TextStyle> = {
   focusDefault: {
     backgroundColor: 'rgba(255,255,255,0.16)',
     borderColor: tvColors.text,
-    transform: [{ scale: 1.05 }],
   },
   text: {
     fontWeight: '900',

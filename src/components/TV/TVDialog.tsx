@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState, type ComponentRef } from 'react'
 import { Modal, View, findNodeHandle, type ViewStyle } from 'react-native'
 import TVButton from './TVButton'
+import { onTVRemoteEvent, requestTVFocus } from '@/utils/nativeModules/utils'
 import TVText from './TVText'
 import { tvColors, tvSize } from '@/theme/tv'
 
@@ -40,14 +41,36 @@ interface TVDialogProps {
 }
 
 const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps) => {
-  // 弹窗按钮显式左右接线：Modal 内几何焦点搜索不可靠，用确定的 nextFocus 保证左右移动可控
+  // 弹窗内焦点自主保障：Modal 内焦点引擎的几何测量不可靠，
+  // 左右键直接按索引移动焦点（requestTVFocus），OK 走现有按钮激活链路
   const buttonRefs = useRef<Array<ComponentRef<typeof TVButton> | null>>([])
+  const focusedIndexRef = useRef(0)
+  const buttonsRef = useRef(buttons)
+  buttonsRef.current = buttons
   const [, setReady] = useState(false)
   useEffect(() => { setReady(true) }, [])
   const getButtonHandle = (index: number) => {
     const node = buttonRefs.current[index]
     return node ? findNodeHandle(node) : null
   }
+  const focusButton = (index: number) => {
+    const total = buttonsRef.current.length
+    const next = Math.max(0, Math.min(total - 1, index))
+    focusedIndexRef.current = next
+    const handle = getButtonHandle(next)
+    if (handle) requestTVFocus(handle)
+  }
+  useEffect(() => {
+    if (!visible) return
+    focusedIndexRef.current = 0
+    const timer = setTimeout(() => { focusButton(0) }, 80)
+    const unsubscribe = onTVRemoteEvent(({ eventType, eventKeyAction }) => {
+      if (eventKeyAction !== 0) return
+      if (eventType === 'left') focusButton(focusedIndexRef.current - 1)
+      else if (eventType === 'right') focusButton(focusedIndexRef.current + 1)
+    })
+    return () => { clearTimeout(timer); unsubscribe() }
+  }, [visible])
   return (
   <Modal transparent visible={visible} animationType="fade" onRequestClose={() => { onDismiss?.() }}>
     <View style={styles.backdrop}>
@@ -62,6 +85,8 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
               label={button.label}
               tone={button.tone ?? (index === 0 ? 'dark' : 'primary')}
               hasTVPreferredFocus={index === 0}
+              focusStyle={styles.buttonFocus}
+              onTVFocusChange={focused => { if (focused) focusedIndexRef.current = index }}
               nextFocusLeft={index > 0 ? getButtonHandle(index - 1) ?? undefined : undefined}
               nextFocusRight={index < buttons.length - 1 ? getButtonHandle(index + 1) ?? undefined : undefined}
               onPress={() => {
@@ -133,6 +158,16 @@ const styles: Record<string, ViewStyle> = {
     flexWrap: 'wrap',
     gap: tvSize(12),
     marginTop: tvSize(8),
+  },
+  buttonFocus: {
+    backgroundColor: 'rgba(255,255,255,0.24)',
+    borderColor: '#FFFFFF',
+    shadowColor: '#FFFFFF',
+    shadowOpacity: 0.9,
+    shadowRadius: tvSize(20),
+    shadowOffset: { width: 0, height: tvSize(3) },
+    elevation: 12,
+    transform: [{ scale: 1.05 }],
   },
 }
 
