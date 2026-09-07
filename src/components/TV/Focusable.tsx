@@ -92,12 +92,8 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
     onBlur?.(event)
   }, [onBlur, setTVFocused])
 
-  // 外部直接控制视觉焦点状态（弹窗用：不依赖原生 onFocus 回调）
-  useEffect(() => {
-    if (forceFocused !== undefined) {
-      setTVFocused(forceFocused)
-    }
-  }, [forceFocused, setTVFocused])
+  // 外部直接控制视觉焦点状态：不走 useEffect（会被引擎回调覆盖），
+  // 直接在样式计算里用 focused || forceFocused，React 渲染 100% 可靠
 
   useEffect(() => {
     const node = nativeRef.current
@@ -148,8 +144,8 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
       style={state => [
         styles.base,
         typeof style === 'function' ? style(state) : style,
-        focused ? styles.focused : null,
-        focused ? focusStyle : null,
+        (focused || forceFocused) ? styles.focused : null,
+        (focused || forceFocused) ? focusStyle : null,
       ]}
       {...rest}
     >
