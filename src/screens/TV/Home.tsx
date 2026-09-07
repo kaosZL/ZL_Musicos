@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState, type ComponentRef } from 'react'
-import { ScrollView, View, findNodeHandle, type ViewStyle } from 'react-native'
+import { ScrollView, Text, View, findNodeHandle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVHeroShelf from '@/components/TV/TVHeroShelf'
@@ -158,12 +158,22 @@ function TVHome({ componentId }: { componentId: string }) {
         </View>
         <View style={styles.bottomSpace} />
       </ScrollView>
+      {/* 临时构建标记：确认电视上跑的是哪个包，验证通过后移除 */}
+      <Text style={styles.buildTag}>{`v1.9.2 · b0907A`}</Text>
     </TVAppleScaffold>
   )
 }
 
 const styles: Record<string, ViewStyle | any> = {
   bottomSpace: { height: 60 },
+  buildTag: {
+    position: 'absolute',
+    right: tvSize(14),
+    bottom: tvSize(8),
+    fontSize: tvSize(11),
+    color: 'rgba(255,255,255,0.45)',
+    fontWeight: '700',
+  },
 }
 
 export default memo(TVHome)
