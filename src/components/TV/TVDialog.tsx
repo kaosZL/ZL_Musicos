@@ -1,9 +1,8 @@
-import { memo, useEffect, useRef, useState, type ComponentRef } from 'react'
-import { BackHandler, View, findNodeHandle, type ViewStyle } from 'react-native'
-import TVButton from './TVButton'
-import TVText from './TVText'
+import { memo, useEffect, useRef, useState } from 'react'
+import { BackHandler, Pressable, Text, View, type TextStyle, type ViewStyle } from 'react-native'
 import { onTVRemoteEvent, requestTVFocus } from '@/utils/nativeModules/utils'
 import { setTVDialogActive } from './tvFocusManager'
+import TVText from './TVText'
 import { tvColors, tvSize } from '@/theme/tv'
 
 export interface TVDialogButtonConfig {
@@ -23,12 +22,10 @@ type TVDialogListener = (request: TVDialogRequest | null) => void
 
 let activeListener: TVDialogListener | null = null
 
-/** 注册全局弹窗监听（由 TVDialogHost 挂载） */
 export const setTVDialogListener = (listener: TVDialogListener | null) => {
   activeListener = listener
 }
 
-/** 全局弹出 TV 风格弹窗（同一时间只保留最后一个） */
 export const showTVDialog = (request: TVDialogRequest) => {
   activeListener?.(request)
 }
@@ -41,43 +38,39 @@ interface TVDialogProps {
   onDismiss?: () => void
 }
 
+// 纯 Pressable 弹窗按钮：不用 Focusable/TVButton/引擎，React state → 条件样式 → 渲染，100% 可靠
+const getToneStyle = (tone?: string): ViewStyle => {
+  switch (tone) {
+    case 'danger': return { backgroundColor: 'rgba(241,195,109,0.14)', borderColor: 'rgba(241,195,109,0.36)' }
+    case 'primary': return { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.2)' }
+    default: return { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.15)' }
+  }
+}
+
 const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps) => {
-  // 弹窗完全自主处理按键（控制器通过 isTVDialogActive() 让路）：
-  // - 打开时 100ms 直接聚焦第一个按钮（requestTVFocus，不依赖引擎调度）
-  // - 左右键按索引切按钮（requestTVFocus 驱动原生焦点切换 → 视觉高亮）
-  // - OK 键直接执行当前按钮动作（不走引擎的 pressActiveTVTarget）
-  // - 返回键关闭弹窗
-  const buttonRefs = useRef<Array<ComponentRef<typeof TVButton> | null>>([])
-  const focusedIndexRef = useRef(0)
+  const [focusedIdx, setFocusedIdx] = useState(0)
+  const focusedIdxRef = useRef(0)
   const buttonsRef = useRef(buttons)
   buttonsRef.current = buttons
   const onDismissRef = useRef(onDismiss)
   onDismissRef.current = onDismiss
 
-  const focusButton = (index: number) => {
-    const total = buttonsRef.current.length
-    const next = Math.max(0, Math.min(total - 1, index))
-    focusedIndexRef.current = next
-    const node = buttonRefs.current[next]
-    const handle = node ? findNodeHandle(node) : null
-    if (handle) requestTVFocus(handle)
-  }
-
   useEffect(() => {
     if (!visible) return
     setTVDialogActive(true)
-    focusedIndexRef.current = 0
-
-    const focusTimer = setTimeout(() => focusButton(0), 100)
+    setFocusedIdx(0)
+    focusedIdxRef.current = 0
 
     const unsub = onTVRemoteEvent(({ eventType, eventKeyAction }) => {
       if (eventKeyAction !== 0) return
-      if (eventType === 'left') {
-        focusButton(focusedIndexRef.current - 1)
-      } else if (eventType === 'right') {
-        focusButton(focusedIndexRef.current + 1)
+      if (eventType === 'left' || eventType === 'right') {
+        const delta = eventType === 'left' ? -1 : 1
+        const total = buttonsRef.current.length
+        const next = Math.max(0, Math.min(total - 1, focusedIdxRef.current + delta))
+        focusedIdxRef.current = next
+        setFocusedIdx(next)
       } else if (eventType === 'select') {
-        const btn = buttonsRef.current[focusedIndexRef.current]
+        const btn = buttonsRef.current[focusedIdxRef.current]
         if (btn) {
           onDismissRef.current?.()
           btn.onPress?.()
@@ -92,7 +85,6 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
 
     return () => {
       setTVDialogActive(false)
-      clearTimeout(focusTimer)
       unsub()
       backSub.remove()
     }
@@ -106,18 +98,20 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
         {message ? <TVText variant="caption" color={tvColors.subtext} style={styles.message}>{message}</TVText> : null}
         <View style={styles.buttonRow}>
           {buttons.map((button, index) => (
-            <TVButton
+            <Pressable
               key={`${button.label}_${index}`}
-              ref={(node: ComponentRef<typeof TVButton> | null) => { buttonRefs.current[index] = node }}
-              label={button.label}
-              tone={button.tone ?? (index === 0 ? 'dark' : 'primary')}
-              focusStyle={styles.buttonFocus}
-              onTVFocusChange={focused => { if (focused) focusedIndexRef.current = index }}
               onPress={() => {
                 onDismissRef.current?.()
                 button.onPress?.()
               }}
-            />
+              style={[
+                styles.btnBase,
+                getToneStyle(button.tone),
+                index === focusedIdx && styles.btnFocused,
+              ]}
+            >
+              <Text style={styles.btnText} numberOfLines={1}>{button.label}</Text>
+            </Pressable>
           ))}
         </View>
       </View>
@@ -125,17 +119,14 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
   )
 }
 
-/** 挂在 TVAppleScaffold 根部，承接全局弹窗 */
 export const TVDialogHost = memo(() => {
   const [request, setRequest] = useState<TVDialogRequest | null>(null)
-
   useEffect(() => {
     setTVDialogListener(setRequest)
     return () => {
       if (activeListener === setRequest) activeListener = null
     }
   }, [])
-
   return (
     <TVDialog
       visible={!!request}
@@ -150,13 +141,10 @@ export const TVDialogHost = memo(() => {
   )
 })
 
-const styles: Record<string, ViewStyle> = {
+const styles: Record<string, ViewStyle | TextStyle> = {
   backdrop: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(2,3,8,0.72)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -174,13 +162,8 @@ const styles: Record<string, ViewStyle> = {
     paddingBottom: tvSize(24),
     paddingHorizontal: tvSize(30),
   },
-  title: {
-    marginBottom: tvSize(8),
-  },
-  message: {
-    marginBottom: tvSize(14),
-    lineHeight: tvSize(24),
-  },
+  title: { marginBottom: tvSize(8) },
+  message: { marginBottom: tvSize(14), lineHeight: tvSize(24) },
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -188,15 +171,29 @@ const styles: Record<string, ViewStyle> = {
     gap: tvSize(12),
     marginTop: tvSize(8),
   },
-  buttonFocus: {
-    backgroundColor: 'rgba(255,255,255,0.24)',
+  btnBase: {
+    minHeight: tvSize(54),
+    paddingHorizontal: tvSize(26),
+    paddingVertical: tvSize(14),
+    borderRadius: tvSize(28),
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  btnFocused: {
+    backgroundColor: 'rgba(255,255,255,0.28)',
     borderColor: '#FFFFFF',
     shadowColor: '#FFFFFF',
     shadowOpacity: 0.9,
     shadowRadius: tvSize(20),
     shadowOffset: { width: 0, height: tvSize(3) },
     elevation: 12,
-    transform: [{ scale: 1.05 }],
+    transform: [{ scale: 1.06 }],
+  },
+  btnText: {
+    fontWeight: '900',
+    fontSize: tvSize(18),
+    color: '#FFFFFF',
   },
 }
 
