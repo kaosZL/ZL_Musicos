@@ -52,6 +52,16 @@ function TVQueue({ componentId }: { componentId: string }) {
   const queueRefs = useRef<FocusRefMap>({})
   const [localDialog, setLocalDialog] = useState<TVDialogRequest | null>(null)
 
+  // 页面挂载后补一次延迟刷新，确保所有按钮/行的 nextFocus 句柄就位（
+  // 首次渲染时 ref 为空 → getNodeHandle 返回 null → nextFocusUp 为 undefined → 引擎找不到目标）
+  const mountRefreshRef = useRef(false)
+  useEffect(() => {
+    if (mountRefreshRef.current) return
+    mountRefreshRef.current = true
+    const timer = setTimeout(() => tabRefresh(), 350)
+    return () => { clearTimeout(timer) }
+  }, [tabRefresh])
+
   useTVNavigationBack(componentId)
 
   // 进入页面时自动滚动到当前播放歌曲

@@ -9,6 +9,7 @@ export interface FocusableProps extends PressableProps {
   onLongPress?: PressableProps['onLongPress']
   onTVFocusChange?: (focused: boolean) => void
   hasTVPreferredFocus?: boolean
+  forceFocused?: boolean
   nextFocusUp?: number
   nextFocusDown?: number
   nextFocusLeft?: number
@@ -24,6 +25,7 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
   onPress,
   onLongPress,
   hasTVPreferredFocus,
+  forceFocused,
   nextFocusUp,
   nextFocusDown,
   nextFocusLeft,
@@ -89,6 +91,13 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
     setTVFocused(false)
     onBlur?.(event)
   }, [onBlur, setTVFocused])
+
+  // 外部直接控制视觉焦点状态（弹窗用：不依赖原生 onFocus 回调）
+  useEffect(() => {
+    if (forceFocused !== undefined) {
+      setTVFocused(forceFocused)
+    }
+  }, [forceFocused, setTVFocused])
 
   useEffect(() => {
     const node = nativeRef.current

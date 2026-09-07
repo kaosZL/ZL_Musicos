@@ -43,21 +43,21 @@ interface TVDialogProps {
 
 const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps) => {
   // 弹窗完全自主处理按键（控制器通过 isTVDialogActive() 让路）：
-  // - 打开时 100ms 直接聚焦第一个按钮（requestTVFocus，不依赖引擎调度）
-  // - 左右键按索引切按钮（requestTVFocus 驱动原生焦点切换 → 视觉高亮）
-  // - OK 键直接执行当前按钮动作（不走引擎的 pressActiveTVTarget）
-  // - 返回键关闭弹窗
+  // 视觉焦点用 React state 直接驱动（forceFocused → Focusable 强制高亮），
+  // 不依赖 requestTVFocus 的原生回调——React 渲染 100% 可靠。
+  // 左右键切按钮、OK 执行动作、返回关闭。
   const buttonRefs = useRef<Array<ComponentRef<typeof TVButton> | null>>([])
-  const focusedIndexRef = useRef(0)
+  const [focusedIdx, setFocusedIdx] = useState(0)
   const buttonsRef = useRef(buttons)
   buttonsRef.current = buttons
   const onDismissRef = useRef(onDismiss)
   onDismissRef.current = onDismiss
 
-  const focusButton = (index: number) => {
+  const moveFocus = (delta: number) => {
     const total = buttonsRef.current.length
-    const next = Math.max(0, Math.min(total - 1, index))
-    focusedIndexRef.current = next
+    const next = Math.max(0, Math.min(total - 1, focusedIdx + delta))
+    setFocusedIdx(next)
+    // 也尝试原生焦点（保持引擎同步，但不依赖它做视觉）
     const node = buttonRefs.current[next]
     const handle = node ? findNodeHandle(node) : null
     if (handle) requestTVFocus(handle)
@@ -66,18 +66,16 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
   useEffect(() => {
     if (!visible) return
     setTVDialogActive(true)
-    focusedIndexRef.current = 0
-
-    const focusTimer = setTimeout(() => focusButton(0), 100)
+    setFocusedIdx(0)
 
     const unsub = onTVRemoteEvent(({ eventType, eventKeyAction }) => {
       if (eventKeyAction !== 0) return
       if (eventType === 'left') {
-        focusButton(focusedIndexRef.current - 1)
+        moveFocus(-1)
       } else if (eventType === 'right') {
-        focusButton(focusedIndexRef.current + 1)
+        moveFocus(1)
       } else if (eventType === 'select') {
-        const btn = buttonsRef.current[focusedIndexRef.current]
+        const btn = buttonsRef.current[focusedIdx]
         if (btn) {
           onDismissRef.current?.()
           btn.onPress?.()
@@ -92,10 +90,10 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
 
     return () => {
       setTVDialogActive(false)
-      clearTimeout(focusTimer)
       unsub()
       backSub.remove()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
 
   if (!visible) return null
@@ -111,8 +109,8 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
               ref={(node: ComponentRef<typeof TVButton> | null) => { buttonRefs.current[index] = node }}
               label={button.label}
               tone={button.tone ?? (index === 0 ? 'dark' : 'primary')}
+              forceFocused={index === focusedIdx}
               focusStyle={styles.buttonFocus}
-              onTVFocusChange={focused => { if (focused) focusedIndexRef.current = index }}
               onPress={() => {
                 onDismissRef.current?.()
                 button.onPress?.()
