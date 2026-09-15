@@ -125,14 +125,20 @@ function TVDetail({ componentId, payload }: Props) {
   const handlePlay = async(index = 0) => {
     if (payload.type === 'board') await handleBoardPlay(payload.id, list, index)
     else if (payload.type === 'userlist') {
-      // 本地歌单：歌曲已经在 getListMusics 时进了缓存，直接按列表 id 播放
+      // 本地歌单：**必须把整张歌单灌进「播放列表」(TEMP) 再播**。
+      // 不能写成 playList(payload.id, index)：那样 playerListId 会是歌单自己的 id，
+      // 而队列页只读 TEMP，于是队列页显示的是上一次留下的旧歌 —— 用户一按 OK
+      // 就跳到不相干的歌上，看起来就是「播完这首就不播歌单里的歌了」。
       if (!list.length) return
-      await playList(payload.id, index)
+      await setTempList(payload.id, [...list])
+      await playList(LIST_IDS.TEMP, index)
     } else await handleSonglistPlay(payload.id, payload.source, list, index)
     pushTVPlayerScreen(componentId)
   }
 
-  // 单曲播放：追加这一首到播放列表（已在列表则直接跳播），不覆盖已有歌曲
+  // 单曲追加（长按 OK）：把这一首塞到播放列表末尾，不动前面的歌。
+  // 注：追加是按「当时已播/未播」的语义放在列表尾部，播完会继续走后面的歌，
+  // 所以它只适合「顺手加一首」，不适合「我想听这张歌单」——后者用短按 OK。
   const handleSinglePlay = async(item: LX.Music.MusicInfoOnline) => {
     const currentList = await getListMusics(LIST_IDS.TEMP)
     let playIndex = currentList.findIndex(m => m.id === item.id)
@@ -205,6 +211,7 @@ function TVDetail({ componentId, payload }: Props) {
             <TVText variant="sectionTitle" style={styles.listTitle}>{tvText.songList}</TVText>
             <TVText variant="caption" color={tvColors.primaryHigh}>{statsText}</TVText>
           </View>
+          {list.length ? <TVText variant="caption" color={tvColors.dimText} style={styles.listHint}>{tvText.detailPlayHint}</TVText> : null}
           <FlatList
             ref={listRef}
             data={list}
@@ -228,7 +235,8 @@ function TVDetail({ componentId, payload }: Props) {
                   badge={index < 3 ? tvText.hotChart : undefined}
                   hasTVPreferredFocus={preferFirstRow && index === 0}
                   onFocus={() => { handleFocus(index) }}
-                  onPress={() => { void handleSinglePlay(item) }}
+                  onPress={() => { void handlePlay(index) }}
+                  onLongPress={() => { void handleSinglePlay(item) }}
                   nextFocusUp={index === 0 ? getActiveTabHandle() ?? playAllFocus.getNodeHandle() ?? undefined : getRowHandle(prevKey) ?? undefined}
                   nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
                   nextFocusDown={getRowHandle(nextKey) ?? undefined}
@@ -298,6 +306,7 @@ const styles: Record<string, ViewStyle | TextStyle | ImageStyle | any> = {
     borderColor: 'rgba(255,255,255,0.24)',
   },
   listHeader: { minHeight: tvSize(42), flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: tvSize(16) },
+  listHint: { marginBottom: tvSize(10) },
   listTitle: { fontSize: tvFont(25) },
   list: { flex: 1 },
   listContent: { paddingTop: tvSize(14), paddingBottom: tvSize(18), gap: tvSize(10) },

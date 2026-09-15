@@ -254,6 +254,41 @@ React 在每次提交时，如果 `ref` 的身份变了，会先以 `null`、再
 
 ---
 
+### 2026-09-15 · 修复「从我的歌单选一首歌，播完就跳到不相干的歌」（播放队列）
+
+**现象**：在某张导入的歌单里按 OK 选一首歌 → 这首放完**不回歌单的下一首**，
+而是播一些不相干的歌；播放列表页显示的内容也和正在放的对不上，按 OK 更乱。
+
+**根因（两处，互相放大）**
+
+1. `Detail.tsx` 歌曲行按 OK 走的是 `handleSinglePlay` —— 它把这一首**追加到共享的临时列表
+   （TEMP）末尾**，再 `playList(TEMP, 末尾下标)`。于是「当前播放队列」= 之前 TEMP 里
+   所有的残留（搜索页单曲播放、在线歌单试听…）+ 这一首。列表循环模式下这首在末尾，
+   播完 `nextIndex` 回绕到 0 —— 正好是那些**残留的旧歌**，看起来就是「它自己找的歌」。
+2. 播放列表页（`Queue.tsx`）**写死读 `LIST_IDS.TEMP`**；而「播放全部」走的是
+   `playList(歌单id, index)`（`playerListId` = 歌单自己的 id），两边根本不是同一个列表
+   → 队列页显示的和实际播放的、以及按 OK 播的都可能是另一份歌。
+
+**修法（把 TV 端所有播放入口统一到 TEMP 这一条队列）**
+
+- 详情页**短按 OK = 从这首开始播整张歌单**：`setTempList(歌单id, 整张歌单)` +
+  `playList(LIST_IDS.TEMP, index)`。这样 `playerListId` 恒为 TEMP，队列页显示的就是
+  你正在听的这张歌单；同时 `tempListMeta.id` 仍记着歌单出处，不破坏上游
+  「同源同步 / 重新拉取」的判定（`SonglistDetail/listAction.ts` 就是这么做的）。
+- 长按 OK 保留原「单曲追加」能力（`handleSinglePlay`），列表上方加一行操作提示说明两者区别。
+- 队列页顶部提示补「队列来自歌单：「xxx」」，一眼能确认队列对不对。
+
+**已知限制**：队列是 TEMP 里的**副本** —— 在队列页删歌/清空只影响队列，不会动你的歌单；
+反过来在歌单里加删歌也不会自动改到已经在播的队列上（下次播放才生效）。
+
+| 文件 | 改了什么 |
+|---|---|
+| `src/screens/TV/Detail.tsx` | ① `handlePlay` 的 `userlist` 分支改走 TEMP（`setTempList` + `playList(LIST_IDS.TEMP)`）；② 歌曲行 `onPress` 由 `handleSinglePlay` 改为 `handlePlay(index)`，新增 `onLongPress` = 单曲追加；③ 列表上方加操作提示 + `listHint` 样式 |
+| `src/screens/TV/Queue.tsx` | 顶部提示补「队列来自歌单：「xxx」」（`useMyList()` + `listState.tempListMeta.id`） |
+| `src/screens/TV/labels.ts` | 新增 `detailPlayHint` / `queueFromSonglist` |
+
+---
+
 ## 📋 待办 / 可选
 
 - [x] ~~歌单重命名~~ —— 已做（手机页「歌单改名」，见上）。

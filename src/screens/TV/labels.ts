@@ -154,6 +154,9 @@ export const tvText = {
   deleteSonglistFailed: '\u5220\u9664\u5931\u8d25',
   cancelAction: '\u53d6\u6d88',
   knowIt: '\u77e5\u9053\u4e86',
+  // 歌曲列表 / 播放队列的操作提示
+  detailPlayHint: '\u70b9 OK \u4ece\u8fd9\u9996\u5f00\u59cb\u64ad\u6574\u4e2a\u6b4c\u5355 \u00b7 \u957f\u6309 OK \u53ea\u628a\u8fd9\u9996\u52a0\u8fdb\u64ad\u653e\u5217\u8868',
+  queueFromSonglist: '\u961f\u5217\u6765\u81ea\u6b4c\u5355\uff1a',
 } as const
 
 export const dot = ' \u00b7 '
