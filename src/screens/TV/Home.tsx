@@ -105,23 +105,31 @@ function TVHome({ componentId }: { componentId: string }) {
     return () => { mounted = false }
   }, [songlistSource, sortId])
 
-  const bindFirstCardRef = (key: string, syncFirst = false) => (node: FocusNode) => {
-    const changed = cardRefs.current[key] !== node
-    cardRefs.current[key] = node
-    if (node && changed) queueFocusRefresh()
-    if (syncFirst && node && firstCardFocus.ref.current !== node) {
-      firstCardFocus.ref.current = node as any
-      queueFocusRefresh()
+  // 性能关键：ref 回调必须保持稳定引用，并且只在「节点真的换了」时才触发刷新。
+  // 若每次渲染都新建箭头函数，React 会在每次提交时先以 null、再以节点调用它，
+  // cardRefs 里的引用随之看似变化 → queueFocusRefresh() → setState → 再渲染，
+  // 于是形成每帧一次的重渲染死循环（首页 30 多张卡片、每帧上百次 findNodeHandle），
+  // 表现就是遥控器移动焦点明显卡顿。这里做两件事：缓存回调 + 按节点去重通知。
+  const cardRefCallbacks = useRef<Record<string, (node: FocusNode) => void>>({})
+  const notifiedCardNodes = useRef<Record<string, FocusNode>>({})
+
+  const getCardRefCallback = (group: 'my' | 'rec', key: string, syncFirst = false) => {
+    const cacheKey = `${group}_${key}_${syncFirst ? 1 : 0}`
+    let callback = cardRefCallbacks.current[cacheKey]
+    if (!callback) {
+      callback = (node: FocusNode) => {
+        cardRefs.current[key] = node
+        if (!node) return
+        const target = group === 'my' ? myListFocus : firstCardFocus
+        const needSyncFirst = syncFirst && target.ref.current !== node
+        if (needSyncFirst) target.ref.current = node as any
+        const freshNode = notifiedCardNodes.current[key] !== node
+        if (freshNode) notifiedCardNodes.current[key] = node
+        if (freshNode || needSyncFirst) queueFocusRefresh()
+      }
+      cardRefCallbacks.current[cacheKey] = callback
     }
-  }
-  const bindMyCardRef = (key: string, syncFirst = false) => (node: FocusNode) => {
-    const changed = cardRefs.current[key] !== node
-    cardRefs.current[key] = node
-    if (node && changed) queueFocusRefresh()
-    if (syncFirst && node && myListFocus.ref.current !== node) {
-      myListFocus.ref.current = node as any
-      queueFocusRefresh()
-    }
+    return callback
   }
   const getActiveTabHandle = () => activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null
   const getCardHandle = (key?: string | null) => key && cardRefs.current[key] ? findNodeHandle(cardRefs.current[key]) : null
@@ -193,14 +201,14 @@ function TVHome({ componentId }: { componentId: string }) {
                 const nextKey = userSonglists[index + 1] ? `mylist_${userSonglists[index + 1].id}` : null
                 const prevKey = userSonglists[index - 1] ? `mylist_${userSonglists[index - 1].id}` : null
                 const recommendKey = songlists[0] ? `songlist_${songlists[0].source}_${songlists[0].id}` : null
-                return <TVPosterCard key={key} ref={bindMyCardRef(key, index === 0) as any} title={item.name} subtitle={item.source ? getSourceName(item.source) : tvText.importSonglist} meta={tvText.openSonglist} size="medium" tint={index % 2 ? tvColors.primary : tvColors.purple} onFocus={() => { scrollToMySonglists() }} onTVFocusChange={handleMySonglistFocusChange} onPress={() => { openMySonglist(item) }} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusLeft={getCardHandle(prevKey) ?? undefined} nextFocusRight={getCardHandle(nextKey) ?? getCardHandle(key) ?? undefined} nextFocusDown={getCardHandle(recommendKey) ?? undefined} />
+                return <TVPosterCard key={key} ref={getCardRefCallback('my', key, index === 0) as any} title={item.name} subtitle={item.source ? getSourceName(item.source) : tvText.importSonglist} meta={tvText.openSonglist} size="medium" tint={index % 2 ? tvColors.primary : tvColors.purple} onFocus={() => { scrollToMySonglists() }} onTVFocusChange={handleMySonglistFocusChange} onPress={() => { openMySonglist(item) }} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusLeft={getCardHandle(prevKey) ?? undefined} nextFocusRight={getCardHandle(nextKey) ?? getCardHandle(key) ?? undefined} nextFocusDown={getCardHandle(recommendKey) ?? undefined} />
               })}
             </TVShelf>
           ) : (
             <TVShelf title={tvText.mySonglists} subtitle={tvText.mySonglistsDesc}>
               {/* 空态也做成可聚焦卡片：否则遥控器够不到这个区块，一往下走就被滚动条顶出屏幕 */}
               <Focusable
-                ref={bindMyCardRef('mylist_empty', true) as any}
+                ref={getCardRefCallback('my', 'mylist_empty', true) as any}
                 style={styles.emptyCard}
                 focusStyle={styles.emptyCardFocus}
                 onFocus={() => { scrollToMySonglists() }}
@@ -225,7 +233,7 @@ function TVHome({ componentId }: { componentId: string }) {
               const nextKey = songlists[index + 1] ? `songlist_${songlists[index + 1].source}_${songlists[index + 1].id}` : null
               const prevKey = songlists[index - 1] ? `songlist_${songlists[index - 1].source}_${songlists[index - 1].id}` : null
               const upKey = userSonglists[index] ? `mylist_${userSonglists[index].id}` : null
-              return <TVPosterCard key={key} ref={bindFirstCardRef(key, index === 0) as any} title={item.name} subtitle={item.author || tvText.songlist} meta={item.play_count ? `${item.play_count}` : tvText.openSonglist} image={item.img} size="medium" tint={index % 2 ? tvColors.purple : tvColors.primary} onFocus={() => { scrollToSonglists() }} onTVFocusChange={handleSonglistFocusChange} onPress={() => { openSonglist(item) }} nextFocusUp={getCardHandle(upKey) ?? getCardHandle('mylist_empty') ?? getActiveTabHandle() ?? undefined} nextFocusLeft={getCardHandle(prevKey) ?? playFocus.getNodeHandle() ?? undefined} nextFocusRight={getCardHandle(nextKey) ?? getCardHandle(key) ?? undefined} nextFocusDown={getCardHandle(key) ?? undefined} />
+              return <TVPosterCard key={key} ref={getCardRefCallback('rec', key, index === 0) as any} title={item.name} subtitle={item.author || tvText.songlist} meta={item.play_count ? `${item.play_count}` : tvText.openSonglist} image={item.img} size="medium" tint={index % 2 ? tvColors.purple : tvColors.primary} onFocus={() => { scrollToSonglists() }} onTVFocusChange={handleSonglistFocusChange} onPress={() => { openSonglist(item) }} nextFocusUp={getCardHandle(upKey) ?? getCardHandle('mylist_empty') ?? getActiveTabHandle() ?? undefined} nextFocusLeft={getCardHandle(prevKey) ?? playFocus.getNodeHandle() ?? undefined} nextFocusRight={getCardHandle(nextKey) ?? getCardHandle(key) ?? undefined} nextFocusDown={getCardHandle(key) ?? undefined} />
             })}
           </TVShelf>
         </View>

@@ -60,6 +60,15 @@
 </section>
 
 <section>
+  <h2>歌单改名</h2>
+  <button class="ghost" onclick="loadSonglists()">读取电视上的歌单</button>
+  <div id="slList"><p class="empty">点上面的按钮读取</p></div>
+  <button onclick="saveSonglists()">保存改名</button>
+  <p id="renameMsg" class="msg"></p>
+  <p class="hint">改完点「保存改名」，电视端「我的歌单」会立即更新。电视遥控器输入不了中文，所以改名放在手机页做。</p>
+</section>
+
+<section>
   <h2>已装音源</h2>
   <div id="list"><p class="empty">加载中…</p></div>
 </section>
@@ -175,6 +184,82 @@ async function doImportSonglist() {
     }
   } catch (e) {
     showSonglistMsg('网络错误，请重试', true)
+  }
+}
+
+// 歌单改名：原始名称快照，用来判断哪些被改动过
+let slOriginal = {}
+
+function showRenameMsg(text, isErr) {
+  const el = document.getElementById('renameMsg')
+  el.textContent = text
+  el.className = isErr ? 'msg err' : 'msg'
+}
+
+// 读取电视端推送过来的「我的歌单」快照
+async function loadSonglists() {
+  const box = document.getElementById('slList')
+  showRenameMsg('正在读取…')
+  try {
+    const r = await fetch('/api/songlists')
+    const d = await r.json()
+    const lists = (d && d.lists) || []
+    if (!lists.length) {
+      box.innerHTML = '<p class="empty">电视上还没有自建歌单，先在「导入歌单」里导一个</p>'
+      showRenameMsg('')
+      return
+    }
+    slOriginal = {}
+    box.innerHTML = ''
+    lists.forEach(item => {
+      slOriginal[item.id] = item.name
+      const wrap = document.createElement('div')
+      wrap.className = 'item'
+      const label = document.createElement('label')
+      label.textContent = '歌单名称'
+      const input = document.createElement('input')
+      input.className = 'slNameInput'
+      input.dataset.id = item.id
+      input.value = item.name
+      input.setAttribute('autocapitalize', 'off')
+      input.setAttribute('autocorrect', 'off')
+      wrap.appendChild(label)
+      wrap.appendChild(input)
+      box.appendChild(wrap)
+    })
+    showRenameMsg('已读取 ' + lists.length + ' 个歌单，改完点下方的「保存改名」')
+  } catch (e) {
+    showRenameMsg('读取失败，请确认电视端仍停在扫码导入页', true)
+  }
+}
+
+// 只提交改动过的条目
+async function saveSonglists() {
+  const inputs = document.querySelectorAll('.slNameInput')
+  const renames = []
+  inputs.forEach(input => {
+    const id = input.dataset.id
+    const name = input.value.trim()
+    if (!id || !name || slOriginal[id] === name) return
+    renames.push({ id: id, name: name })
+  })
+  if (!renames.length) return showRenameMsg('没有修改任何名称', true)
+  showRenameMsg('正在保存…')
+  try {
+    const r = await fetch('/api/songlist-rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ renames: renames })
+    })
+    const d = await r.json()
+    if (d && d.ok) {
+      showRenameMsg('已提交，请查看电视上的结果')
+      setTimeout(loadSonglists, 800)
+    } else {
+      showRenameMsg((d && d.message) || '提交失败', true)
+    }
+  } catch (e) {
+    showRenameMsg('网络错误，请重试', true)
   }
 }
 

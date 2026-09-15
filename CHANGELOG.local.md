@@ -82,13 +82,17 @@
 | `android/gradle.properties` | `reactNativeArchitectures` 由 `arm64-v8a,x86_64` 改为 `arm64-v8a,armeabi-v7a,x86_64`：补编 32 位 ARM，修复 32 位电视/盒子上 `UnsatisfiedLinkError: libquickbase64.so not found` 崩溃（quick-base64 等自编 C++ 库原先没有 v7a 版本）。副作用：构建时间约多 3-5 分钟、universal 包体积变大。 | 低 |
 | `android/app/build.gradle` | `applicationVariants` 里的 `outputFileName` 加 `-lulu` 标记：产物变为 `zl-music-v1.9.5-lulu-universal.apk`，与上游官方的 `zl-music-v1.9.5-universal.apk` 区分开（曾因同名误装官方包）。**签名、versionCode、applicationId、构建逻辑一律未动。** | 低 |
 | `.github/workflows/build-apk.yml` | ① `on.push.branches` 加 `lulu`（原为 `[master, dev]`）；② 顶部加 `permissions: contents: write`；③ 末尾新增「Publish APK to Release」步骤（仅 `lulu` 分支执行，用 runner 自带的 `gh` CLI 把 universal 包发到固定 tag `apk-lulu`）。**原有构建步骤一律未动。** | 低 |
-| `android/.../utils/LanImportServer.java` | `serve()` 的 POST 分支里，在 `/api/activate` 之后追加一个 `if ("/api/songlist".equals(uri))` 块：调用 `SonglistImportPayload.expand(payload)` 后 `notify("songlist", ...)`。原三个路由未动。 | 低 |
-| `android/app/src/main/assets/lan_input.html` | ① `<title>` 改「ZL-Music 导入」；② 新增「导入歌单」section（`slText` / `slFile` / `slName` / `doImportSonglist` / `songlistMsg`）；③ 新增 JS：`doImportSonglist` / `showSonglistMsg` / `bufferToBase64` / `sniffKind` / `decodeTextSmart`；④ 样式加 `.hint` 与 file input。原有音源导入逻辑未动。 | 低 |
+| `android/.../utils/LanImportServer.java` | `serve()` 的 POST 分支里，在 `/api/activate` 之后追加一个 `if ("/api/songlist".equals(uri))` 块：调用 `SonglistImportPayload.expand(payload)` 后 `notify("songlist", ...)`。原三个路由未动。<br>**后续追加**：① 新增静态字段 `songlistsJson` 与 `setSonglists(String)`（对齐原有 `setSources`）；② 新增 `GET /api/songlists` 返回歌单快照；③ 新增 `POST /api/songlist-rename` → `notify("songlist-rename", payload)`；④ `json()` 的 MIME 加 `; charset=utf-8`（否则中文被 US-ASCII 编码成 `?`）。 | 低 |
+| `android/.../utils/UtilsModule.java` | 在 `pushLanSources` 之后追加 `@ReactMethod pushLanSonglists(String, Promise)`，转调 `LanImportServer.setSonglists`。原方法未动。 | 低 |
+| `src/utils/nativeModules/utils.ts` | 末尾追加 `pushLanSonglists(songlistsJson)` 包装。`pushLanSources` 及原有导出未动。 | 低 |
+| `src/components/TV/TVTopTabs.tsx` | 新增 `readyNodeRef`，把 `onActiveTabReady()` 改为**节点真正变化时才通知**（修上游的重渲染死循环）。ref 本身仍是内联函数，未改结构。 | 中 |
+| `src/components/TV/TVSearchKeyboard.tsx` | 新增 `firstKeyNodeRef`，把 `onFirstKeyReady()` 改为**节点真正变化时才通知**（同类死循环）。 | 中 |
+| `android/app/src/main/assets/lan_input.html` | ① `<title>` 改「ZL-Music 导入」；② 新增「导入歌单」section（`slText` / `slFile` / `slName` / `doImportSonglist` / `songlistMsg`）；③ 新增 JS：`doImportSonglist` / `showSonglistMsg` / `bufferToBase64` / `sniffKind` / `decodeTextSmart`；④ 样式加 `.hint` 与 file input。<br>**后续追加**：⑤ 新增「歌单改名」section（`slList` / `loadSonglists` / `saveSonglists` / `renameMsg` / `slOriginal` 快照比对）。原有音源导入逻辑未动。 | 低 |
 | `src/screens/TV/labels.ts` | 末尾追加 8 个文案键：`mySonglists` / `mySonglistsDesc` / `emptyMySonglists` / `emptyMySonglistsHint` / `importingSonglist` / `importSonglist` / `importSonglistTip` / `userList`。 | 低 |
 | `src/screens/TV/types.ts` | `TVDetailPayload` 联合类型追加 `userlist` 分支。 | 低 |
-| `src/screens/TV/Settings.tsx` | ① 新增 `import { importSonglist } from './songlistImport'`；② 新增 state `lanMessageOk`；③ `handleLanSourceEvent` 追加 `else if (action === 'songlist')` 分支；④ `handleOpenLanImport` 重置 `lanMessageOk`；⑤ 二维码下方提示文案改一句 + 新增 `lanMessage` 展示行。 | **高** |
+| `src/screens/TV/Settings.tsx` | ① 新增 `import { importSonglist } from './songlistImport'`；② 新增 state `lanMessageOk`；③ `handleLanSourceEvent` 追加 `else if (action === 'songlist')` 分支；④ `handleOpenLanImport` 重置 `lanMessageOk`；⑤ 二维码下方提示文案改一句 + 新增 `lanMessage` 展示行。<br>**后续追加**：⑥ 新增 `useMyList()` 取用户歌单、`userSonglists`；⑦ 新增 `pushLanSonglistsSnapshot()`（与 `pushLanSourcesSnapshot` 一并改为 `useCallback`）；⑧ `handleLanSourceEvent` 追加 `else if (action === 'songlist-rename')` 分支，调 `core/list.ts` 的 `updateUserList`；⑨ `useEffect` 依赖改为两个快照回调；⑩ 顺手删掉未使用的 `tvFont` 导入。 | **高** |
 | `src/screens/TV/Detail.tsx` | ① `heroMeta` 的兜底分支改为「我的歌单」文案；② `useEffect` 的 loader 抽成 async `load()`，新增 `payload.type === 'userlist'` 分支走 `getListMusics(payload.id)`；③ `handlePlay` 新增 `userlist` 分支走 `playList(payload.id, index)`。 | **高** |
-| `src/screens/TV/Home.tsx` | ① 新增 `useMyList` 取用户歌单；② 新增 `myListFocus` / `sectionOffsetRef.mySonglists` / `bindMyCardRef` / `scrollToMySonglists` / `handleMySonglistFocusChange` / `openMySonglist`；③ Hero 按钮 `nextFocusDown` 改为 `heroNextDownHandle`（优先「我的歌单」首卡）；④ 新增「我的歌单」shelf（推荐歌单上方，含空态）；⑤ 推荐歌单卡片 `nextFocusUp` 改为镜像到「我的歌单」同序号卡片；⑥ **空态卡片改为可聚焦的 `Focusable`**（原先是个普通 View，遥控器够不到，一往下走就被滚出屏幕），并订阅 `songlistImportResult` 事件显示「上次导入结果」，方便直接在首页看到失败原因。 | 中高 |
+| `src/screens/TV/Home.tsx` | ① 新增 `useMyList` 取用户歌单；② 新增 `myListFocus` / `sectionOffsetRef.mySonglists` / `bindMyCardRef` / `scrollToMySonglists` / `handleMySonglistFocusChange` / `openMySonglist`；③ Hero 按钮 `nextFocusDown` 改为 `heroNextDownHandle`（优先「我的歌单」首卡）；④ 新增「我的歌单」shelf（推荐歌单上方，含空态）；⑤ 推荐歌单卡片 `nextFocusUp` 改为镜像到「我的歌单」同序号卡片；⑥ **空态卡片改为可聚焦的 `Focusable`**（原先是个普通 View，遥控器够不到，一往下走就被滚出屏幕），并订阅 `songlistImportResult` 事件显示「上次导入结果」，方便直接在首页看到失败原因。<br>**后续追加**：⑦ `bindFirstCardRef` / `bindMyCardRef` 合并为 `getCardRefCallback(group, key, syncFirst)`，回调按 key 缓存（`cardRefCallbacks`）并对 `queueFocusRefresh` 按节点去重（`notifiedCardNodes`）——修上游遗留的重渲染死循环，顺带解决遥控器换焦点卡顿。 | 中高 |
 | `src/event/appEvent.ts` | 新增一个具名事件方法 `songlistImportResult(result)`（`emit('songlistImportResult', result)`），用于设置页把导入结果广播给首页。纯追加，其余事件未动。 | 低 |
 
 #### 交互流程（已实现）
@@ -136,10 +140,78 @@ https://github.com/soren1985/ZL_Musicos/releases/download/apk-lulu/ZL_Musicos-lu
 
 ---
 
+### 2026-09-15 · 修复遥控器切换焦点卡顿（**上游原有 bug**）
+
+**现象**：遥控器在卡片/图标之间移动时明显发滞（越多人反馈"切换图标慢"）。
+
+**根因：三处 ref 回调引发「每帧一次的重渲染死循环」**（全部是上游原有写法，不是本次功能引入的）：
+
+React 在每次提交时，如果 `ref` 的身份变了，会先以 `null`、再以节点调用它。
+上游多处把 ref 写成**内联箭头函数 / 每次渲染新建的工厂函数**，于是：
+
+```
+渲染 → 新建 ref 回调（身份变了）
+     → React 先 ref(null) 再 ref(node)
+     → 回调内部的「节点已变化」判断恒为真 → 调 queueFocusRefresh()
+     → setTick → 再渲染 → 回到第一行
+```
+
+`useTVFocusRefresh` 又用 `requestAnimationFrame` 限流，所以循环稳定跑在**每秒 60 次**。
+首页有 30 多张卡片，每帧都要整棵树重渲染 + 上百次 `findNodeHandle` + 每张卡
+`updateTVFocusTarget` 重建对象，JS 线程被占满 → 按键处理排在后面 → 手感卡顿。
+它影响的是**所有 TV 页面**（只要有顶部 tab 或搜索键盘）。
+
+**修复：两件事都做 —— 让回调身份稳定，并对「就绪通知」按节点去重。**
+
+| 文件 | 改动 |
+|---|---|
+| `src/screens/TV/Home.tsx` | `bindFirstCardRef` / `bindMyCardRef` 合并为 `getCardRefCallback(group, key, syncFirst)`，按 key 缓存回调（`cardRefCallbacks`），并对 `queueFocusRefresh` 按节点去重（`notifiedCardNodes`）。30 多张卡的 ref 不再每次渲染都换身份。 |
+| `src/components/TV/TVTopTabs.tsx` | 内联 ref 保留，但 `onActiveTabReady()` 改为「节点真正变化时」才通知（`readyNodeRef` 去重）。此组件被 Home / Detail / History / Queue 共用，是影响面最大的一处。 |
+| `src/components/TV/TVSearchKeyboard.tsx` | 同上，`onFirstKeyReady()` 按节点去重（`firstKeyNodeRef`）。原先在搜索页输入时也会空转重渲染。 |
+
+> 关键点：**不能**只在回调里比较 `refs.current[key] !== node`。因为 React 的
+> detach 会先把 `refs.current[key]` 置成 `null`，再 attach 时永远"看起来变了"。
+> 必须用**独立的一份记录**（只记 attach 过的节点、忽略 detach 的 `null`）来判重。
+
+---
+
+### 2026-09-15 · 功能二：歌单重命名（手机页操作）
+
+**动机**：导入的歌单名来自平台（如「我喜欢的音乐」），用户想自己改。
+**为什么放在手机页**：电视遥控器只能输入英文 + 数字，**打不了中文**，
+而歌单名基本都是中文。局域网手机页是现成的输入通道，直接复用最省事。
+
+**不新增任何依赖，复用已验证的局域网通道：**
+
+```
+手机页「歌单改名」
+  → GET  /api/songlists        读电视推送的歌单快照（原生层缓存）
+  → 手机编辑名称（手机键盘，支持中文）
+  → POST /api/songlist-rename  { renames: [{ id, name }] }
+  → 原生 notify("songlist-rename", payload)
+  → JS: core/list.ts updateUserList([{ ...原条目, name }])
+  → list_update → setUserList → emit('mylistUpdated') → 首页自动刷新
+```
+
+**实现要点**：
+
+| 点 | 说明 |
+|---|---|
+| 只提交改动项 | 手机页保存时用 `slOriginal` 快照比对，未改名的条目不发 |
+| 补全其余字段 | JS 端用本地 `userSonglists` 里的原条目展开后再覆盖 `name`，保住 `locationUpdateTime` 等字段（`listEvent.list_update` 的 `updateList()` 会读这些字段） |
+| 快照推送时机 | 设置页打开扫码面板时、以及 `userSonglists` 变化时（`useCallback` + `useEffect`） |
+| 中文不乱码 | `LanImportServer.json()` 的 MIME 由 `application/json` 改为 `application/json; charset=utf-8`。NanoHTTPD 在 MIME 无 charset 时按 **US-ASCII** 编码字符串，会把中文变成「?」（顺带修好了原有 `/api/sources` 与中文错误提示的乱码） |
+
+---
+
 ## 📋 待办 / 可选
 
-- [ ] 歌单管理（重命名 / 删除 / 排序）目前仍只有手机端设置页，TV 端未做。
+- [x] ~~歌单重命名~~ —— 已做（手机页「歌单改名」，见上）。
+- [ ] 歌单删除 / 排序仍未在 TV 端暴露（手机页目前只做改名，可继续加删除、排序）。
 - [ ] 导入时若匹配上的歌曲过少，可考虑在电视上给一个「是否仍要保留」的确认弹窗。
+- [ ] `TVNavBar.tsx` 的 ref 也是内联箭头（`ref={(node) => { refs.current[index] = node }}`），
+      不过它没有「就绪回调」，不会造成死循环，只是每次渲染多一次 detach/attach，暂未改动。
+- [ ] 其余 TV 屏（Detail / History / Queue）若仍觉卡顿，可检查是否还有同类内联 ref + 就绪回调的组合。
 - [ ] 定时任务：自动检测上游新提交并提醒（尚未确认要做）。
 
 ---

@@ -21,6 +21,7 @@ public class LanImportServer extends NanoHTTPD {
 
   private static volatile LanImportServer instance;
   private static volatile String sourcesJson = "{\"sources\":[]}";
+  private static volatile String songlistsJson = "{\"lists\":[]}";
   private static volatile LanListener listener;
   private static volatile byte[] pageHtml;
   private static volatile Context appContext;
@@ -53,6 +54,14 @@ public class LanImportServer extends NanoHTTPD {
     sourcesJson = (json == null || json.isEmpty()) ? "{\"sources\":[]}" : json;
   }
 
+  /**
+   * 电视端「我的歌单」快照，供手机页读取后改名。
+   * 歌单名多为中文，必须由 JS 侧以 UTF-8 序列化后原样保存。
+   */
+  public static void setSonglists(String json) {
+    songlistsJson = (json == null || json.isEmpty()) ? "{\"lists\":[]}" : json;
+  }
+
   private static byte[] getPage() {
     if (pageHtml == null) {
       try {
@@ -71,7 +80,9 @@ public class LanImportServer extends NanoHTTPD {
   }
 
   private static Response json(String json) {
-    return newFixedLengthResponse(Response.Status.OK, "application/json", json);
+    // 必须显式声明 charset：NanoHTTPD 在 MIME 未带 charset 时按 US-ASCII 编码字符串，
+    // 中文歌单名 / 中文提示会被替换成「?」，所以这里统一用 UTF-8。
+    return newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8", json);
   }
 
   private static void notify(String action, String payload) {
@@ -88,6 +99,10 @@ public class LanImportServer extends NanoHTTPD {
     }
     if (Method.GET.equals(method) && "/api/sources".equals(uri)) {
       return json(sourcesJson);
+    }
+    // 手机页读取电视上「我的歌单」列表，用于改名
+    if (Method.GET.equals(method) && "/api/songlists".equals(uri)) {
+      return json(songlistsJson);
     }
     if (Method.POST.equals(method)) {
       Map<String, String> body = new HashMap<>();
@@ -112,6 +127,11 @@ public class LanImportServer extends NanoHTTPD {
       if ("/api/songlist".equals(uri)) {
         // 歌单导入：载荷里可能带 zip/crx/gzip 的 base64，先展开成文本再交给 JS 解析
         notify("songlist", SonglistImportPayload.expand(payload));
+        return json("{\"ok\":true,\"message\":\"已提交\"}");
+      }
+      if ("/api/songlist-rename".equals(uri)) {
+        // 歌单改名：纯 JSON（{renames:[{id,name}]}），不需要解压展开
+        notify("songlist-rename", payload);
         return json("{\"ok\":true,\"message\":\"已提交\"}");
       }
     }

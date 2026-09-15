@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
 import { Image, ScrollView, View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
@@ -7,15 +7,18 @@ import TVButton from '@/components/TV/TVButton'
 import TVSettingsPane from '@/components/TV/TVSettingsPane'
 import { showTVDialog, type TVDialogButtonConfig } from '@/components/TV/TVDialog'
 import Focusable from '@/components/TV/Focusable'
-import { tvColors, tvFont, tvSize } from '@/theme/tv'
+import { tvColors, tvSize } from '@/theme/tv'
 import { useSettingValue } from '@/store/setting/hook'
 import { usePlayerMusicInfo } from '@/store/player/hook'
+import { useMyList } from '@/store/list/hook'
 import { useStatus, useUserApiList } from '@/store/userApi/hook'
 import apiSourceInfo from '@/utils/musicSdk/api-source-info'
+import { LIST_IDS } from '@/config/constant'
 import { setApiSource } from '@/core/apiSource'
 import { updateSetting } from '@/core/common'
+import { updateUserList } from '@/core/list'
 import { httpFetch } from '@/utils/request'
-import { generateQRCodeBase64, onLanSourceEvent, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
+import { generateQRCodeBase64, onLanSourceEvent, pushLanSonglists, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
 import { importUserApi, removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
@@ -119,6 +122,12 @@ function TVSettings({ componentId }: { componentId: string }) {
   ]), [defaultSources, presetSources])
 
   const userApiById = useMemo(() => new Map(userApiList.map(item => [item.id, item])), [userApiList])
+  // 「我的歌单」快照：推给原生层缓存，手机页读取后在手机上改名（TV 屏上无法输入中文）
+  const allLists = useMyList()
+  const userSonglists = useMemo(
+    () => allLists.filter((item): item is LX.List.UserListInfo => item.id !== LIST_IDS.DEFAULT && item.id !== LIST_IDS.LOVE),
+    [allLists],
+  )
   const allSources = useMemo<SourceItem[]>(() => [
     ...userApiList.map(item => ({
       id: item.id,
@@ -233,15 +242,25 @@ function TVSettings({ componentId }: { componentId: string }) {
     }
   }
 
-  const pushLanSourcesSnapshot = () => {
+  const pushLanSourcesSnapshot = useCallback(() => {
     try {
-      pushLanSources(JSON.stringify({
+      void pushLanSources(JSON.stringify({
         sources: allSources.map(src => ({ id: src.id, name: src.name, active: apiSource === src.id, isUser: userApiById.has(src.id) })),
       }))
     } catch (err: unknown) {
       // 快照推送失败静默忽略
     }
-  }
+  }, [allSources, apiSource, userApiById])
+
+  const pushLanSonglistsSnapshot = useCallback(() => {
+    try {
+      void pushLanSonglists(JSON.stringify({
+        lists: userSonglists.map(item => ({ id: item.id, name: item.name })),
+      }))
+    } catch (err: unknown) {
+      // 快照推送失败静默忽略
+    }
+  }, [userSonglists])
 
   const handleLanSourceEvent = async(action: string, payload: string) => {
     try {
@@ -287,6 +306,28 @@ function TVSettings({ componentId }: { componentId: string }) {
         setLanMessage(outcome.message)
         // 同时广播给首页「我的歌单」，让用户不用回到设置页也能看到导入结果
         global.app_event.songlistImportResult({ ok: outcome.ok, message: outcome.message })
+      } else if (action === 'songlist-rename') {
+        // 手机页改名：拿本地列表补全其余字段（locationUpdateTime 等），只覆盖 name
+        const data = JSON.parse(payload || '{}') as { renames?: Array<{ id?: string, name?: string }> }
+        const infos: LX.List.UserListInfo[] = []
+        for (const item of data.renames ?? []) {
+          if (!item.id) continue
+          const name = item.name?.trim()
+          if (!name) continue
+          const target = userSonglists.find(list => list.id === item.id)
+          if (!target || target.name === name) continue
+          infos.push({ ...target, name })
+        }
+        if (!infos.length) {
+          setLanMessageOk(false)
+          setLanMessage('没有需要修改的歌单名')
+          return
+        }
+        await updateUserList(infos)
+        const renamedMessage = `已重命名 ${infos.length} 个歌单`
+        setLanMessageOk(true)
+        setLanMessage(renamedMessage)
+        global.app_event.songlistImportResult({ ok: true, message: renamedMessage })
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '手机操作失败'
@@ -300,8 +341,9 @@ function TVSettings({ componentId }: { componentId: string }) {
   useEffect(() => {
     if (!lanRunning) return
     pushLanSourcesSnapshot()
+    pushLanSonglistsSnapshot()
     return onLanSourceEvent((event) => { void lanHandlerRef.current?.(event.action, event.payload) })
-  }, [lanRunning, allSources, apiSource, userApiById])
+  }, [lanRunning, pushLanSonglistsSnapshot, pushLanSourcesSnapshot])
 
   const handleOpenLanImport = async() => {
     setLanMessage('')
@@ -312,6 +354,7 @@ function TVSettings({ componentId }: { componentId: string }) {
       setQrImage(qr)
       setLanRunning(true)
       pushLanSourcesSnapshot()
+      pushLanSonglistsSnapshot()
       setTimeout(() => { rightScrollRef.current?.scrollToEnd({ animated: true }) }, 300)
     } catch (err: unknown) {
       setLanMessage(err instanceof Error ? err.message : '启动失败')
@@ -319,7 +362,7 @@ function TVSettings({ componentId }: { componentId: string }) {
   }
 
   const handleCloseLanImport = () => {
-    stopLanImportServer()
+    void stopLanImportServer()
     setLanRunning(false)
     setQrImage('')
   }
