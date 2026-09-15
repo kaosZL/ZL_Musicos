@@ -223,6 +223,7 @@ React 在每次提交时，如果 `ref` 的身份变了，会先以 `null`、再
 | 8 | 歌单名可以无限长，卡片和详情标题会被撑爆 | 手机页输入框没有长度限制 | 输入框加 `maxlength=40` |
 | 9 | 一个弹窗的按钮里立刻弹下一个弹窗（管理菜单 → 删除确认）时，焦点会停在上一个弹窗的位置，**很容易误按到「删除」** | `TVDialog` 的 effect 只看 `visible`，而连续弹窗时 `visible` 一直是 `true` | `TVDialog` 新增 `resetKey`（`TVDialogHost` 传 `request`），弹窗内容变化时重置焦点到第一个按钮 |
 | 10 | **按遥控器 MENU 键会抛 `ReferenceError`**（上游 bug） | `TVRemoteFocusController.tsx` 用了 `focusPreferredTVTarget()` 但**没有 import**（函数在 `tvFocusManager.ts` 里有正常导出）。Metro 打包不做类型检查，所以一直没暴露 | import 列表补上 `focusPreferredTVTarget` |
+| 11 | 空态卡片提示用户「到设置页点手机扫码导入」，但**按 OK 毫无反应** —— 是个死胡同 | 空态 `Focusable` 只写了 `onFocus`，没有 `onPress` | 空态卡片加 `onPress` → `pushTVSettingsScreen(componentId)`；文案改为「按 OK 直接打开『手机扫码导入』…」 |
 
 > **已知限制（未改，但已在手机页明确提示）**：局域网导入服务的按键/事件监听挂在设置页组件上，
 > 手机页操作时电视必须停在「手机扫码导入」（显示二维码）界面。彻底解决需要把监听提升到 App 级
@@ -235,7 +236,7 @@ React 在每次提交时，如果 `ref` 的身份变了，会先以 `null`、再
 | `src/components/TV/TVPosterCard.tsx` | 新增 `coverFallback`，新增 `musicGlyph` 样式（56 号字音符），默认行为不变 |
 | `src/components/TV/TVDialog.tsx` | 新增可选 `resetKey`，`useEffect` 依赖由 `[visible]` 改为 `[visible, resetKey]`；`TVDialogHost` 把 `request` 传进去 |
 | `src/components/TV/TVRemoteFocusController.tsx` | import 补上漏掉的 `focusPreferredTVTarget`（修 MENU 键 ReferenceError） |
-| `src/screens/TV/Home.tsx` | ① 我的歌单卡片传 `coverFallback="music"`、`meta` 改「长按 OK 管理」、新增 `onLongPress`；② 新增 `handleManageSonglist` / `handleRemoveSonglist`（`showTVDialog` + `confirmDialog` + `tipDialog`）；③ 结果提示移出空态分支、常显；④ 模块级 `lastSonglistResultCache` 让结果跨挂载保留；⑤ 新增 `import { removeUserList }`、`showTVDialog`、`confirmDialog`、`tipDialog` |
+| `src/screens/TV/Home.tsx` | ① 我的歌单卡片传 `coverFallback="music"`、`meta` 改「长按 OK 管理」、新增 `onLongPress`；② 空态卡片新增 `onPress` → 跳设置页；③ 新增 `handleManageSonglist` / `handleRemoveSonglist`（`showTVDialog` + `confirmDialog` + `tipDialog`）；④ 结果提示移出空态分支、常显；⑤ 模块级 `lastSonglistResultCache` 让结果跨挂载保留；⑥ 新增 `import { removeUserList }`、`showTVDialog`、`confirmDialog`、`tipDialog`、`pushTVSettingsScreen` |
 | `src/screens/TV/Settings.tsx` | ① import 加 `removeUserList`；② `handleLanSourceEvent` 新增 `songlist-remove` 分支（含快照过期校验）；③ 二维码下方提示补「改名、删除」说明 |
 | `src/screens/TV/labels.ts` | 新增 `lastImportResult` / `managingSonglist` / `longPressManage` / `renameSonglistNeedPhone` / `deleteSonglist` / `deleteSonglistConfirm` / `deleteSonglistDone` / `deleteSonglistFailed` / `cancelAction` / `knowIt`；改写 `mySonglistsDesc` / `emptyMySonglistsHint` |
 | `src/screens/TV/songlistImport.ts` | `createListsFromParsed` 增加重名去重（`usedNames` + 序号后缀） |

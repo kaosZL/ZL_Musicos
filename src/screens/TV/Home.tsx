@@ -24,13 +24,13 @@ import { confirmDialog, exitApp, tipDialog } from '@/utils/tools'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { useNavigationComponentDidAppear } from '@/navigation/hooks'
-import { pushTVDetailScreen, pushTVPlayerScreen, pushTVSearchScreen } from '@/navigation/navigation'
+import { pushTVDetailScreen, pushTVPlayerScreen, pushTVSearchScreen, pushTVSettingsScreen } from '@/navigation/navigation'
 import { createTVTabs, getSourceName } from './utils'
 import { dot, tvText } from './labels'
 
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
-type SonglistResult = { ok: boolean, message: string }
+interface SonglistResult { ok: boolean, message: string }
 
 // 手机端的导入/改名/删除结果缓存到模块级：首页被切走再回来时组件会重新挂载、
 // state 会被重置，这里留一份，保证用户回到首页仍能看到「上次的结果」
@@ -247,13 +247,15 @@ function TVHome({ componentId }: { componentId: string }) {
             </TVShelf>
           ) : (
             <TVShelf title={tvText.mySonglists} subtitle={tvText.mySonglistsDesc}>
-              {/* 空态也做成可聚焦卡片：否则遥控器够不到这个区块，一往下走就被滚动条顶出屏幕 */}
+              {/* 空态也做成可聚焦卡片：否则遥控器够不到这个区块，一往下走就被滚动条顶出屏幕。
+                  再给一个 onPress —— 否则卡片提示「按 OK 去扫码页」却按了没反应，是个死胡同 */}
               <Focusable
                 ref={getCardRefCallback('my', 'mylist_empty', true) as any}
                 style={styles.emptyCard}
                 focusStyle={styles.emptyCardFocus}
                 onFocus={() => { scrollToMySonglists() }}
                 onTVFocusChange={handleMySonglistFocusChange}
+                onPress={() => { pushTVSettingsScreen(componentId) }}
                 nextFocusUp={getActiveTabHandle() ?? undefined}
                 nextFocusDown={getCardHandle(firstRecommendKey) ?? undefined}
               >
