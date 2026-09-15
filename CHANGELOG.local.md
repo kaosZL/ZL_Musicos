@@ -88,7 +88,8 @@
 | `src/screens/TV/types.ts` | `TVDetailPayload` 联合类型追加 `userlist` 分支。 | 低 |
 | `src/screens/TV/Settings.tsx` | ① 新增 `import { importSonglist } from './songlistImport'`；② 新增 state `lanMessageOk`；③ `handleLanSourceEvent` 追加 `else if (action === 'songlist')` 分支；④ `handleOpenLanImport` 重置 `lanMessageOk`；⑤ 二维码下方提示文案改一句 + 新增 `lanMessage` 展示行。 | **高** |
 | `src/screens/TV/Detail.tsx` | ① `heroMeta` 的兜底分支改为「我的歌单」文案；② `useEffect` 的 loader 抽成 async `load()`，新增 `payload.type === 'userlist'` 分支走 `getListMusics(payload.id)`；③ `handlePlay` 新增 `userlist` 分支走 `playList(payload.id, index)`。 | **高** |
-| `src/screens/TV/Home.tsx` | ① 新增 `useMyList` 取用户歌单；② 新增 `myListFocus` / `sectionOffsetRef.mySonglists` / `bindMyCardRef` / `scrollToMySonglists` / `handleMySonglistFocusChange` / `openMySonglist`；③ Hero 按钮 `nextFocusDown` 改为 `heroNextDownHandle`（优先「我的歌单」首卡）；④ 新增「我的歌单」shelf（推荐歌单上方，含空态）；⑤ 推荐歌单卡片 `nextFocusUp` 改为镜像到「我的歌单」同序号卡片。 | 中高 |
+| `src/screens/TV/Home.tsx` | ① 新增 `useMyList` 取用户歌单；② 新增 `myListFocus` / `sectionOffsetRef.mySonglists` / `bindMyCardRef` / `scrollToMySonglists` / `handleMySonglistFocusChange` / `openMySonglist`；③ Hero 按钮 `nextFocusDown` 改为 `heroNextDownHandle`（优先「我的歌单」首卡）；④ 新增「我的歌单」shelf（推荐歌单上方，含空态）；⑤ 推荐歌单卡片 `nextFocusUp` 改为镜像到「我的歌单」同序号卡片；⑥ **空态卡片改为可聚焦的 `Focusable`**（原先是个普通 View，遥控器够不到，一往下走就被滚出屏幕），并订阅 `songlistImportResult` 事件显示「上次导入结果」，方便直接在首页看到失败原因。 | 中高 |
+| `src/event/appEvent.ts` | 新增一个具名事件方法 `songlistImportResult(result)`（`emit('songlistImportResult', result)`），用于设置页把导入结果广播给首页。纯追加，其余事件未动。 | 低 |
 
 #### 交互流程（已实现）
 

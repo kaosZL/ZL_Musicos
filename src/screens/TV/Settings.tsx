@@ -274,6 +274,7 @@ function TVSettings({ componentId }: { componentId: string }) {
         if (!rawText.trim()) {
           setLanMessageOk(false)
           setLanMessage('手机提交的歌单内容为空')
+          global.app_event.songlistImportResult({ ok: false, message: '手机提交的歌单内容为空' })
           return
         }
         setLanMessageOk(false)
@@ -284,10 +285,14 @@ function TVSettings({ componentId }: { componentId: string }) {
         })
         setLanMessageOk(outcome.ok)
         setLanMessage(outcome.message)
+        // 同时广播给首页「我的歌单」，让用户不用回到设置页也能看到导入结果
+        global.app_event.songlistImportResult({ ok: outcome.ok, message: outcome.message })
       }
     } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '手机操作失败'
       setLanMessageOk(false)
-      setLanMessage(err instanceof Error ? err.message : '手机操作失败')
+      setLanMessage(message)
+      global.app_event.songlistImportResult({ ok: false, message })
     }
   }
   lanHandlerRef.current = (action: string, payload: string) => { void handleLanSourceEvent(action, payload) }

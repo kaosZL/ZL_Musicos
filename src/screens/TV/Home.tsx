@@ -7,7 +7,7 @@ import TVShelf from '@/components/TV/TVShelf'
 import TVPosterCard from '@/components/TV/TVPosterCard'
 import TVButton from '@/components/TV/TVButton'
 import TVText from '@/components/TV/TVText'
-import type Focusable from '@/components/TV/Focusable'
+import Focusable from '@/components/TV/Focusable'
 import { tvColors, tvSize } from '@/theme/tv'
 import { setComponentId } from '@/core/common'
 import { COMPONENT_IDS, LIST_IDS } from '@/config/constant'
@@ -33,6 +33,8 @@ function TVHome({ componentId }: { componentId: string }) {
   const musicInfo = usePlayerMusicInfo()
   const isPlay = useIsPlay()
   const [songlists, setSonglists] = useState<ListInfoItem[]>([])
+  // 手机导入歌单的结果（由设置页广播），歌单为空时直接显示在首页，省得用户跑回设置页看
+  const [importResult, setImportResult] = useState<{ ok: boolean, message: string } | null>(null)
   const playFocus = useTVFocusRef()
   const searchFocus = useTVFocusRef()
   const myListFocus = useTVFocusRef()
@@ -45,6 +47,11 @@ function TVHome({ componentId }: { componentId: string }) {
   const queueFocusRefresh = useTVFocusRefresh()
 
   useEffect(() => { setComponentId(COMPONENT_IDS.home, componentId) }, [componentId])
+  useEffect(() => {
+    const handleImportResult = (result: { ok: boolean, message: string }) => { setImportResult(result) }
+    global.app_event.on('songlistImportResult', handleImportResult)
+    return () => { global.app_event.off('songlistImportResult', handleImportResult) }
+  }, [])
   useEffect(() => () => {
     if (appearTimerRef.current) clearTimeout(appearTimerRef.current)
   }, [])
@@ -160,8 +167,9 @@ function TVHome({ componentId }: { componentId: string }) {
   const heroSubtitle = musicInfo.id
     ? `${musicInfo.singer || tvText.unknownSinger}${dot}${isPlay ? tvText.playing : tvText.paused}`
     : tvText.allMusicDesc
-  // Hero 上按「下」优先落到「我的歌单」第一张卡，没有导入过歌单时退回推荐歌单
-  const heroNextDownHandle = (userSonglists.length ? myListFocus.getNodeHandle() : null) ?? firstCardFocus.getNodeHandle()
+  // Hero 上按「下」优先落到「我的歌单」：有歌单时是第一张卡，没有时是那张空态卡片（能被选到、能看到导入提示）
+  const heroNextDownHandle = myListFocus.getNodeHandle() ?? firstCardFocus.getNodeHandle()
+  const firstRecommendKey = songlists[0] ? `songlist_${songlists[0].source}_${songlists[0].id}` : null
 
   return (
     <TVAppleScaffold image={musicInfo.pic}>
@@ -190,10 +198,22 @@ function TVHome({ componentId }: { componentId: string }) {
             </TVShelf>
           ) : (
             <TVShelf title={tvText.mySonglists} subtitle={tvText.mySonglistsDesc}>
-              <View style={styles.emptyCard}>
+              {/* 空态也做成可聚焦卡片：否则遥控器够不到这个区块，一往下走就被滚动条顶出屏幕 */}
+              <Focusable
+                ref={bindMyCardRef('mylist_empty', true) as any}
+                style={styles.emptyCard}
+                focusStyle={styles.emptyCardFocus}
+                onFocus={() => { scrollToMySonglists() }}
+                onTVFocusChange={handleMySonglistFocusChange}
+                nextFocusUp={getActiveTabHandle() ?? undefined}
+                nextFocusDown={getCardHandle(firstRecommendKey) ?? undefined}
+              >
                 <TVText variant="cardTitle">{tvText.emptyMySonglists}</TVText>
+                {importResult
+                  ? <TVText variant="caption" color={importResult.ok ? tvColors.primaryHigh : tvColors.warn} style={styles.emptyHint}>{`上次导入结果：${importResult.message}`}</TVText>
+                  : null}
                 <TVText variant="caption" color={tvColors.dimText} style={styles.emptyHint}>{tvText.emptyMySonglistsHint}</TVText>
-              </View>
+              </Focusable>
             </TVShelf>
           )}
         </View>
@@ -205,7 +225,7 @@ function TVHome({ componentId }: { componentId: string }) {
               const nextKey = songlists[index + 1] ? `songlist_${songlists[index + 1].source}_${songlists[index + 1].id}` : null
               const prevKey = songlists[index - 1] ? `songlist_${songlists[index - 1].source}_${songlists[index - 1].id}` : null
               const upKey = userSonglists[index] ? `mylist_${userSonglists[index].id}` : null
-              return <TVPosterCard key={key} ref={bindFirstCardRef(key, index === 0) as any} title={item.name} subtitle={item.author || tvText.songlist} meta={item.play_count ? `${item.play_count}` : tvText.openSonglist} image={item.img} size="medium" tint={index % 2 ? tvColors.purple : tvColors.primary} onFocus={() => { scrollToSonglists() }} onTVFocusChange={handleSonglistFocusChange} onPress={() => { openSonglist(item) }} nextFocusUp={getCardHandle(upKey) ?? getActiveTabHandle() ?? undefined} nextFocusLeft={getCardHandle(prevKey) ?? playFocus.getNodeHandle() ?? undefined} nextFocusRight={getCardHandle(nextKey) ?? getCardHandle(key) ?? undefined} nextFocusDown={getCardHandle(key) ?? undefined} />
+              return <TVPosterCard key={key} ref={bindFirstCardRef(key, index === 0) as any} title={item.name} subtitle={item.author || tvText.songlist} meta={item.play_count ? `${item.play_count}` : tvText.openSonglist} image={item.img} size="medium" tint={index % 2 ? tvColors.purple : tvColors.primary} onFocus={() => { scrollToSonglists() }} onTVFocusChange={handleSonglistFocusChange} onPress={() => { openSonglist(item) }} nextFocusUp={getCardHandle(upKey) ?? getCardHandle('mylist_empty') ?? getActiveTabHandle() ?? undefined} nextFocusLeft={getCardHandle(prevKey) ?? playFocus.getNodeHandle() ?? undefined} nextFocusRight={getCardHandle(nextKey) ?? getCardHandle(key) ?? undefined} nextFocusDown={getCardHandle(key) ?? undefined} />
             })}
           </TVShelf>
         </View>
@@ -218,6 +238,7 @@ function TVHome({ componentId }: { componentId: string }) {
 const styles: Record<string, ViewStyle | any> = {
   bottomSpace: { height: 60 },
   emptyCard: { width: tvSize(460), borderRadius: tvSize(18), borderWidth: 1, borderColor: tvColors.border, backgroundColor: 'rgba(255,255,255,0.04)', padding: tvSize(18), gap: tvSize(8) },
+  emptyCardFocus: { borderColor: tvColors.primaryHigh, backgroundColor: 'rgba(255,255,255,0.08)' },
   emptyHint: { lineHeight: tvSize(22) },
 }
 
