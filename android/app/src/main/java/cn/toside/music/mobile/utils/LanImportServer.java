@@ -134,6 +134,11 @@ public class LanImportServer extends NanoHTTPD {
         notify("songlist-rename", payload);
         return json("{\"ok\":true,\"message\":\"已提交\"}");
       }
+      if ("/api/songlist-remove".equals(uri)) {
+        // 歌单删除：纯 JSON（{ids:[...]}），不需要解压展开
+        notify("songlist-remove", payload);
+        return json("{\"ok\":true,\"message\":\"已提交\"}");
+      }
     }
     return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Not Found");
   }

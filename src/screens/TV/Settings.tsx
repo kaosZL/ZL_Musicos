@@ -16,7 +16,7 @@ import apiSourceInfo from '@/utils/musicSdk/api-source-info'
 import { LIST_IDS } from '@/config/constant'
 import { setApiSource } from '@/core/apiSource'
 import { updateSetting } from '@/core/common'
-import { updateUserList } from '@/core/list'
+import { removeUserList, updateUserList } from '@/core/list'
 import { httpFetch } from '@/utils/request'
 import { generateQRCodeBase64, onLanSourceEvent, pushLanSonglists, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
 import { importUserApi, removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
@@ -328,6 +328,24 @@ function TVSettings({ componentId }: { componentId: string }) {
         setLanMessageOk(true)
         setLanMessage(renamedMessage)
         global.app_event.songlistImportResult({ ok: true, message: renamedMessage })
+      } else if (action === 'songlist-remove') {
+        // 手机页删除歌单：这里是唯一的删除入口，删完同步广播给首页
+        const data = JSON.parse(payload || '{}') as { id?: string, ids?: Array<string | undefined> }
+        const ids: string[] = []
+        for (const id of data.ids ?? []) { if (id) ids.push(id) }
+        if (!ids.length && data.id) ids.push(data.id)
+        // 手机页拿到的是上一次推送的快照，可能已经过期（比如刚在电视上删过）
+        const existingIds = ids.filter(id => userSonglists.some(list => list.id === id))
+        if (!existingIds.length) {
+          setLanMessageOk(false)
+          setLanMessage(ids.length ? '电视上已经没有这些歌单了，请重新读取' : '没有指定要删除的歌单')
+          return
+        }
+        await removeUserList(existingIds)
+        const removedMessage = existingIds.length > 1 ? `已删除 ${existingIds.length} 个歌单` : '已删除歌单'
+        setLanMessageOk(true)
+        setLanMessage(removedMessage)
+        global.app_event.songlistImportResult({ ok: true, message: removedMessage })
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '手机操作失败'
@@ -503,7 +521,8 @@ function TVSettings({ componentId }: { componentId: string }) {
             {qrImage ? (
               <View style={styles.qrWrap}>
                 <Image source={{ uri: qrImage }} style={styles.qrImage} />
-                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>手机扫码打开页面，粘贴音源链接/脚本，或导入歌单（链接、歌名清单、歌单文件均可）</TVText>
+                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>手机扫码打开页面，可导入音源/歌单，也能给已导入的歌单改名、删除</TVText>
+                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>改名必须在手机上做：电视遥控器输不了中文</TVText>
                 <TVText variant="caption" color={tvColors.warn} style={styles.line}>⚠ 请确保手机与电视连接同一局域网（WiFi）</TVText>
               </View>
             ) : null}

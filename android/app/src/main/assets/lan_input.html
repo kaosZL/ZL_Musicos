@@ -53,19 +53,19 @@
   <label>方式二：选择文件</label>
   <input id="slFile" type="file">
   <label>歌单名称（选填，不填自动命名）</label>
-  <input id="slName" placeholder="例如：车载歌单" autocapitalize="off" autocorrect="off">
+  <input id="slName" placeholder="例如：车载歌单" autocapitalize="off" autocorrect="off" maxlength="40">
   <button onclick="doImportSonglist()">导入歌单到电视</button>
   <p id="songlistMsg" class="msg"></p>
   <p class="hint">支持：各平台歌单链接（网易云 / QQ音乐 / 酷狗 / 酷我 / 咪咕）、洛雪导出的歌单文件（.json / .lxmc）、压缩包或 .crx 里的歌单文件，以及「歌名 - 歌手」纯文本清单。</p>
 </section>
 
 <section>
-  <h2>歌单改名</h2>
+  <h2>歌单改名 / 删除</h2>
   <button class="ghost" onclick="loadSonglists()">读取电视上的歌单</button>
   <div id="slList"><p class="empty">点上面的按钮读取</p></div>
   <button onclick="saveSonglists()">保存改名</button>
   <p id="renameMsg" class="msg"></p>
-  <p class="hint">改完点「保存改名」，电视端「我的歌单」会立即更新。电视遥控器输入不了中文，所以改名放在手机页做。</p>
+  <p class="hint">改完点「保存改名」，电视端「我的歌单」会立即更新。电视遥控器输入不了中文，所以改名放在手机页做；导入错了的歌单也可以在这里点「删除这个歌单」直接删掉（删了不可恢复）。</p>
 </section>
 
 <section>
@@ -196,40 +196,99 @@ function showRenameMsg(text, isErr) {
   el.className = isErr ? 'msg err' : 'msg'
 }
 
-// 读取电视端推送过来的「我的歌单」快照
-async function loadSonglists() {
+// 读取电视端推送过来的「我的歌单」快照（原生层缓存，电视端歌单有变化时会重新推送）
+async function fetchSonglists() {
+  const r = await fetch('/api/songlists')
+  const d = await r.json()
+  return (d && d.lists) || []
+}
+
+// 渲染歌单列表：一个名称输入框 + 一个删除按钮
+function renderSonglists(lists) {
   const box = document.getElementById('slList')
+  slOriginal = {}
+  if (!lists.length) {
+    box.innerHTML = '<p class="empty">电视上还没有自建歌单，先在「导入歌单」里导一个</p>'
+    return
+  }
+  box.innerHTML = ''
+  lists.forEach(item => {
+    slOriginal[item.id] = item.name
+    const wrap = document.createElement('div')
+    wrap.className = 'item'
+    const label = document.createElement('label')
+    label.textContent = '歌单名称'
+    const input = document.createElement('input')
+    input.className = 'slNameInput'
+    input.dataset.id = item.id
+    input.value = item.name
+    input.setAttribute('autocapitalize', 'off')
+    input.setAttribute('autocorrect', 'off')
+    input.maxLength = 40
+    wrap.appendChild(label)
+    wrap.appendChild(input)
+    const ops = document.createElement('div')
+    ops.className = 'ops'
+    const delBtn = document.createElement('button')
+    delBtn.className = 'danger'
+    delBtn.textContent = '删除这个歌单'
+    delBtn.onclick = () => removeSonglist(item.id, item.name)
+    ops.appendChild(delBtn)
+    wrap.appendChild(ops)
+    box.appendChild(wrap)
+  })
+}
+
+async function loadSonglists() {
   showRenameMsg('正在读取…')
   try {
-    const r = await fetch('/api/songlists')
-    const d = await r.json()
-    const lists = (d && d.lists) || []
-    if (!lists.length) {
-      box.innerHTML = '<p class="empty">电视上还没有自建歌单，先在「导入歌单」里导一个</p>'
-      showRenameMsg('')
-      return
-    }
-    slOriginal = {}
-    box.innerHTML = ''
-    lists.forEach(item => {
-      slOriginal[item.id] = item.name
-      const wrap = document.createElement('div')
-      wrap.className = 'item'
-      const label = document.createElement('label')
-      label.textContent = '歌单名称'
-      const input = document.createElement('input')
-      input.className = 'slNameInput'
-      input.dataset.id = item.id
-      input.value = item.name
-      input.setAttribute('autocapitalize', 'off')
-      input.setAttribute('autocorrect', 'off')
-      wrap.appendChild(label)
-      wrap.appendChild(input)
-      box.appendChild(wrap)
-    })
-    showRenameMsg('已读取 ' + lists.length + ' 个歌单，改完点下方的「保存改名」')
+    const lists = await fetchSonglists()
+    renderSonglists(lists)
+    showRenameMsg(lists.length ? '已读取 ' + lists.length + ' 个歌单，改完点下方的「保存改名」' : '')
   } catch (e) {
     showRenameMsg('读取失败，请确认电视端仍停在扫码导入页', true)
+  }
+}
+
+// 提交之后回读快照确认是否真的生效。
+// 电视端如果已经切到别的页面，「手机扫码导入」的监听就不在了，提交会成功但不会有任何变化，
+// 所以必须回读核对，否则用户会以为改好了。
+async function confirmApplied(check, okText) {
+  await new Promise(resolve => setTimeout(resolve, 900))
+  let lists
+  try {
+    lists = await fetchSonglists()
+  } catch (e) {
+    showRenameMsg('已提交，但读不到电视端的结果，请看电视屏幕上的提示', true)
+    return
+  }
+  if (check(lists)) {
+    renderSonglists(lists)
+    showRenameMsg(okText)
+  } else {
+    // 失败时不重渲染，保留用户刚才的输入，方便他们重试
+    showRenameMsg('电视端没有响应：请确认电视停在设置页的「手机扫码导入」（显示二维码）界面，再重试一次', true)
+  }
+}
+
+// 删除歌单：点了确认立即生效，不走下面的「保存改名」
+async function removeSonglist(id, name) {
+  if (!confirm('确定删除歌单「' + name + '」吗？歌单和它里面的歌曲都会从电视上移除，无法恢复。')) return
+  showRenameMsg('正在删除…')
+  try {
+    const r = await fetch('/api/songlist-remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ ids: [id] })
+    })
+    const d = await r.json()
+    if (!d || !d.ok) {
+      showRenameMsg((d && d.message) || '删除失败', true)
+      return
+    }
+    await confirmApplied(lists => !lists.some(item => item.id === id), '已删除，电视端「我的歌单」已更新')
+  } catch (e) {
+    showRenameMsg('网络错误，请重试', true)
   }
 }
 
@@ -243,7 +302,10 @@ async function saveSonglists() {
     if (!id || !name || slOriginal[id] === name) return
     renames.push({ id: id, name: name })
   })
-  if (!renames.length) return showRenameMsg('没有修改任何名称', true)
+  if (!renames.length) {
+    showRenameMsg('没有修改任何名称', true)
+    return
+  }
   showRenameMsg('正在保存…')
   try {
     const r = await fetch('/api/songlist-rename', {
@@ -252,12 +314,14 @@ async function saveSonglists() {
       body: JSON.stringify({ renames: renames })
     })
     const d = await r.json()
-    if (d && d.ok) {
-      showRenameMsg('已提交，请查看电视上的结果')
-      setTimeout(loadSonglists, 800)
-    } else {
+    if (!d || !d.ok) {
       showRenameMsg((d && d.message) || '提交失败', true)
+      return
     }
+    await confirmApplied(
+      lists => renames.every(item => lists.some(list => list.id === item.id && list.name === item.name)),
+      '已生效，电视端「我的歌单」已更新'
+    )
   } catch (e) {
     showRenameMsg('网络错误，请重试', true)
   }

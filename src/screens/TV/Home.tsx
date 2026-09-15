@@ -14,11 +14,13 @@ import { COMPONENT_IDS, LIST_IDS } from '@/config/constant'
 import { togglePlay } from '@/core/player/player'
 import { useIsPlay, usePlayerMusicInfo } from '@/store/player/hook'
 import { useMyList } from '@/store/list/hook'
+import { removeUserList } from '@/core/list'
 import { getList as getSonglist } from '@/core/songlist'
 import songlistState, { type ListInfoItem } from '@/store/songlist/state'
+import { showTVDialog } from '@/components/TV/TVDialog'
 import { useBackHandler } from '@/utils/hooks/useBackHandler'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
-import { exitApp } from '@/utils/tools'
+import { confirmDialog, exitApp, tipDialog } from '@/utils/tools'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { useNavigationComponentDidAppear } from '@/navigation/hooks'
@@ -28,13 +30,18 @@ import { dot, tvText } from './labels'
 
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
+type SonglistResult = { ok: boolean, message: string }
+
+// 手机端的导入/改名/删除结果缓存到模块级：首页被切走再回来时组件会重新挂载、
+// state 会被重置，这里留一份，保证用户回到首页仍能看到「上次的结果」
+let lastSonglistResultCache: SonglistResult | null = null
 
 function TVHome({ componentId }: { componentId: string }) {
   const musicInfo = usePlayerMusicInfo()
   const isPlay = useIsPlay()
   const [songlists, setSonglists] = useState<ListInfoItem[]>([])
-  // 手机导入歌单的结果（由设置页广播），歌单为空时直接显示在首页，省得用户跑回设置页看
-  const [importResult, setImportResult] = useState<{ ok: boolean, message: string } | null>(null)
+  // 手机端操作歌单的结果（由设置页广播），直接显示在首页，省得用户跑回设置页看
+  const [importResult, setImportResult] = useState<SonglistResult | null>(() => lastSonglistResultCache)
   const playFocus = useTVFocusRef()
   const searchFocus = useTVFocusRef()
   const myListFocus = useTVFocusRef()
@@ -48,7 +55,10 @@ function TVHome({ componentId }: { componentId: string }) {
 
   useEffect(() => { setComponentId(COMPONENT_IDS.home, componentId) }, [componentId])
   useEffect(() => {
-    const handleImportResult = (result: { ok: boolean, message: string }) => { setImportResult(result) }
+    const handleImportResult = (result: SonglistResult) => {
+      lastSonglistResultCache = result
+      setImportResult(result)
+    }
     global.app_event.on('songlistImportResult', handleImportResult)
     return () => { global.app_event.off('songlistImportResult', handleImportResult) }
   }, [])
@@ -171,6 +181,37 @@ function TVHome({ componentId }: { componentId: string }) {
     pushTVDetailScreen(componentId, { type: 'userlist', id: list.id, title: list.name, subtitle: list.source ? getSourceName(list.source) : undefined, source: list.source, userlist: list })
   }
 
+  const handleRemoveSonglist = async(list: LX.List.UserListInfo) => {
+    const confirmed = await confirmDialog({
+      title: `${tvText.deleteSonglist}：${list.name}`,
+      message: tvText.deleteSonglistConfirm,
+      confirmButtonText: tvText.deleteSonglist,
+      cancelButtonText: tvText.cancelAction,
+    })
+    if (!confirmed) return
+    try {
+      await removeUserList([list.id])
+      // 歌单没了，聚焦的那张卡也被卸载了，重排一次焦点免得遥控器「悬空」
+      queueFocusRefresh()
+      await tipDialog({ title: tvText.deleteSonglistDone, message: list.name, btnText: tvText.knowIt })
+    } catch (err: unknown) {
+      await tipDialog({ title: tvText.deleteSonglistFailed, message: err instanceof Error ? err.message : '', btnText: tvText.knowIt })
+    }
+  }
+
+  // 遥控器「长按 OK」= 歌单管理。改名必须在手机上做（电视遥控器输不了中文），
+  // 所以这里只给操作说明 + 删除入口，避免让用户到处找入口。
+  const handleManageSonglist = (list: LX.List.UserListInfo) => {
+    showTVDialog({
+      title: `${tvText.managingSonglist}：${list.name}`,
+      message: tvText.renameSonglistNeedPhone,
+      buttons: [
+        { label: tvText.cancelAction, tone: 'dark' },
+        { label: tvText.deleteSonglist, tone: 'danger', onPress: () => { void handleRemoveSonglist(list) } },
+      ],
+    })
+  }
+
   const heroTitle = musicInfo.name || tvText.livingRoom
   const heroSubtitle = musicInfo.id
     ? `${musicInfo.singer || tvText.unknownSinger}${dot}${isPlay ? tvText.playing : tvText.paused}`
@@ -201,7 +242,7 @@ function TVHome({ componentId }: { componentId: string }) {
                 const nextKey = userSonglists[index + 1] ? `mylist_${userSonglists[index + 1].id}` : null
                 const prevKey = userSonglists[index - 1] ? `mylist_${userSonglists[index - 1].id}` : null
                 const recommendKey = songlists[0] ? `songlist_${songlists[0].source}_${songlists[0].id}` : null
-                return <TVPosterCard key={key} ref={getCardRefCallback('my', key, index === 0) as any} title={item.name} subtitle={item.source ? getSourceName(item.source) : tvText.importSonglist} meta={tvText.openSonglist} size="medium" tint={index % 2 ? tvColors.primary : tvColors.purple} onFocus={() => { scrollToMySonglists() }} onTVFocusChange={handleMySonglistFocusChange} onPress={() => { openMySonglist(item) }} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusLeft={getCardHandle(prevKey) ?? undefined} nextFocusRight={getCardHandle(nextKey) ?? getCardHandle(key) ?? undefined} nextFocusDown={getCardHandle(recommendKey) ?? undefined} />
+                return <TVPosterCard key={key} ref={getCardRefCallback('my', key, index === 0) as any} title={item.name} subtitle={item.source ? getSourceName(item.source) : tvText.importSonglist} meta={tvText.longPressManage} size="medium" tint={index % 2 ? tvColors.primary : tvColors.purple} coverFallback="music" onFocus={() => { scrollToMySonglists() }} onTVFocusChange={handleMySonglistFocusChange} onPress={() => { openMySonglist(item) }} onLongPress={() => { handleManageSonglist(item) }} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusLeft={getCardHandle(prevKey) ?? undefined} nextFocusRight={getCardHandle(nextKey) ?? getCardHandle(key) ?? undefined} nextFocusDown={getCardHandle(recommendKey) ?? undefined} />
               })}
             </TVShelf>
           ) : (
@@ -217,13 +258,15 @@ function TVHome({ componentId }: { componentId: string }) {
                 nextFocusDown={getCardHandle(firstRecommendKey) ?? undefined}
               >
                 <TVText variant="cardTitle">{tvText.emptyMySonglists}</TVText>
-                {importResult
-                  ? <TVText variant="caption" color={importResult.ok ? tvColors.primaryHigh : tvColors.warn} style={styles.emptyHint}>{`上次导入结果：${importResult.message}`}</TVText>
-                  : null}
                 <TVText variant="caption" color={tvColors.dimText} style={styles.emptyHint}>{tvText.emptyMySonglistsHint}</TVText>
               </Focusable>
             </TVShelf>
           )}
+          {/* 结果提示常显：原来只在「一个歌单都没有」时才显示，导致导入第二个歌单后
+              用户回到首页看不到任何反馈（会以为没导入成功） */}
+          {importResult
+            ? <TVText variant="caption" color={importResult.ok ? tvColors.primaryHigh : tvColors.warn} style={styles.resultLine}>{`${tvText.lastImportResult}${importResult.message}`}</TVText>
+            : null}
         </View>
 
         <View onLayout={event => { sectionOffsetRef.current.songlists = event.nativeEvent.layout.y }}>
@@ -248,6 +291,7 @@ const styles: Record<string, ViewStyle | any> = {
   emptyCard: { width: tvSize(460), borderRadius: tvSize(18), borderWidth: 1, borderColor: tvColors.border, backgroundColor: 'rgba(255,255,255,0.04)', padding: tvSize(18), gap: tvSize(8) },
   emptyCardFocus: { borderColor: tvColors.primaryHigh, backgroundColor: 'rgba(255,255,255,0.08)' },
   emptyHint: { lineHeight: tvSize(22) },
+  resultLine: { marginTop: tvSize(10), marginLeft: tvSize(6), lineHeight: tvSize(22) },
 }
 
 export default memo(TVHome)

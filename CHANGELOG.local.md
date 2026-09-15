@@ -204,10 +204,56 @@ React 在每次提交时，如果 `ref` 的身份变了，会先以 `null`、再
 
 ---
 
+### 2026-09-15 · 歌单卡片视觉 + 管理入口（按反馈修复）
+
+**用户反馈的原话**：① 重命名到底绑在遥控器哪个键上？② 看看还有没有别的没想到的问题；
+③ 导入的歌单名叫 `q`，界面上就冒出一个挺大的 `q` 字样。
+
+#### 问题清单与修法
+
+| # | 问题 | 根因 | 修法 |
+|---|---|---|---|
+| 1 | 卡片上一个巨大的单字母（名字叫 `q` 就是个大 `q`） | `TVPosterCard` 无封面时用 `title.slice(0,1)` 以 **74 号字**当封面兜底 | 组件新增 `coverFallback?: 'letter' \| 'music'`（默认 `letter`，推荐位行为不变）；「我的歌单」传 `'music'`，封面统一显示音符 ♪，不再随名字变形 |
+| 2 | 重命名在电视上没有入口、也没有任何提示，用户完全不知道要扫码 | 功能只做在手机页，电视端文案没提 | 新增**遥控器长按 OK = 歌单管理**（弹窗给出「改名要用手机」的说明 + 删除入口）；卡片 `meta` 显示「长按 OK 管理」；设置页二维码下方文案补上「也能给已导入的歌单改名、删除」+「改名必须在手机上做」 |
+| 3 | **导入第二个歌单后，首页再也看不到导入结果** | 结果提示只写在「一个歌单都没有」的空态卡片里 | 结果提示移出空态分支，改为「我的歌单」区块下常显一行；同时加模块级缓存 `lastSonglistResultCache`，首页切走再回来（组件重挂载、state 重置）也能看到上次结果 |
+| 4 | **导入错了的歌单删不掉** | TV 端和手机页都没有删除入口 | ① 首页长按 OK → 删除（带二次确认）；② 手机页每个歌单加「删除这个歌单」按钮 → 新增 `POST /api/songlist-remove` → `songlist-remove` 事件 → `removeUserList` |
+| 5 | 同一个歌单导入两次会得到两张同名卡片，分不清 | 落库时不去重名 | `createListsFromParsed` 重名时自动加序号：`车载歌单` → `车载歌单 (2)` |
+| 6 | 手机页「已提交」其实可能什么都没发生 | 电视端切到别的页面后，`手机扫码导入`的事件监听就不在了（监听挂在设置页组件里） | 手机页提交后**回读快照核对**：核对不上就明确提示「请确认电视停在显示二维码的界面」，且**保留用户刚输入的改名内容**便于重试；删除同理 |
+| 7 | 手机页删除已不存在的歌单，电视端仍回「已删除」 | 手机页拿到的是上一次推送的快照 | 删前用本地 `userSonglists` 过滤，全部不存在则提示「电视上已经没有这些歌单了，请重新读取」 |
+| 8 | 歌单名可以无限长，卡片和详情标题会被撑爆 | 手机页输入框没有长度限制 | 输入框加 `maxlength=40` |
+
+> **已知限制（未改，但已在手机页明确提示）**：局域网导入服务的按键/事件监听挂在设置页组件上，
+> 手机页操作时电视必须停在「手机扫码导入」（显示二维码）界面。彻底解决需要把监听提升到 App 级
+> 并重构 `apiSource` 等设置页私有状态，风险大于收益，暂不做。
+
+#### 改动文件
+
+| 文件 | 改了什么 |
+|---|---|
+| `src/components/TV/TVPosterCard.tsx` | 新增 `coverFallback`，新增 `musicGlyph` 样式（56 号字音符），默认行为不变 |
+| `src/screens/TV/Home.tsx` | ① 我的歌单卡片传 `coverFallback="music"`、`meta` 改「长按 OK 管理」、新增 `onLongPress`；② 新增 `handleManageSonglist` / `handleRemoveSonglist`（`showTVDialog` + `confirmDialog` + `tipDialog`）；③ 结果提示移出空态分支、常显；④ 模块级 `lastSonglistResultCache` 让结果跨挂载保留；⑤ 新增 `import { removeUserList }`、`showTVDialog`、`confirmDialog`、`tipDialog` |
+| `src/screens/TV/Settings.tsx` | ① import 加 `removeUserList`；② `handleLanSourceEvent` 新增 `songlist-remove` 分支（含快照过期校验）；③ 二维码下方提示补「改名、删除」说明 |
+| `src/screens/TV/labels.ts` | 新增 `lastImportResult` / `managingSonglist` / `longPressManage` / `renameSonglistNeedPhone` / `deleteSonglist` / `deleteSonglistConfirm` / `deleteSonglistDone` / `deleteSonglistFailed` / `cancelAction` / `knowIt`；改写 `mySonglistsDesc` / `emptyMySonglistsHint` |
+| `src/screens/TV/songlistImport.ts` | `createListsFromParsed` 增加重名去重（`usedNames` + 序号后缀） |
+| `android/.../utils/LanImportServer.java` | 新增 `POST /api/songlist-remove` 路由 → `notify("songlist-remove", payload)` |
+| `android/.../assets/lan_input.html` | ① 「歌单改名」区块改名「歌单改名 / 删除」，补删除说明；② `loadSonglists` 拆成 `fetchSonglists` + `renderSonglists`（顺带修掉「重新读取时列表渲染逻辑重复」）；③ 每个歌单加「删除这个歌单」按钮 + `removeSonglist()`；④ 新增 `confirmApplied()` 提交后回读核对；⑤ 两个名称输入框加 `maxlength=40` |
+
+**遥控器按键映射（本次确立）**
+
+| 操作 | 遥控器 | 说明 |
+|---|---|---|
+| 打开歌单 | 短按 OK | 原行为 |
+| 歌单管理 | **长按 OK** | 弹窗：改名说明 + 删除歌单 |
+| 改名（实际输入） | 手机 | 电视遥控器打不了中文，手机页「歌单改名 / 删除」 |
+| 删除歌单 | 长按 OK → 删除，或手机页删除按钮 | 都带二次确认 |
+
+---
+
 ## 📋 待办 / 可选
 
 - [x] ~~歌单重命名~~ —— 已做（手机页「歌单改名」，见上）。
-- [ ] 歌单删除 / 排序仍未在 TV 端暴露（手机页目前只做改名，可继续加删除、排序）。
+- [x] ~~歌单删除~~ —— 已做（首页长按 OK + 手机页删除按钮，见上）。
+- [ ] 歌单**排序**仍未暴露（手机页 / 电视端都还没有拖排序入口）。
 - [ ] 导入时若匹配上的歌曲过少，可考虑在电视上给一个「是否仍要保留」的确认弹窗。
 - [ ] `TVNavBar.tsx` 的 ref 也是内联箭头（`ref={(node) => { refs.current[index] = node }}`），
       不过它没有「就绪回调」，不会造成死循环，只是每次渲染多一次 detach/attach，暂未改动。

@@ -266,11 +266,25 @@ const createListsFromParsed = async(
 ): Promise<TVSonglistImportOutcome> => {
   const createdNames: string[] = []
   let added = 0
+  // 重名兜底：同一个歌单被导入两次会生成两张同名卡片，用户根本分不出哪张是哪张，
+  // 这里在重名时自动补「(2)」「(3)」序号
+  const usedNames = new Set(userLists.map(list => list.name))
+  const uniqueName = (raw: string) => {
+    if (!usedNames.has(raw)) {
+      usedNames.add(raw)
+      return raw
+    }
+    let index = 2
+    while (usedNames.has(`${raw} (${index})`)) index += 1
+    const next = `${raw} (${index})`
+    usedNames.add(next)
+    return next
+  }
 
   for (const item of items) {
     const list = deduplicationList(item.list)
     if (!list.length) continue
-    const name = (nameHint && items.length === 1 ? nameHint : item.name) || defaultListName()
+    const name = uniqueName((nameHint && items.length === 1 ? nameHint : item.name) || defaultListName())
     const id = makeUniqueListId(item.id)
     onProgress?.(`正在写入歌单「${name}」…`)
     await createList({

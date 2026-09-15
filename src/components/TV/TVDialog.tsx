@@ -36,6 +36,12 @@ interface TVDialogProps {
   message?: string
   buttons: TVDialogButtonConfig[]
   onDismiss?: () => void
+  /**
+   * 弹窗内容标识。一个弹窗的按钮里立刻弹下一个弹窗时（例如「管理歌单」→「删除确认」），
+   * visible 一直是 true，若不重置焦点，焦点会停在上一个弹窗停留的按钮上
+   * —— 很容易在确认框里误按到「删除」。传 request 对象即可每次重置到第一个按钮。
+   */
+  resetKey?: unknown
 }
 
 // 纯 Pressable 弹窗按钮：不用 Focusable/TVButton/引擎，React state → 条件样式 → 渲染，100% 可靠
@@ -47,7 +53,7 @@ const getToneStyle = (tone?: string): ViewStyle => {
   }
 }
 
-const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps) => {
+const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVDialogProps) => {
   const [focusedIdx, setFocusedIdx] = useState(0)
   const focusedIdxRef = useRef(0)
   const buttonsRef = useRef(buttons)
@@ -88,7 +94,7 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss }: TVDialogProps
       unsub()
       backSub.remove()
     }
-  }, [visible])
+  }, [visible, resetKey])
 
   if (!visible) return null
   return (
@@ -130,6 +136,7 @@ export const TVDialogHost = memo(() => {
   return (
     <TVDialog
       visible={!!request}
+      resetKey={request}
       title={request?.title ?? ''}
       message={request?.message}
       buttons={request?.buttons ?? []}
