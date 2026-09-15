@@ -15,7 +15,7 @@
 
 ---
 
-## 🚧 功能一：歌单导入（链接 / 文本 / 文件）
+## ✅ 功能一：歌单导入（链接 / 文本 / 文件）
 
 **目标**：在 TV 端导入歌单，**来源不限格式** ——
 歌单链接、纯文本清单、洛雪导出文件、压缩包 / crx，
@@ -57,7 +57,7 @@
 |---|---|
 | 拉取歌单全量歌曲 | `src/core/songlist.ts` → `getListDetailAll(source, id)` |
 | 创建本地歌单 | `src/core/list.ts` → `createList({ name, id, list, source, sourceListId })` |
-| 清空 store 并广播刷新 | `src/core/list.ts` → `setUserList(userLists)`（触发 `mylistUpdated`） |
+| 刷新 Home 歌单区块 | 不需要额外调用：`createList` → `listEvent.list_create` 内部已调 `updateUserList()` → `setUserList()` → `emit('mylistUpdated')`，`useMyList()` 订阅该事件后自动重渲染 |
 | 链接/ID → 数字 ID | 各平台 SDK 的 `listDetailLink` 正则，`getListDetail` 内部自动识别 |
 | 高置信度搜索匹配 | `src/utils/musicSdk/index.js` → `findMusic({ name, singer })` |
 | TV 端输入通道 | `LanImportServer.java` 的 `onLanAction(action, payload)` 回调 |
@@ -72,14 +72,14 @@
 
 | 文件 | 作用 |
 |---|---|
-| `src/screens/TV/songlistImport.ts` | **核心解析/落库逻辑**。导出 `importSonglist(rawText, options)`。三层路径：① `parseLxListFile()` 解析洛雪原生 JSON（`playListPart`/`playListPart_v2`/`playList`/`playList_v2`/`allData`/`allData_v2`/`defautlList`）；② `splitInput()` 拆出链接与「歌名 - 歌手」行，`importFromLinks()` 按域名判定平台后拉全量；③ `matchSongs()` 并发 3 逐首 `findMusic` 匹配（上限 300 行）。最后 `createListsFromParsed()` 建列表 + `setUserList(userLists)` 广播。 |
+| `src/screens/TV/songlistImport.ts` | **核心解析/落库逻辑**。导出 `importSonglist(rawText, options)`。三层路径：① `parseLxListFile()` 解析洛雪原生 JSON（`playListPart`/`playListPart_v2`/`playList`/`playList_v2`/`allData`/`allData_v2`/`defautlList`）；② `splitInput()` 拆出链接与「歌名 - 歌手」行，`importFromLinks()` 按域名判定平台后拉全量；③ `matchSongs()` 并发 3 逐首 `findMusic` 匹配（上限 300 行）。最后 `createListsFromParsed()` 建列表（内部已触发 `mylistUpdated`，Home 自动刷新）。 |
 | `android/app/src/main/java/cn/toside/music/mobile/utils/SonglistImportPayload.java` | 原生层预处理 `/api/songlist` 载荷：base64 解码 → 按内容嗅探（gzip 魔数 / zip·crx 的 `PK\x03\x04`）→ 递归展开 → 文本合并。带预算上限（40 个条目 / 单条目 2MB / 总量 6MB / 递归 3 层），UTF-8 失败回退 GBK。静态方法 `expand(String rawPayload)`。 |
 
 #### 修改的上游文件（冲突时按这里重做）
 
 | 文件 | 改了哪一段 | 冲突风险 |
 |---|---|---|
-| `.github/workflows/build-apk.yml` | `on.push.branches` 加 `lulu`（原为 `[master, dev]`）。**构建步骤一律未动。** | 低 |
+| `.github/workflows/build-apk.yml` | ① `on.push.branches` 加 `lulu`（原为 `[master, dev]`）；② 顶部加 `permissions: contents: write`；③ 末尾新增「Publish APK to Release」步骤（仅 `lulu` 分支执行，用 runner 自带的 `gh` CLI 把 universal 包发到固定 tag `apk-lulu`）。**原有构建步骤一律未动。** | 低 |
 | `android/.../utils/LanImportServer.java` | `serve()` 的 POST 分支里，在 `/api/activate` 之后追加一个 `if ("/api/songlist".equals(uri))` 块：调用 `SonglistImportPayload.expand(payload)` 后 `notify("songlist", ...)`。原三个路由未动。 | 低 |
 | `android/app/src/main/assets/lan_input.html` | ① `<title>` 改「ZL-Music 导入」；② 新增「导入歌单」section（`slText` / `slFile` / `slName` / `doImportSonglist` / `songlistMsg`）；③ 新增 JS：`doImportSonglist` / `showSonglistMsg` / `bufferToBase64` / `sniffKind` / `decodeTextSmart`；④ 样式加 `.hint` 与 file input。原有音源导入逻辑未动。 | 低 |
 | `src/screens/TV/labels.ts` | 末尾追加 8 个文案键：`mySonglists` / `mySonglistsDesc` / `emptyMySonglists` / `emptyMySonglistsHint` / `importingSonglist` / `importSonglist` / `importSonglistTip` / `userList`。 | 低 |
@@ -107,6 +107,29 @@ TV 设置页 →「手机扫码导入」→ 出二维码
 - 压缩包解压总量上限 6MB、单条目 2MB、最多 40 个条目、最多 3 层嵌套。
 - 手机上「zip 里套 zip 里的歌单文件」也可以，但超过 3 层就不再往下钻。
 - `findMusic` 要求歌名精确一致，因此「歌名只有部分相同」的条目会被判为低置信度而跳过——这是刻意设计。
+
+### 2026-09-15 · 构建产物自动发布到 Release（免登录直链）
+
+**动机**：Actions 的 Artifacts **必须登录 GitHub 才能下载**，而且 30 天自动过期。
+迭代测试要反复装包，每次都要登录、过期了还得重新构建，太麻烦。
+
+`.github/workflows/build-apk.yml` 追加两处：
+
+- 顶部 `permissions: contents: write` —— 否则 `GITHUB_TOKEN` 没有创建 Release 的权限
+- 末尾「Publish APK to Release」步骤，限定 `if: github.ref == 'refs/heads/lulu'`，
+  用 runner 预装的 `gh` CLI（**不引入任何第三方 action**）：
+  挑出 `*universal*.apk` → 统一改名成 `ZL_Musicos-lulu.apk` → 创建/更新 tag 为 `apk-lulu` 的 Release
+  → `gh release upload --clobber` 覆盖上传
+
+**固定下载直链**（免登录、不过期，每次构建自动更新）：
+
+```
+https://github.com/soren1985/ZL_Musicos/releases/download/apk-lulu/ZL_Musicos-lulu.apk
+```
+
+**前置条件**：仓库 `Settings → Actions → General → Workflow permissions` 需为
+「Read and write permissions」。若为只读，workflow 里声明的 `contents: write` 会被降级，
+该步骤会报权限错误（但**不影响**前面的 APK 构建与 Artifacts 上传）。
 
 ---
 
