@@ -67,17 +67,28 @@ function TVDetail({ componentId, payload }: Props) {
   const image = payload.type === 'songlist' ? payload.songlist.img : null
   const heroMeta = payload.type === 'songlist'
     ? `${getSourceName(payload.source)}${dot}${tvText.songlist}${payload.songlist.play_count ? `${dot}${payload.songlist.play_count}` : ''}`
-    : `${getSourceName(payload.source)}${dot}${tvText.charts}${dot}${tvText.hotChart}`
+    : payload.type === 'board'
+      ? `${getSourceName(payload.source)}${dot}${tvText.charts}${dot}${tvText.hotChart}`
+      : `${tvText.userList}${payload.source ? `${dot}${getSourceName(payload.source)}` : ''}`
 
   useEffect(() => {
     let mounted = true
     setLoading(true)
     setError('')
-    const loader = payload.type === 'board'
-      ? getBoardListDetail(payload.id, 1)
-      : getSonglistDetail(payload.id, payload.source, 1)
+    const load = async(): Promise<{ list: LX.Music.MusicInfoOnline[], total: number }> => {
+      if (payload.type === 'board') {
+        const result = await getBoardListDetail(payload.id, 1)
+        return { list: result.list, total: result.total }
+      }
+      if (payload.type === 'userlist') {
+        const localList = await getListMusics(payload.id)
+        return { list: localList as unknown as LX.Music.MusicInfoOnline[], total: localList.length }
+      }
+      const result = await getSonglistDetail(payload.id, payload.source, 1)
+      return { list: result.list, total: result.total }
+    }
 
-    loader.then(result => {
+    load().then(result => {
       if (!mounted) return
       setList(result.list)
       setTotal(result.total)
@@ -113,7 +124,11 @@ function TVDetail({ componentId, payload }: Props) {
 
   const handlePlay = async(index = 0) => {
     if (payload.type === 'board') await handleBoardPlay(payload.id, list, index)
-    else await handleSonglistPlay(payload.id, payload.source, list, index)
+    else if (payload.type === 'userlist') {
+      // 本地歌单：歌曲已经在 getListMusics 时进了缓存，直接按列表 id 播放
+      if (!list.length) return
+      await playList(payload.id, index)
+    } else await handleSonglistPlay(payload.id, payload.source, list, index)
     pushTVPlayerScreen(componentId)
   }
 

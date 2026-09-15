@@ -24,6 +24,7 @@ import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { dot, tvText } from './labels'
+import { importSonglist } from './songlistImport'
 import { createTVTabs, getSourceName } from './utils'
 import { TV_CURRENT_VERSION, checkTVUpdate, downloadTVUpdate, getDownloadedTVUpdatePath, installTVUpdate, type TVUpdateInfo } from './update'
 
@@ -78,6 +79,7 @@ function TVSettings({ componentId }: { componentId: string }) {
   const [qrImage, setQrImage] = useState('')
   const [lanRunning, setLanRunning] = useState(false)
   const [lanMessage, setLanMessage] = useState('')
+  const [lanMessageOk, setLanMessageOk] = useState(false)
   const lanButtonFocus = useTVFocusRef()
   const lanHandlerRef = useRef<((action: string, payload: string) => void) | null>(null)
   const sourceScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
@@ -252,6 +254,7 @@ function TVSettings({ componentId }: { componentId: string }) {
           return
         }
         await importUserApi(script)
+        setLanMessageOk(true)
         setLanMessage('手机导入成功')
       } else if (action === 'remove') {
         const data = JSON.parse(payload || '{}') as { id?: string }
@@ -259,8 +262,31 @@ function TVSettings({ componentId }: { componentId: string }) {
       } else if (action === 'activate') {
         const data = JSON.parse(payload || '{}') as { id?: string }
         if (data.id) setApiSource(data.id)
+      } else if (action === 'songlist') {
+        const data = JSON.parse(payload || '{}') as {
+          text?: string
+          fileText?: string
+          listName?: string
+          fileName?: string
+        }
+        // 原生层已经把压缩包 / base64 展开过，这里 text + fileText 拼一起再解析
+        const rawText = [data.text ?? '', data.fileText ?? ''].filter(item => item.trim()).join('\n')
+        if (!rawText.trim()) {
+          setLanMessageOk(false)
+          setLanMessage('手机提交的歌单内容为空')
+          return
+        }
+        setLanMessageOk(false)
+        const outcome = await importSonglist(rawText, {
+          listName: data.listName,
+          fileName: data.fileName,
+          onProgress: setLanMessage,
+        })
+        setLanMessageOk(outcome.ok)
+        setLanMessage(outcome.message)
       }
     } catch (err: unknown) {
+      setLanMessageOk(false)
       setLanMessage(err instanceof Error ? err.message : '手机操作失败')
     }
   }
@@ -274,6 +300,7 @@ function TVSettings({ componentId }: { componentId: string }) {
 
   const handleOpenLanImport = async() => {
     setLanMessage('')
+    setLanMessageOk(false)
     try {
       const { ip, port } = await startLanImportServer(9527)
       const qr = await generateQRCodeBase64(`http://${ip}:${port}`, 560)
@@ -428,10 +455,11 @@ function TVSettings({ componentId }: { componentId: string }) {
             {qrImage ? (
               <View style={styles.qrWrap}>
                 <Image source={{ uri: qrImage }} style={styles.qrImage} />
-                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>手机扫码打开导入页，粘贴源链接或脚本导入</TVText>
+                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>手机扫码打开页面，粘贴音源链接/脚本，或导入歌单（链接、歌名清单、歌单文件均可）</TVText>
                 <TVText variant="caption" color={tvColors.warn} style={styles.line}>⚠ 请确保手机与电视连接同一局域网（WiFi）</TVText>
               </View>
             ) : null}
+            {lanMessage ? <TVText variant="caption" color={lanMessageOk ? tvColors.primaryHigh : tvColors.warn} style={styles.message}>{lanMessage}</TVText> : null}
           </TVSettingsPane>
         </ScrollView>
       </View>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>ZL-Music 音源导入</title>
+<title>ZL-Music 导入</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0d1117; color: #e6edf3; padding: 20px; max-width: 640px; margin: 0 auto; }
@@ -21,6 +21,8 @@
   button.danger { background: #b62324; }
   .msg { font-size: 13px; margin-top: 10px; color: #7ee787; min-height: 18px; }
   .msg.err { color: #ffa198; }
+  .hint { font-size: 12px; color: #8b949e; margin-top: 10px; line-height: 1.6; }
+  input[type=file] { padding: 10px; font-size: 13px; }
   .item { background: rgba(255,255,255,0.05); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
   .item .name { font-size: 15px; font-weight: 600; }
   .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 8px; margin-left: 6px; background: #1f6feb33; color: #79c0ff; }
@@ -31,7 +33,7 @@
 </style>
 </head>
 <body>
-<h1>ZL-Music 音源导入</h1>
+<h1>ZL-Music 导入</h1>
 <p class="tip">请确保手机与电视/盒子处于同一局域网 · 提交后电视端立即生效</p>
 
 <section>
@@ -42,6 +44,19 @@
   <textarea id="srcScript" placeholder="// 粘贴完整音源 JS 脚本"></textarea>
   <button onclick="doImport()">导入到电视</button>
   <p id="importMsg" class="msg"></p>
+</section>
+
+<section>
+  <h2>导入歌单</h2>
+  <label>方式一：粘贴歌单链接 / 歌单 ID / 歌曲清单（一行一个）</label>
+  <textarea id="slText" placeholder="https://music.163.com/playlist?id=123456&#10;或者：&#10;晴天 - 周杰伦&#10;稻香 - 周杰伦"></textarea>
+  <label>方式二：选择文件</label>
+  <input id="slFile" type="file">
+  <label>歌单名称（选填，不填自动命名）</label>
+  <input id="slName" placeholder="例如：车载歌单" autocapitalize="off" autocorrect="off">
+  <button onclick="doImportSonglist()">导入歌单到电视</button>
+  <p id="songlistMsg" class="msg"></p>
+  <p class="hint">支持：各平台歌单链接（网易云 / QQ音乐 / 酷狗 / 酷我 / 咪咕）、洛雪导出的歌单文件（.json / .lxmc）、压缩包或 .crx 里的歌单文件，以及「歌名 - 歌手」纯文本清单。</p>
 </section>
 
 <section>
@@ -73,6 +88,93 @@ async function doImport() {
     }
   } catch (e) {
     showMsg('网络错误，请重试', true)
+  }
+}
+
+function showSonglistMsg(text, isErr) {
+  const el = document.getElementById('songlistMsg')
+  el.textContent = text
+  el.className = isErr ? 'msg err' : 'msg'
+}
+
+// 把二进制转成 base64（分块处理，避免超长参数把 String.fromCharCode 打爆）
+function bufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk))
+  }
+  return btoa(binary)
+}
+
+// 按内容嗅探，而不是按后缀名：zip / crx 找 PK 头，gzip 看魔数，其余按文本处理
+function sniffKind(bytes) {
+  if (bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) return 'gzip'
+  const scan = Math.min(bytes.length - 3, 65536)
+  for (let i = 0; i < scan; i++) {
+    if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x03 && bytes[i + 3] === 0x04) return 'zip'
+  }
+  const probe = Math.min(bytes.length, 4096)
+  for (let i = 0; i < probe; i++) {
+    if (bytes[i] === 0) return 'binary'
+  }
+  return 'text'
+}
+
+// UTF-8 优先，乱码较多时回退 GBK（国内 txt 歌单很常见）
+function decodeTextSmart(buffer) {
+  const bytes = new Uint8Array(buffer)
+  try {
+    const utf8 = new TextDecoder('utf-8').decode(bytes)
+    const broken = (utf8.match(/\uFFFD/g) || []).length
+    if (broken <= 2) return utf8
+    return new TextDecoder('gbk').decode(bytes)
+  } catch (e) {
+    return new TextDecoder('utf-8').decode(bytes)
+  }
+}
+
+async function doImportSonglist() {
+  const text = document.getElementById('slText').value
+  const listName = document.getElementById('slName').value.trim()
+  const input = document.getElementById('slFile')
+  const file = input.files && input.files[0]
+  const MAX_BYTES = 20 * 1024 * 1024
+  const payload = { text: text, listName: listName, fileName: '', fileText: '', fileBase64: '' }
+  if (file) {
+    if (file.size > MAX_BYTES) return showSonglistMsg('文件太大（超过 20MB），请换一个小一点的文件', true)
+    payload.fileName = file.name
+    try {
+      const buffer = await file.arrayBuffer()
+      const kind = sniffKind(new Uint8Array(buffer))
+      if (kind === 'text') payload.fileText = decodeTextSmart(buffer)
+      else payload.fileBase64 = bufferToBase64(buffer)
+    } catch (e) {
+      return showSonglistMsg('读取文件失败，请重试', true)
+    }
+  }
+  if (!payload.text.trim() && !payload.fileText.trim() && !payload.fileBase64) {
+    return showSonglistMsg('请粘贴链接或歌单清单，或者选择一个文件', true)
+  }
+  showSonglistMsg('正在提交到电视…')
+  try {
+    const r = await fetch('/api/songlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(payload)
+    })
+    const d = await r.json()
+    if (d && d.ok) {
+      document.getElementById('slText').value = ''
+      document.getElementById('slFile').value = ''
+      document.getElementById('slName').value = ''
+      showSonglistMsg('已提交，请查看电视上的导入结果')
+    } else {
+      showSonglistMsg((d && d.message) || '提交失败', true)
+    }
+  } catch (e) {
+    showSonglistMsg('网络错误，请重试', true)
   }
 }
 

@@ -135,6 +135,14 @@ export const tvText = {
   space: '\u7a7a\u683c',
   backspace: '\u5220\u9664',
   clear: '\u6e05\u7a7a',
+  mySonglists: '我的歌单',
+  mySonglistsDesc: '手机扫码导入的歌单会出现在这里',
+  emptyMySonglists: '还没有导入的歌单',
+  emptyMySonglistsHint: '到设置页点「手机扫码导入」，用手机粘贴歌单链接或上传文件即可导入。',
+  importingSonglist: '正在导入歌单',
+  importSonglist: '导入歌单',
+  importSonglistTip: '手机页面上可以粘贴歌单链接/歌曲清单，也可以选择文件上传',
+  userList: '我的歌单',
 } as const
 
 export const dot = ' \u00b7 '

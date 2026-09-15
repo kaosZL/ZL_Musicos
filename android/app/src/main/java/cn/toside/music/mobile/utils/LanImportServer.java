@@ -109,6 +109,11 @@ public class LanImportServer extends NanoHTTPD {
         notify("activate", payload);
         return json("{\"ok\":true,\"message\":\"已提交\"}");
       }
+      if ("/api/songlist".equals(uri)) {
+        // 歌单导入：载荷里可能带 zip/crx/gzip 的 base64，先展开成文本再交给 JS 解析
+        notify("songlist", SonglistImportPayload.expand(payload));
+        return json("{\"ok\":true,\"message\":\"已提交\"}");
+      }
     }
     return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Not Found");
   }
