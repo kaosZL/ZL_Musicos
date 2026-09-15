@@ -185,7 +185,7 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   actions: { flexDirection: 'row', alignItems: 'center', gap: tvSize(12) },
   listContent: { paddingBottom: tvSize(28) },
   sourceTabWrap: { marginBottom: tvSize(14), flexGrow: 0 },
-  sourceTabContent: { flexDirection: 'row', gap: tvSize(8), alignItems: 'center', minHeight: tvSize(34), paddingRight: tvSize(8) },
+  sourceTabContent: { flexDirection: 'row', gap: tvSize(8), alignItems: 'center', minHeight: tvSize(40), paddingRight: tvSize(8) },
   sourceTab: { minHeight: tvSize(30), borderRadius: 999, paddingHorizontal: tvSize(14), alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: tvColors.border },
   sourceTabActive: { backgroundColor: 'rgba(0,103,192,0.25)', borderColor: tvColors.primary },
   sourceTabText: { color: tvColors.subtext },
