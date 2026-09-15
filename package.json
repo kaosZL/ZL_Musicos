@@ -100,13 +100,93 @@
   },
   "overrides": {
     "@react-native-community/cli-platform-android": {
-      "fast-xml-parser": "^5.3.4"
+      "fast-xml-parser": "^5.3.4",
+      "shell-quote": "1.9.0"
     },
     "@react-native-community/cli-platform-ios": {
-      "fast-xml-parser": "^5.3.4"
+      "fast-xml-parser": "^5.3.4",
+      "shell-quote": "1.9.0"
     },
     "@typescript-eslint/typescript-estree": {
       "minimatch": "^9"
+    },
+    "@craftzdog/react-native-buffer": {
+      "shell-quote": "1.9.0"
+    },
+    "@react-native-async-storage/async-storage": {
+      "shell-quote": "1.9.0"
+    },
+    "@react-native-clipboard/clipboard": {
+      "shell-quote": "1.9.0"
+    },
+    "@react-native-community/cli": {
+      "shell-quote": "1.9.0"
+    },
+    "@react-native-community/cli-clean": {
+      "shell-quote": "1.9.0"
+    },
+    "@react-native-community/cli-config": {
+      "shell-quote": "1.9.0"
+    },
+    "@react-native-community/cli-doctor": {
+      "shell-quote": "1.9.0"
+    },
+    "@react-native-community/cli-hermes": {
+      "shell-quote": "1.9.0"
+    },
+    "@react-native-community/cli-server-api": {
+      "shell-quote": "1.9.0"
+    },
+    "@react-native-community/cli-tools": {
+      "shell-quote": "1.9.0"
+    },
+    "@react-native/community-cli-plugin": {
+      "shell-quote": "1.9.0"
+    },
+    "@react-native/virtualized-lists": {
+      "shell-quote": "1.9.0"
+    },
+    "@types/react-native": {
+      "shell-quote": "1.9.0"
+    },
+    "react-devtools-core": {
+      "shell-quote": "1.9.0"
+    },
+    "react-native": {
+      "shell-quote": "1.9.0"
+    },
+    "react-native-background-timer": {
+      "shell-quote": "1.9.0"
+    },
+    "react-native-exception-handler": {
+      "shell-quote": "1.9.0"
+    },
+    "react-native-file-system": {
+      "shell-quote": "1.9.0"
+    },
+    "react-native-fs": {
+      "shell-quote": "1.9.0"
+    },
+    "react-native-local-media-metadata": {
+      "shell-quote": "1.9.0"
+    },
+    "react-native-navigation": {
+      "shell-quote": "1.9.0"
+    },
+    "react-native-pager-view": {
+      "shell-quote": "1.9.0"
+    },
+    "react-native-quick-base64": {
+      "shell-quote": "1.9.0"
+    },
+    "react-native-quick-md5": {
+      "shell-quote": "1.9.0"
+    },
+    "react-native-track-player": {
+      "shell-quote": "1.9.0"
+    },
+    "shell-quote": {
+      "shell-quote": "1.9.0"
     }
   }
 }
