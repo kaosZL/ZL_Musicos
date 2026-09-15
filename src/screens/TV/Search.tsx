@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
 import { FlatList, ScrollView, TextInput, View, findNodeHandle, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
@@ -22,7 +22,7 @@ import { usePlayerMusicInfo } from '@/store/player/hook'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { LIST_IDS } from '@/config/constant'
 import { tvText } from './labels'
-import { createTVTabs, getMusicSubtitle } from './utils'
+import { createTVTabs, getMusicSubtitle, getSourceName } from './utils'
 
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
@@ -52,7 +52,7 @@ function TVSearch({ componentId }: { componentId: string }) {
   const [error, setError] = useState('')
   const [pageInfo, setPageInfo] = useState({ page: 0, maxPage: 0, total: 0 })
   const sourceOptions = searchMusicState.sources
-  const [source] = useState<typeof searchMusicState.source>(sourceOptions.includes(searchMusicState.source) ? searchMusicState.source : sourceOptions[0])
+  const [source, setSource] = useState<typeof searchMusicState.source>(sourceOptions.includes(searchMusicState.source) ? searchMusicState.source : sourceOptions[0])
   const queueFocusRefresh = useTVFocusRefresh()
   const searchButtonFocus = useTVFocusRef()
   const firstResultFocus = useTVFocusRef()
@@ -63,6 +63,23 @@ function TVSearch({ componentId }: { componentId: string }) {
   const listRef = useRef<FlatList<LX.Music.MusicInfoOnline>>(null)
   const resultRefs = useRef<FocusRefMap>({})
   const hotRefs = useRef<FocusRefMap>({})
+  const sourceRefs = useRef<FocusRefMap>({})
+
+  const sourceTabs = useMemo(() => {
+    const all = sourceOptions.filter(s => s === 'all')
+    const others = sourceOptions.filter(s => s !== 'all')
+    return [...all, ...others].map(s => ({ id: s, label: getSourceName(s) ?? s }))
+  }, [sourceOptions])
+  const getSourceHandle = (id?: string | null) => getHandleFromMap(sourceRefs, id)
+  const bindSourceRef = (id: string) => (node: FocusNode) => { sourceRefs.current[id] = node }
+
+  const handleSourceChange = (newSource: typeof source) => {
+    if (newSource === source) return
+    setSource(newSource)
+    if (text.trim()) {
+      void handleSearch(1, undefined, newSource)
+    }
+  }
 
   useTVNavigationBack(componentId)
   useTVRemoteActions({
@@ -98,7 +115,7 @@ function TVSearch({ componentId }: { componentId: string }) {
     setResults(listInfo.key === expectedKey ? listInfo.list : [])
   }, [source, text, syncPageInfo])
 
-  const handleSearch = async(targetPage = 1, keywordOverride?: string) => {
+  const handleSearch = async(targetPage = 1, keywordOverride?: string, sourceOverride?: typeof source) => {
     let keyword = (keywordOverride ?? text).trim()
     if (keywordOverride == null && /^[a-zA-Z]+$/.test(keyword)) {
       const exact = matchExactPinyin(keyword)
@@ -115,9 +132,10 @@ function TVSearch({ componentId }: { componentId: string }) {
     else setLoading(true)
     setError('')
     try {
-      const list = await search(keyword, targetPage, source)
+      const activeSource = sourceOverride ?? source
+      const list = await search(keyword, targetPage, activeSource)
       setResults(list)
-      syncPageInfo(source)
+      syncPageInfo(activeSource)
       if (targetPage === 1) requestAnimationFrame(() => { listRef.current?.scrollToOffset({ offset: 0, animated: false }) })
     } catch (err: unknown) {
       if (targetPage === 1) setResults([])
@@ -203,6 +221,23 @@ function TVSearch({ componentId }: { componentId: string }) {
           <TVSearchKeyboard firstKeyRef={firstKeyboardKeyFocus} onFirstKeyReady={queueFocusRefresh} onKeyPress={handleKeyboardKey} onBackspace={() => { setText(value => value.slice(0, -1)) }} onClear={() => { setText('') }} onSubmit={() => { void handleSearch() }} nextFocusUp={lastHotHandle} topRowFocusUpTargets={keyboardTopRowFocusUps} nextFocusRight={firstResultHandle} />
         </TVGlassPanel>
         <TVGlassPanel style={styles.resultPanel}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sourceTabWrap} contentContainerStyle={styles.sourceTabContent}>
+            {sourceTabs.map((tab, index) => (
+              <Focusable
+                key={tab.id}
+                ref={bindSourceRef(tab.id) as any}
+                style={[styles.sourceTab, source === tab.id && styles.sourceTabActive]}
+                onPress={() => { handleSourceChange(tab.id) }}
+                nextFocusLeft={getSourceHandle(sourceTabs[index - 1]?.id) ?? searchButtonHandle}
+                nextFocusRight={getSourceHandle(sourceTabs[index + 1]?.id) ?? undefined}
+                nextFocusDown={results.length ? (playAllFocus.getNodeHandle() ?? firstResultHandle) : undefined}
+              >
+                <TVText variant="caption" style={source === tab.id ? styles.sourceTabTextActive : styles.sourceTabText}>
+                  {tab.label}
+                </TVText>
+              </Focusable>
+            ))}
+          </ScrollView>
           <View style={styles.resultHeader}>
             <View>
               <TVText variant="sectionTitle">{tvText.searchResult}</TVText>
@@ -247,11 +282,17 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   hotItem: { minHeight: tvSize(32), borderRadius: 999, paddingHorizontal: tvSize(13), alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: tvColors.border },
   suggestItem: { backgroundColor: 'rgba(122,162,247,0.16)', borderColor: tvColors.primaryHigh },
   resultPanel: { flex: 1, paddingHorizontal: tvSize(30), paddingVertical: tvSize(26), backgroundColor: 'rgba(10,13,21,0.96)' },
-  resultHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: tvSize(18) },
+  resultHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: tvSize(12), minHeight: tvSize(44) },
   resultContent: { paddingBottom: tvSize(20) },
   footer: { alignItems: 'center', paddingVertical: tvSize(18) },
   line: { marginTop: tvSize(8) },
   error: { marginBottom: tvSize(12) },
+  sourceTabWrap: { marginBottom: tvSize(14), flexGrow: 0 },
+  sourceTabContent: { flexDirection: 'row', gap: tvSize(8), alignItems: 'center', minHeight: tvSize(40), paddingRight: tvSize(8) },
+  sourceTab: { minHeight: tvSize(30), borderRadius: 999, paddingHorizontal: tvSize(14), alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: tvColors.border },
+  sourceTabActive: { backgroundColor: 'rgba(0,103,192,0.25)', borderColor: tvColors.primary },
+  sourceTabText: { color: tvColors.subtext },
+  sourceTabTextActive: { color: tvColors.text, fontWeight: '700' },
 }
 
 export default memo(TVSearch)
