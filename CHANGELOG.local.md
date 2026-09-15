@@ -221,6 +221,8 @@ React 在每次提交时，如果 `ref` 的身份变了，会先以 `null`、再
 | 6 | 手机页「已提交」其实可能什么都没发生 | 电视端切到别的页面后，`手机扫码导入`的事件监听就不在了（监听挂在设置页组件里） | 手机页提交后**回读快照核对**：核对不上就明确提示「请确认电视停在显示二维码的界面」，且**保留用户刚输入的改名内容**便于重试；删除同理 |
 | 7 | 手机页删除已不存在的歌单，电视端仍回「已删除」 | 手机页拿到的是上一次推送的快照 | 删前用本地 `userSonglists` 过滤，全部不存在则提示「电视上已经没有这些歌单了，请重新读取」 |
 | 8 | 歌单名可以无限长，卡片和详情标题会被撑爆 | 手机页输入框没有长度限制 | 输入框加 `maxlength=40` |
+| 9 | 一个弹窗的按钮里立刻弹下一个弹窗（管理菜单 → 删除确认）时，焦点会停在上一个弹窗的位置，**很容易误按到「删除」** | `TVDialog` 的 effect 只看 `visible`，而连续弹窗时 `visible` 一直是 `true` | `TVDialog` 新增 `resetKey`（`TVDialogHost` 传 `request`），弹窗内容变化时重置焦点到第一个按钮 |
+| 10 | **按遥控器 MENU 键会抛 `ReferenceError`**（上游 bug） | `TVRemoteFocusController.tsx` 用了 `focusPreferredTVTarget()` 但**没有 import**（函数在 `tvFocusManager.ts` 里有正常导出）。Metro 打包不做类型检查，所以一直没暴露 | import 列表补上 `focusPreferredTVTarget` |
 
 > **已知限制（未改，但已在手机页明确提示）**：局域网导入服务的按键/事件监听挂在设置页组件上，
 > 手机页操作时电视必须停在「手机扫码导入」（显示二维码）界面。彻底解决需要把监听提升到 App 级
@@ -231,6 +233,8 @@ React 在每次提交时，如果 `ref` 的身份变了，会先以 `null`、再
 | 文件 | 改了什么 |
 |---|---|
 | `src/components/TV/TVPosterCard.tsx` | 新增 `coverFallback`，新增 `musicGlyph` 样式（56 号字音符），默认行为不变 |
+| `src/components/TV/TVDialog.tsx` | 新增可选 `resetKey`，`useEffect` 依赖由 `[visible]` 改为 `[visible, resetKey]`；`TVDialogHost` 把 `request` 传进去 |
+| `src/components/TV/TVRemoteFocusController.tsx` | import 补上漏掉的 `focusPreferredTVTarget`（修 MENU 键 ReferenceError） |
 | `src/screens/TV/Home.tsx` | ① 我的歌单卡片传 `coverFallback="music"`、`meta` 改「长按 OK 管理」、新增 `onLongPress`；② 新增 `handleManageSonglist` / `handleRemoveSonglist`（`showTVDialog` + `confirmDialog` + `tipDialog`）；③ 结果提示移出空态分支、常显；④ 模块级 `lastSonglistResultCache` 让结果跨挂载保留；⑤ 新增 `import { removeUserList }`、`showTVDialog`、`confirmDialog`、`tipDialog` |
 | `src/screens/TV/Settings.tsx` | ① import 加 `removeUserList`；② `handleLanSourceEvent` 新增 `songlist-remove` 分支（含快照过期校验）；③ 二维码下方提示补「改名、删除」说明 |
 | `src/screens/TV/labels.ts` | 新增 `lastImportResult` / `managingSonglist` / `longPressManage` / `renameSonglistNeedPhone` / `deleteSonglist` / `deleteSonglistConfirm` / `deleteSonglistDone` / `deleteSonglistFailed` / `cancelAction` / `knowIt`；改写 `mySonglistsDesc` / `emptyMySonglistsHint` |

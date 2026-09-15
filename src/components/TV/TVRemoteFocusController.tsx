@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { getCachedIsTV } from '@/utils/tvMode'
 import { onTVRemoteEvent } from '@/utils/nativeModules/utils'
-import { activeTargetHasLongPress, clearActiveTVFocusScope, isActiveTVFocusScope, isTVDialogActive, longPressActiveTVTarget, moveTVFocus, pressActiveTVTarget, setActiveTVFocusScope } from './tvFocusManager'
+import { activeTargetHasLongPress, clearActiveTVFocusScope, focusPreferredTVTarget, isActiveTVFocusScope, isTVDialogActive, longPressActiveTVTarget, moveTVFocus, pressActiveTVTarget, setActiveTVFocusScope } from './tvFocusManager'
 import { useNavigationComponentDidAppear, useNavigationComponentDidDisappear } from '@/navigation/hooks'
 
 const KEY_ACTION_DOWN = 0
