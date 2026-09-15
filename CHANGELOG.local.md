@@ -79,6 +79,7 @@
 
 | 文件 | 改了哪一段 | 冲突风险 |
 |---|---|---|
+| `android/gradle.properties` | `reactNativeArchitectures` 由 `arm64-v8a,x86_64` 改为 `arm64-v8a,armeabi-v7a,x86_64`：补编 32 位 ARM，修复 32 位电视/盒子上 `UnsatisfiedLinkError: libquickbase64.so not found` 崩溃（quick-base64 等自编 C++ 库原先没有 v7a 版本）。副作用：构建时间约多 3-5 分钟、universal 包体积变大。 | 低 |
 | `.github/workflows/build-apk.yml` | ① `on.push.branches` 加 `lulu`（原为 `[master, dev]`）；② 顶部加 `permissions: contents: write`；③ 末尾新增「Publish APK to Release」步骤（仅 `lulu` 分支执行，用 runner 自带的 `gh` CLI 把 universal 包发到固定 tag `apk-lulu`）。**原有构建步骤一律未动。** | 低 |
 | `android/.../utils/LanImportServer.java` | `serve()` 的 POST 分支里，在 `/api/activate` 之后追加一个 `if ("/api/songlist".equals(uri))` 块：调用 `SonglistImportPayload.expand(payload)` 后 `notify("songlist", ...)`。原三个路由未动。 | 低 |
 | `android/app/src/main/assets/lan_input.html` | ① `<title>` 改「ZL-Music 导入」；② 新增「导入歌单」section（`slText` / `slFile` / `slName` / `doImportSonglist` / `songlistMsg`）；③ 新增 JS：`doImportSonglist` / `showSonglistMsg` / `bufferToBase64` / `sniffKind` / `decodeTextSmart`；④ 样式加 `.hint` 与 file input。原有音源导入逻辑未动。 | 低 |
