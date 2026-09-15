@@ -109,7 +109,7 @@ function TVHistory({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={currentMusicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="new" nextFocusDown={firstBoardFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus as any} onActiveTabReady={queueFocusRefresh} />
+      <TVTopTabs items={createTVTabs(componentId)} activeId="new" nextFocusDown={getSourceHandle(sourceTabs[0]?.id) ?? firstBoardFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus as any} onActiveTabReady={queueFocusRefresh} />
       <View style={styles.root}>
         <TVGlassPanel style={styles.listPanel}>
          <View style={styles.header}>
@@ -163,7 +163,7 @@ function TVHistory({ componentId }: { componentId: string }) {
                  active={selectedIndex === index}
                  onFocus={() => { handleBoardFocus(index) }}
                  onPress={() => { openBoard(item) }}
-                 nextFocusUp={index === 0 ? getActiveTabHandle() ?? undefined : getBoardHandle(prevKey) ?? undefined}
+                 nextFocusUp={index === 0 ? getSourceHandle(sourceTabs[sourceTabs.length - 1]?.id) ?? getActiveTabHandle() ?? undefined : getBoardHandle(prevKey) ?? undefined}
                  nextFocusRight={playerFocus.getNodeHandle() ?? undefined}
                  nextFocusDown={getBoardHandle(nextKey) ?? undefined}
                />
