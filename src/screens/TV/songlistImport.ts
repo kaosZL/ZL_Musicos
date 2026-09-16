@@ -4,6 +4,7 @@ import { userLists } from '@/utils/listManage'
 import { deduplicationList, filterMusicList, fixNewMusicInfoQuality, toNewMusicInfo } from '@/utils'
 import { findMusic } from '@/utils/musicSdk'
 import { getSourceName } from './utils'
+import { tvText } from './labels'
 
 /**
  * TV 端「导入歌单」的解析与落库逻辑。
@@ -64,9 +65,16 @@ const runFindMusic = findMusic as unknown as (info: {
 
 const pad2 = (value: number) => (value < 10 ? `0${value}` : `${value}`)
 
+/**
+ * 没给歌单名时的自动命名。
+ *
+ * 以前叫「导入歌单 MM-DD HH:mm」，而「我的歌单」页里常驻的导入入口卡标题也是「导入歌单」，
+ * 于是海报卡被截断成「导入歌单…」后与入口卡几乎无法区分（用户报「有两个都叫导入歌单的选项」）。
+ * 现在用「歌单」前缀 + 时间，和入口卡彻底区分开；文案复用 labels.ts 的键，不硬编码中文。
+ */
 const defaultListName = () => {
   const now = new Date()
-  return `导入歌单 ${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`
+  return `${tvText.songlist} ${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`
 }
 
 const normalizeText = (raw: string) => (raw ?? '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim()
