@@ -1,4 +1,4 @@
-import { createList, setUserList } from '@/core/list'
+import { createList } from '@/core/list'
 import { getListDetail, getListDetailAll } from '@/core/songlist'
 import { userLists } from '@/utils/listManage'
 import { deduplicationList, filterMusicList, fixNewMusicInfoQuality, toNewMusicInfo } from '@/utils'
@@ -265,6 +265,9 @@ const createListsFromParsed = async(
   onProgress?: (message: string) => void,
 ): Promise<TVSonglistImportOutcome> => {
   const createdNames: string[] = []
+  // 被 userListCreate 静默跳过的歌单名（ID 撞车时上游是 `return`，既不抛错也不返回信号）。
+  // 不能让它变成「提示导入成功、实际啥也没发生」，所以这里显式记下来并如实上报。
+  const skippedNames: string[] = []
   let added = 0
   // 重名兜底：同一个歌单被导入两次会生成两张同名卡片，用户根本分不出哪张是哪张，
   // 这里在重名时自动补「(2)」「(3)」序号
@@ -294,18 +297,38 @@ const createListsFromParsed = async(
       source: item.source,
       sourceListId: item.sourceListId,
     })
+    // createList → list_create → userListCreate 会写进 userLists（同一个活数组）。
+    // 万一 ID 仍然撞车，上游会静默 return：这里回读一次，避免把「没写进去」报成成功。
+    if (!userLists.some(entry => entry.id === id)) {
+      skippedNames.push(name)
+      continue
+    }
     createdNames.push(name)
     added += list.length
   }
 
+  // 注意：这里【不需要】再调一次 setUserList(userLists)。
+  // createList → createUserList → list_event.list_create → updateUserList() 内部已经
+  // setUserList(userLists) 了（见 src/event/listEvent.ts）。原来那句是多余的一次
+  // mylistUpdated 广播，会让「我的歌单」多渲染一次、并让设置页的快照 effect 多重跑一次。
+
   if (!createdNames.length) {
-    return { ok: false, message: '文件里没有解析到歌曲', listNames: [], addedCount: 0, skippedCount: 0 }
+    return {
+      ok: false,
+      message: skippedNames.length
+        ? `导入失败：歌单「${skippedNames.join('、')}」与已有歌单 ID 冲突，没有写入`
+        : '文件里没有解析到歌曲',
+      listNames: [],
+      addedCount: 0,
+      skippedCount: 0,
+    }
   }
 
-  setUserList(userLists)
+  const parts = [`已导入 ${createdNames.length} 个歌单，共 ${added} 首`]
+  if (skippedNames.length) parts.push(`另有 ${skippedNames.length} 个因 ID 冲突被跳过（${skippedNames.join('、')}）`)
   return {
     ok: true,
-    message: `已导入 ${createdNames.length} 个歌单，共 ${added} 首`,
+    message: parts.join('，'),
     listNames: createdNames,
     addedCount: added,
     skippedCount: 0,
@@ -426,6 +449,16 @@ export const importSonglist = async(
   }
 
   const outcome = await createListsFromParsed(items, nameHint, onProgress)
+  // 一个歌单都没落地时，必须如实返回 ok:false，否则「提示导入成功、电视上啥也没有」。
+  if (!outcome.ok) {
+    return {
+      ok: false,
+      message: outcome.message,
+      listNames: [],
+      addedCount: 0,
+      skippedCount,
+    }
+  }
   const summaries: string[] = []
   if (outcome.listNames.length) summaries.push(`已导入 ${outcome.listNames.length} 个歌单`)
   if (matchedCount) summaries.push(`匹配到 ${matchedCount} 首`)

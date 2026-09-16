@@ -29,7 +29,9 @@ interface SonglistResult { ok: boolean, message: string }
 // state 会被重置，这里留一份，保证用户回到本页仍能看到「上次的结果」。
 let lastSonglistResultCache: SonglistResult | null = null
 
-const EMPTY_CARD_KEY = '__mylist_empty__'
+// 常驻的「导入歌单」入口卡片。这张卡任何时候都在（空态时它兼任空态提示），
+// 所以 key 用固定的 IMPORT_CARD_KEY，不随歌单数量变化。
+const IMPORT_CARD_KEY = '__mylist_import__'
 
 function TVMyList({ componentId }: { componentId: string }) {
   const musicInfo = usePlayerMusicInfo()
@@ -143,38 +145,39 @@ function TVMyList({ componentId }: { componentId: string }) {
           <TVText variant="caption" color={tvColors.dimText} style={styles.hint}>{tvText.myListHint}</TVText>
         </View>
         <TVGlassPanel style={styles.panel}>
-          {hasLists ? (
-            <View style={styles.grid}>
-              {userSonglists.map((item, index) => (
-                <TVPosterCard
-                  key={`mylist_${item.id}`}
-                  ref={getCardRefCallback(`mylist_${item.id}`, index === 0) as any}
-                  title={item.name}
-                  subtitle={item.source ? getSourceName(item.source) : tvText.importSonglist}
-                  meta={tvText.longPressManage}
-                  size="medium"
-                  tint={index % 2 ? tvColors.primary : tvColors.purple}
-                  coverFallback="music"
-                  onPress={() => { openMySonglist(item) }}
-                  onLongPress={() => { handleManageSonglist(item) }}
-                />
-              ))}
-            </View>
-          ) : (
-            <View style={styles.grid}>
-              {/* 空态也做成可聚焦卡片：否则遥控器够不到，一往下走焦点就被顶出屏幕。
-                  再给一个 onPress —— 否则卡片提示「去扫码页」却按了没反应，是个死胡同 */}
-              <Focusable
-                ref={getCardRefCallback(EMPTY_CARD_KEY, true) as any}
-                style={styles.emptyCard}
-                focusStyle={styles.emptyCardFocus}
-                onPress={() => { pushTVSettingsScreen(componentId) }}
-              >
-                <TVText variant="cardTitle">{tvText.emptyMySonglists}</TVText>
-                <TVText variant="caption" color={tvColors.dimText} style={styles.emptyHint}>{tvText.emptyMySonglistsHint}</TVText>
-              </Focusable>
-            </View>
-          )}
+          {/* 注意：这里【不再】按 hasLists 二选一渲染。
+              以前「导入歌单」入口只长在空态卡上，一旦导入成功第一张歌单，hasLists 变 true，
+              整张空态卡（连同 onPress → 扫码页）就被卸载了，页面上再也没有第二次导入的入口 ——
+              这就是「歌单只能导入一个，想导入第二个没反应」的直接原因。
+              现在把入口做成常驻卡片、固定在网格第一位：有歌单时文案切到「导入歌单」提示，
+              没歌单时沿用原来的空态文案。顺带还解决了「删光歌单后焦点悬空」的问题。 */}
+          <View style={styles.grid}>
+            <Focusable
+              ref={getCardRefCallback(IMPORT_CARD_KEY, true) as any}
+              style={styles.emptyCard}
+              focusStyle={styles.emptyCardFocus}
+              onPress={() => { pushTVSettingsScreen(componentId) }}
+            >
+              <TVText variant="cardTitle">{hasLists ? tvText.importSonglist : tvText.emptyMySonglists}</TVText>
+              <TVText variant="caption" color={tvColors.dimText} style={styles.emptyHint}>
+                {hasLists ? tvText.importSonglistTip : tvText.emptyMySonglistsHint}
+              </TVText>
+            </Focusable>
+            {userSonglists.map((item, index) => (
+              <TVPosterCard
+                key={`mylist_${item.id}`}
+                ref={getCardRefCallback(`mylist_${item.id}`) as any}
+                title={item.name}
+                subtitle={item.source ? getSourceName(item.source) : tvText.songlist}
+                meta={tvText.longPressManage}
+                size="medium"
+                tint={index % 2 ? tvColors.primary : tvColors.purple}
+                coverFallback="music"
+                onPress={() => { openMySonglist(item) }}
+                onLongPress={() => { handleManageSonglist(item) }}
+              />
+            ))}
+          </View>
           {importResult
             ? <TVText variant="caption" color={importResult.ok ? tvColors.primaryHigh : tvColors.warn} style={styles.resultLine}>{`${tvText.lastImportResult}${importResult.message}`}</TVText>
             : null}

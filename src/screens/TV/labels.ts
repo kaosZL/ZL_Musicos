@@ -142,6 +142,9 @@ export const tvText = {
   importingSonglist: '正在导入歌单',
   importSonglist: '导入歌单',
   importSonglistTip: '手机页面上可以粘贴歌单链接/歌曲清单，也可以选择文件上传',
+  // 扫码页启动失败（端口被占 / 原生服务起不来）：以前只写进面板角落的 setLanMessage，
+  // 用户看不到 → 表现成「按了按钮没反应」，所以现在会弹窗
+  lanStartFailed: '扫码页启动失败',
   userList: '我的歌单',
   lastImportResult: '\u4e0a\u6b21\u5bfc\u5165\u7ed3\u679c\uff1a',
   // 歌单管理（首页卡片长按 OK 弹出）

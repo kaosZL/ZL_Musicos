@@ -379,11 +379,132 @@ Home 页原横向区块（含空态卡）整体移除，Hero 的「下」键改�
 
 ---
 
+## 🚧 修复：「歌单只能导入一个，要导第二个时没反应」（2026-09-16）
+
+**现象**：导入第一个歌单成功之后，再想导入第二个时「没反应」。
+
+**根因（两条，A 是直接原因）**
+
+- **(A) 可达性缺陷〔直接原因〕**：`src/screens/TV/MyList.tsx` 原来按 `hasLists` 二选一渲染 ——
+  没有歌单时渲染那张空态卡（`onPress` → 扫码设置页），**有歌单之后整张空态卡连同入口一起被卸载**，
+  页面上只剩歌单卡 + 长按菜单，**再没有任何「导入歌单」入口**。
+  该缺陷在旧的 Home「我的歌单」区块里就已经存在
+  （`git show 425e890^:src/screens/TV/Home.tsx` 可查：有歌单时只渲染歌单卡、没有导入入口），
+  commit `425e890` 把它搬到顶部 Tab 时一并带了过来。
+- **(B) 功能性缺陷〔已用可运行实验逐条排除〕**：取证脚本（等价重写 + 真 HTTP 服务，未入库）跑了 4 组实验：
+  ① JS 导入管道连导 4 次全部落地（`makeUniqueListId` 的 `__N` 兜底有效，`userListsAdd` 的静默 `return` 一次都没触发）；
+  ② 原生 LAN 服务对连续 POST 完全无状态（4 次 POST = 4 次 notify；`start()` 提前返回、`stop→start` 都不影响投递）；
+  ③ 订阅 effect 重订阅在真实时序下不漏事件，且任何时刻只有 1 个订阅者（无泄漏）；
+  ④ 唯一确认存在的静默无响应场景见下方「已知未修」。
+  → **LAN 服务 / 事件桥 / 静默去重 三者均已排除**。
+
+**改了哪些文件**
+
+| 文件 | 改了什么 |
+|---|---|
+| `src/screens/TV/MyList.tsx` | 「导入歌单」卡片改为**常驻**、固定在网格第一位（有歌单时文案 `importSonglist` / `importSonglistTip`，空态时沿用原空态文案）；不再按 `hasLists` 二选一。顺带解决「删光歌单后焦点悬空」。歌单卡副标题兜底 `importSonglist` → `songlist`，避免与入口卡撞文案 |
+| `src/screens/TV/songlistImport.ts` | ① 删掉 `createListsFromParsed` 尾部多余的 `setUserList(userLists)`（`list_event.list_create` 内部已调，实测每次导入会多发一次 `mylistUpdated`）；② `createList` 后回读 `userLists`，把上游 `userListCreate` 的**静默 ID 撞车 `return`** 变成明确上报；③ `importSonglist` 尾部在 `outcome.ok === false` 时如实返回 `ok:false`（原来无论成败都返回 `ok:true`） |
+| `src/screens/TV/Settings.tsx` | 订阅 effect 依赖收窄为 `[lanRunning]`，快照推送拆成两个独立 effect —— 避免导入成功后 `userSonglists` 变化引发 unsubscribe/resubscribe；重订阅之间的同步空窗里到达的桥事件会被直接丢掉 |
+
+**已知未修（已确认存在，留作后续）**：电视端**不在**扫码页时（例如按 BACK 回到「我的歌单」，
+但原生 LAN 服务仍在跑），手机提交依然会拿到 `{ok:true}`「已提交」，而 JS 侧没有订阅者 → 事件被丢弃，
+电视毫无反应。原生 `UtilsEvent.sendLanSourceEvent` / `LanImportServer` 只 emit 不回放，
+且 `stopServer()` 不清 `listener`。彻底修需要给导入加一条 ack 通道（新增原生路由），
+或让手机页像改名/删除那样回读校验（`lan_input.html` 已有 `confirmApplied` 模式）。
+本次未动，避免引入新原生路由 / 破坏「两个 Settings 实例共存」的场景。
+
+**验证**：tsc 改动文件 0 新增 error、`error TS2304` 计数 = 0；eslint 改动文件与 HEAD 基线完全一致（0 新增）。
+
+---
+
+### 2026-09-16 · 续查：推翻 (A) 为「用户实际障碍」，定位到生命周期黑洞 + 结果反馈不可见
+
+**用户澄清**（问：第二次想导入时在哪个界面操作的？）：
+① 第二次是在**「设置」页**按「手机扫码导入」做的，不是「我的歌单」页；
+② **连第一次的导入结果提示都没看到**。
+
+→ 前面判定的 **(A)「我的歌单页入口不可达」不是用户的实际障碍**（它仍是真实缺陷，已修并保留），
+真正的问题是 **③ 结果反馈根本看不见** + **④ 离开设置页后原生服务还在跑、JS 订阅却没了，
+手机提交被黑洞吞掉、而手机仍显示「已提交」**。
+
+**修正后的根因（全部用可运行实验取证，未入库）**
+
+1. **生命周期黑洞〔本次真正主因〕**：`LanImportServer` 是原生单例，而 `Settings.tsx`
+   **卸载时没有任何 cleanup 去停它**。于是「按 BACK 离开设置页 / 切到别的 tab」之后：
+   JS 侧订阅被移除，原生服务仍在监听，手机页面还开着 → 再提交一次，
+   手机拿到 `{ok:true}`「已提交」，电视侧却**没有任何人接事件**（原生只 emit、不回放）
+   → 用户看到的正是「要导第二个时没反应」。
+   **实验 E5**：旧代码在「离开设置页后再提交」这一步得到 `NOTIFIED-BUT-DROPPED` 且手机回
+   `{ok:true}` → 黑洞命中；按本修复（卸载即停服）改后命中 **0 次**。
+2. **结果反馈不可见**：`setLanMessage` 渲染在右栏 ScrollView 的**最下方**，导入结束时**不会自动滚过去**
+   （只有成功打开二维码时才 `scrollToEnd`）。于是「已导入 N 个歌单 / 导入失败」用户根本看不到
+   —— 连第一次的结果都看不到，与用户描述完全吻合。
+3. **启动失败被吞成「没反应」**：旧 `LanImportServer.start()` 开头是 `if (instance != null) return;`
+   ——「上一次留下的、其实并没有在监听的半死实例」会把之后**每一次** start() 静默堵死；
+   此时 `getServerPort()` 恒返回 `-1`（二维码会编成 `http://ip:-1`），失败信息只写进 JS 侧看不见的
+   `setLanMessage`。另外端口被占用（`BindException`）时**没有任何兜底**。**实验 E6** 确认。
+
+**改了哪些文件（本轮）**
+
+| 文件 | 改了什么 |
+|---|---|
+| `android/.../utils/LanImportServer.java` | ① `start()` 由 `void` 改为返回**实际监听的端口**；② **无论复用还是新建都刷新 listener**（修「提前 return 不刷新、留下半死监听者」）；③ 先判活实例再复用，死的先 `stop()` 再丢弃引用（不再污染 `instance`）；④ 端口被占用时**向后顺延重试**最多 `PORT_RETRY_COUNT=5` 个端口；⑤ 全部失败时 `instance=null` 并**抛异常**（让 JS 能弹窗，而不是装作成功）；⑥ 新增 `isListening()`（`getListeningPort() > 0`）；⑦ `stopServer()` 额外清空 `listener`；⑧ `getServerPort()` 对死实例返回 `0`（不再吐 `-1`） |
+| `android/.../utils/UtilsModule.java` | `startLanImportServer` 改用 `start()` 返回的端口，`actualPort <= 0` 时 `reject`；resolve 的 `port` 用实际端口 |
+| `src/screens/TV/Settings.tsx` | ① **订阅 effect 改为「挂载即订阅」+ 卸载时停服**（cleanup 里 `stopLanImportServer()`），并用模块级 `lanSessionOwner` token 保证同一时刻只有一个实例「拥有」会话（避免「设置页里再 push 一个设置页」同一件事被处理两遍）；② `handleOpenLanImport` 在 `await` 二维码**之前**就接管会话（消除「二维码还没渲染出来时手机就提交」的窗口）；③ 新增本页独立 `TVDialog`，把成功/失败/改名/删除结果**弹窗**，不再只靠角落文案；④ 结果文案移到按钮**上方**带边框的框里；⑤ 启动失败弹 `lanStartFailed`；⑥ 保留上一轮的订阅拆分 + 两个快照 effect |
+| `src/screens/TV/labels.ts` | 新增 `lanStartFailed`（「扫码页启动失败」） |
+| `src/screens/TV/songlistImport.ts` | （沿用上一轮）ID 撞车显式上报、删冗余 `setUserList`、`ok:false` 如实返回 |
+| `src/screens/TV/MyList.tsx` | （沿用上一轮）「导入歌单」入口常驻、固定网格第一位 |
+
+**为什么用本页自己的 `TVDialog`，而不是全局 `tipDialog`**：全局 `showTVDialog` 只投给「最后挂载的
+`TVDialogHost`」，而各屏 pop 时它的 cleanup 会把 `activeListener` 置 null 且**不再重注册** →
+全局弹窗有可能静默失效，用户又变成「啥也没看到」。本页自己弹最稳。
+
+**复现步骤（修复前）**：设置页 →「手机扫码导入」→ 出二维码 → 手机扫码导入第一个歌单 → 成功 →
+在电视上按 BACK 离开设置页（原生服务仍在跑）→ 手机页面**不关**，再提交第二个歌单 →
+手机显示「已提交」，**电视毫无反应**。
+
+**验证**：tsc 改动文件 0 新增 error、`error TS2304` 计数 = 0；eslint 改动文件与 HEAD 基线完全一致
+（均 10 条既有 rule 违规，行号仅因新增代码位移）。Java 侧本机不可编译，逐行核对签名 / 异常 / 返回值。
+
+**后续修正（QA 回归①，2026-09-16）**：`handleCloseLanImport` 原来**无条件** `stopLanImportServer()`，
+非 owner 实例点「关闭二维码」会把 owner 还在用的服务停掉（owner 页面上二维码仍挂着、服务却已死 =
+假存活）。已把**停服也纳入 owner 判定**（只有 owner 才真的停），与卸载 cleanup 的守卫语义一致；
+非 owner 仅复位自己的 `lanRunning/qrImage`。QA 提的回归②③（结果弹窗宿主不可见 / 两个 TVDialog
+重复消费按键）本轮只记录不修，见下方「待办 / 可选」。
+
+**已知限制（未改）**：两个 `Settings` 实例共存时靠 `lanSessionOwner` token 只让一个实例处理事件。
+彻底按 App 级单例重构（把监听提升到 App、`apiSource` 等私有状态外提）风险大于收益，仍不做。
+
+---
+
 ## 📋 待办 / 可选
 
 - [x] ~~歌单重命名~~ —— 已做（手机页「歌单改名」+ 电视端改名屏，见上）。
 - [x] ~~歌单删除~~ —— 已做（首页长按 OK + 手机页删除按钮，见上）。
 - [ ] 歌单**排序**仍未暴露（手机页 / 电视端都还没有拖排序入口）。
+- [ ] 局域网歌单导入加 **ack / 回读校验**（增强项）：本轮已让「离开设置页 → 立即停服」，
+      手机再提交会**连接失败（诚实报错）**而不是假成功；但若手机在电视卸载的**那一瞬**刚好提交、
+      或电视侧业务处理期间出错，仍缺一条端到端 ack。手机页已有 `confirmApplied` 模式可复用。
+- [ ] **（回归②，QA 发现）结果弹窗的宿主可能在被压在栈下的不可见页面上，用户看不到即时弹窗。**
+      触发：设置页 #A 开二维码（owner=A）→ 电视上按「我的歌单」Tab（RNN push，A **不卸载**）→ 手机提交。
+      **数据不丢**（歌单真的导入了，`MyList` 的 `songlistImportResult` 订阅 + `lastSonglistResultCache`
+      会在「我的歌单」页显示「上次导入结果：…」），**丢的只是即时弹窗**（弹窗挂在与 owner 同一实例的
+      `Settings` 上，而该页此刻不可见）。
+      建议：结果弹窗改由「永远可见的宿主」来弹 —— 即去修全局 `showTVDialog`（其 `activeListener` 在
+      页面 pop 的 cleanup 里被置 null 且**不再重注册**，所以有时静默失效）。修它能一并解决回归③。
+- [ ] **（回归③，QA 发现）两个 `TVDialog` 同时可见时，一次按键会被消费两次。**
+      两层机制：① 每个 `TVDialog` 实例各自订阅 `onTVRemoteEvent`、互不知情，两个都 visible 时
+      一次 `select` 会让两边按钮都触发（`src/components/TV/TVDialog.tsx:73-96`）；
+      ② `setTVDialogActive` 是**单一全局布尔、不是引用计数**，`TVRemoteFocusController` 靠它让路
+      （`src/theme/tvFocusManager.ts:279-281`、`TVRemoteFocusController.tsx:37`）→ **关掉一个弹窗会把
+      标记置 false，即使另一个还开着**，背景焦点引擎随即恢复处理按键。
+      可达场景：电视上正开着音源长按菜单时，手机恰好提交（本页也会弹结果弹窗）。
+      建议：把 `setTVDialogActive` 改成**引用计数**。
+- [ ] **（残余，本轮修复的边界）owner 关闭 / 离开时会把服务停掉；若此时栈下还压着另一个
+      「二维码仍挂着」的设置页，就会出现「下层页二维码看起来正常、服务其实已停」的假存活。**
+      触发：A 开二维码 → push B → B 开二维码（owner 变 B，两页共用同一端口）→ B 关二维码 / 返回。
+      影响有限（下层页不可见；回到它时再按一次「手机扫码导入」会重新起服务且二维码一致），
+      彻底修需要在 `lanSessionOwner` 之外再维护「还有几个页面自称在跑」的引用计数。
 - [ ] 导入时若匹配上的歌曲过少，可考虑在电视上给一个「是否仍要保留」的确认弹窗。
 - [ ] `TVNavBar.tsx` 的 ref 也是内联箭头（`ref={(node) => { refs.current[index] = node }}`），
       不过它没有「就绪回调」，不会造成死循环，只是每次渲染多一次 detach/attach，暂未改动。
