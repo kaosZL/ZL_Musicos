@@ -289,9 +289,71 @@ React 在每次提交时，如果 `ref` 的身份变了，会先以 `null`、再
 
 ---
 
+### 2026-09-16 · 修「长按 OK 弹窗闪一下就消失」+ 我的歌单搬到顶部 Tab + 电视端改名 + 换应用图标
+
+**① 弹窗闪退（用户：按下 enter 键会闪一下，看不清内容就消失了）**
+
+根因不在弹窗的显示，而在**遥控器连发事件**：Android 长按是靠按键 repeat 识别的，
+而 **repeat 事件的 `eventKeyAction` 仍然是 0（ACTION_DOWN），只有 `repeatCount > 0` 能区分**
+（原生侧见 `MainActivity.java` 发 `event.getAction()` / `event.getRepeatCount()`）。
+`TVDialog` 的遥控监听只判断了 `eventKeyAction !== 0`，于是：
+
+```
+长按 OK：DOWN(rc=0) → DOWN(rc=1) ← 这一刻弹出菜单
+                    → DOWN(rc=2) ← 手指还没松，弹窗把它当成"又按了一次确定"
+                    → 立刻执行第一个按钮（取消）→ 菜单关闭 → 用户看到"闪一下"
+```
+
+修法：弹窗忽略 `repeatCount > 0` 的事件，再加一道「打开后 350ms 内忽略 select」双保险
+（只拦 select，左右切按钮与返回键不受影响）。
+
+**② 「我的歌单」从 Home 区块改为顶部 Tab**
+
+用户要求挪到「推荐 / 排行榜」那一排。现在顶部 tab 顺序为
+**推荐 · 排行榜 · 我的歌单 · 搜索 · 播放列表 · 设置**，点进去是独立的「我的歌单」页。
+Home 页原横向区块（含空态卡）整体移除，Hero 的「下」键改指**第一张推荐歌单卡**，
+焦点链重排后无悬空。
+
+**③ 电视端可直接改名（新增）**
+
+原来只能去手机扫码页改名，电视上按 OK 没任何编辑入口。现在长按 OK 的菜单是
+**[取消] [改名] [删除]**，「改名」进入屏上键盘（项目自带 `TVSearchKeyboard`）输入。
+**限制**：屏上键盘只有英文/数字，**中文名仍需去手机扫码页改**，页面上已明确提示。
+
+**④ 应用图标 / TV banner 换成指定照片**
+
+- 5 档密度 `ic_launcher.png` / `ic_launcher_round.png` / `ic_launcher_foreground.png` 全部替换，
+  `ic_launcher_foreground.png` 为**整幅铺满**（launcher 会裁掉外圈，可见区只有中间 66%）。
+- **关键**：Android TV 桌面显示的是 `drawable-xhdpi/tv_banner.png`（640×360，manifest 里的
+  `android:banner`），**不是 ic_launcher** —— 只换图标在电视上是看不到变化的，banner 必须一起换。
+- `ic_launcher_background.xml` 底色 `#01041C` → `#0D0D10`（贴近照片暗部）。
+- 裁切以人脸为中心（源图 1260×1678，人脸在画面偏上，直接取几何中心会裁到胸口）。
+
+| 文件 | 改了什么 |
+|---|---|
+| `src/components/TV/TVDialog.tsx` | 遥控监听加 `repeatCount > 0` 拦截 + `visibleAtRef` 350ms select 防抖窗口 |
+| `src/screens/TV/MyList.tsx` | **新增文件** —— 「我的歌单」独立页（tab 页），卡片 OK=打开、长按 OK=管理菜单，空态卡 OK 直达扫码页；导入结果提示也搬到这里 |
+| `src/screens/TV/Rename.tsx` | **新增文件** —— 电视端改名屏（屏上键盘 + 保存/取消），保存走 `updateUserList([{...原条目, name}])` 保留 `locationUpdateTime` 等字段 |
+| `src/screens/TV/Home.tsx` | 删掉整个「我的歌单」区块及只服务它的 state/ref/订阅/模块缓存；Hero「下」改指第一张推荐卡 |
+| `src/screens/TV/utils.ts` | `createTVTabs` 在「排行榜」之后插入「我的歌单」 |
+| `src/components/TV/TVTopTabs.tsx` | tab 水平内边距 `tvSize(20)` → `tvSize(16)`，给 6 个 tab 留宽度（焦点逻辑未动） |
+| `src/navigation/screenNames.ts` / `navigation.ts` / `registerScreens.tsx` / `src/screens/index.ts` | 注册并导出 `TVMyList` / `TVRename` 两个新屏 |
+| `src/screens/TV/labels.ts` | 新增 myListHint / rename 相关文案（沿用 `\uXXXX` 转义写法） |
+| `android/app/src/main/res/mipmap-*/` 15 个 PNG + `drawable-xhdpi/tv_banner.png` + `values/ic_launcher_background.xml` | 换成照片 |
+
+**验证方式**：QA 用同一串遥控事件分别跑旧/新判定函数，**旧逻辑成功复现了闪退、新逻辑通过**；
+新页面导航链路逐环核对无断链；tsc 改动文件 0 新增 error、eslint 改动文件全绿。
+
+**顺带发现（未修，历史遗留）**：`src/screens/TV/Player.tsx` 有个分支假设
+`eventKeyAction === 2` 表示 REPEAT，但原生只发 0/1 —— 该分支是死代码。
+`Focusable.tsx` 注册 `onLongPress` 的 effect 依赖数组里缺 `onLongPress`/`handleLongPress`，
+当前被「onPress 是内联箭头、每次渲染都重跑 effect」掩盖，暂未触发问题。
+
+---
+
 ## 📋 待办 / 可选
 
-- [x] ~~歌单重命名~~ —— 已做（手机页「歌单改名」，见上）。
+- [x] ~~歌单重命名~~ —— 已做（手机页「歌单改名」+ 电视端改名屏，见上）。
 - [x] ~~歌单删除~~ —— 已做（首页长按 OK + 手机页删除按钮，见上）。
 - [ ] 歌单**排序**仍未暴露（手机页 / 电视端都还没有拖排序入口）。
 - [ ] 导入时若匹配上的歌曲过少，可考虑在电视上给一个「是否仍要保留」的确认弹窗。

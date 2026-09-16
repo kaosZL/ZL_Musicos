@@ -106,7 +106,7 @@ const styles: Record<string, ViewStyle | TextStyle> = {
   },
   tab: {
     minHeight: tvSize(48),
-    paddingHorizontal: tvSize(20),
+    paddingHorizontal: tvSize(16),
     borderRadius: tvTokens.radiusPill,
     alignItems: 'center',
     justifyContent: 'center',

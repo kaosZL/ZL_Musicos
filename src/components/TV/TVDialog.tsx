@@ -60,15 +60,26 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
   buttonsRef.current = buttons
   const onDismissRef = useRef(onDismiss)
   onDismissRef.current = onDismiss
+  // 弹窗真正可见的时间戳，用于启动后的短暂「忽略 select」防抖窗口
+  const visibleAtRef = useRef(0)
 
   useEffect(() => {
     if (!visible) return
     setTVDialogActive(true)
     setFocusedIdx(0)
     focusedIdxRef.current = 0
+    visibleAtRef.current = Date.now()
 
-    const unsub = onTVRemoteEvent(({ eventType, eventKeyAction }) => {
+    const unsub = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
+      // 长按连发必须忽略：Android 的 repeat 事件 eventKeyAction 仍然是 0（KEY_ACTION_DOWN），
+      // 只有 repeatCount>0。用户长按 OK 打开本弹窗后手指还没松开，后续 repeat 会继续送到这里；
+      // 若不忽略就会被当成一次全新的「确定」，立刻点到第一个按钮（取消）把弹窗关掉，
+      // 表现就是「闪一下、看不清内容」。
+      if (repeatCount > 0) return
       if (eventKeyAction !== 0) return
+      // 双保险：不同机型/不同事件路径下 repeatCount 可能缺失，开启后的 ~350ms 内忽略 select，
+      // 保证长按手势的收尾事件不会误触弹窗按钮。左右切按钮/返回键不受影响。
+      if (eventType === 'select' && Date.now() - visibleAtRef.current < 350) return
       if (eventType === 'left' || eventType === 'right') {
         const delta = eventType === 'left' ? -1 : 1
         const total = buttonsRef.current.length

@@ -157,6 +157,21 @@ export const tvText = {
   // 歌曲列表 / 播放队列的操作提示
   detailPlayHint: '\u70b9 OK \u4ece\u8fd9\u9996\u5f00\u59cb\u64ad\u6574\u4e2a\u6b4c\u5355 \u00b7 \u957f\u6309 OK \u53ea\u628a\u8fd9\u9996\u52a0\u8fdb\u64ad\u653e\u5217\u8868',
   queueFromSonglist: '\u961f\u5217\u6765\u81ea\u6b4c\u5355\uff1a',
+  // 我的歌单独立页（顶部 Tab「我的歌单」）
+  myListHint: 'OK \u6253\u5f00\u6b4c\u5355 \u00b7 \u957f\u6309 OK \u7ba1\u7406',
+  // 电视端屏上改歌单名
+  renameTitle: '\u6539\u6b4c\u5355\u540d',
+  renameAction: '\u6539\u540d',
+  renameOriginal: '\u539f\u540d\u5b57',
+  renameNew: '\u65b0\u540d\u5b57',
+  renameInputHint: '\u8f93\u5165\u65b0\u540d\u5b57\u540e\u6309\u300c\u4fdd\u5b58\u300d\u5373\u53ef',
+  renameKeyboardHint: '\u7535\u89c6\u952e\u76d8\u53ea\u80fd\u8f93\u82f1\u6587/\u6570\u5b57\uff0c\u4e2d\u6587\u540d\u8bf7\u5728\u624b\u673a\u626b\u7801\u9875\u6539',
+  renameSave: '\u4fdd\u5b58',
+  renameEmpty: '\u6b4c\u5355\u540d\u4e0d\u80fd\u4e3a\u7a7a',
+  renameDone: '\u5df2\u6539\u540d',
+  renameFailed: '\u6539\u540d\u5931\u8d25',
+  // 改名时目标歌单已被删除（找不到原条目）
+  songlistMissing: '\u8fd9\u4e2a\u6b4c\u5355\u5df2\u7ecf\u4e0d\u5b58\u5728\u4e86',
 } as const
 
 export const dot = ' \u00b7 '
