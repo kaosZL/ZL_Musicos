@@ -2,8 +2,11 @@ name: Build Android APK
 
 on:
   push:
-    branches: [master, dev]
+    branches: [master, dev, lulu]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-apk:
@@ -42,3 +45,35 @@ jobs:
           name: ZL_Musicos-debug-apk-${{ github.ref_name }}
           path: android/app/build/outputs/apk/release/*.apk
           retention-days: 30
+
+      # 把 universal 包发到 Release，提供一个免登录、不过期的固定下载直链：
+      # https://github.com/soren1985/ZL_Musicos/releases/download/apk-lulu/ZL_Musicos-lulu.apk
+      - name: Publish APK to Release
+        if: github.ref == 'refs/heads/lulu'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          APK_DIR=android/app/build/outputs/apk/release
+          ls -lh "$APK_DIR"
+          UNIVERSAL=$(ls "$APK_DIR"/*universal*.apk 2>/dev/null | head -n1)
+          if [ -z "$UNIVERSAL" ]; then
+            UNIVERSAL=$(ls "$APK_DIR"/*.apk | head -n1)
+          fi
+          echo "Publishing: $UNIVERSAL"
+          cp "$UNIVERSAL" ZL_Musicos-lulu.apk
+
+          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
+          NOTE="带「歌单导入」功能的测试包。
+          分支：lulu　提交：${SHORT_SHA}
+          构建时间：$(date -u '+%Y-%m-%d %H:%M UTC')
+
+          下载下方的 ZL_Musicos-lulu.apk 直接覆盖安装即可。签名与官方版一致，歌单、收藏、播放历史都不会丢。"
+
+          if gh release view apk-lulu >/dev/null 2>&1; then
+            gh release edit apk-lulu --title "ZL_Musicos 测试包（含歌单导入）" --notes "$NOTE" --latest
+          else
+            gh release create apk-lulu --title "ZL_Musicos 测试包（含歌单导入）" --notes "$NOTE" --target "$GITHUB_SHA"
+          fi
+          gh release upload apk-lulu ZL_Musicos-lulu.apk --clobber
+          echo "Download: https://github.com/${{ github.repository }}/releases/download/apk-lulu/ZL_Musicos-lulu.apk"

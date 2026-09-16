@@ -67,17 +67,28 @@ function TVDetail({ componentId, payload }: Props) {
   const image = payload.type === 'songlist' ? payload.songlist.img : null
   const heroMeta = payload.type === 'songlist'
     ? `${getSourceName(payload.source)}${dot}${tvText.songlist}${payload.songlist.play_count ? `${dot}${payload.songlist.play_count}` : ''}`
-    : `${getSourceName(payload.source)}${dot}${tvText.charts}${dot}${tvText.hotChart}`
+    : payload.type === 'board'
+      ? `${getSourceName(payload.source)}${dot}${tvText.charts}${dot}${tvText.hotChart}`
+      : `${tvText.userList}${payload.source ? `${dot}${getSourceName(payload.source)}` : ''}`
 
   useEffect(() => {
     let mounted = true
     setLoading(true)
     setError('')
-    const loader = payload.type === 'board'
-      ? getBoardListDetail(payload.id, 1)
-      : getSonglistDetail(payload.id, payload.source, 1)
+    const load = async(): Promise<{ list: LX.Music.MusicInfoOnline[], total: number }> => {
+      if (payload.type === 'board') {
+        const result = await getBoardListDetail(payload.id, 1)
+        return { list: result.list, total: result.total }
+      }
+      if (payload.type === 'userlist') {
+        const localList = await getListMusics(payload.id)
+        return { list: localList as unknown as LX.Music.MusicInfoOnline[], total: localList.length }
+      }
+      const result = await getSonglistDetail(payload.id, payload.source, 1)
+      return { list: result.list, total: result.total }
+    }
 
-    loader.then(result => {
+    load().then(result => {
       if (!mounted) return
       setList(result.list)
       setTotal(result.total)
@@ -113,11 +124,21 @@ function TVDetail({ componentId, payload }: Props) {
 
   const handlePlay = async(index = 0) => {
     if (payload.type === 'board') await handleBoardPlay(payload.id, list, index)
-    else await handleSonglistPlay(payload.id, payload.source, list, index)
+    else if (payload.type === 'userlist') {
+      // 本地歌单：**必须把整张歌单灌进「播放列表」(TEMP) 再播**。
+      // 不能写成 playList(payload.id, index)：那样 playerListId 会是歌单自己的 id，
+      // 而队列页只读 TEMP，于是队列页显示的是上一次留下的旧歌 —— 用户一按 OK
+      // 就跳到不相干的歌上，看起来就是「播完这首就不播歌单里的歌了」。
+      if (!list.length) return
+      await setTempList(payload.id, [...list])
+      await playList(LIST_IDS.TEMP, index)
+    } else await handleSonglistPlay(payload.id, payload.source, list, index)
     pushTVPlayerScreen(componentId)
   }
 
-  // 单曲播放：追加这一首到播放列表（已在列表则直接跳播），不覆盖已有歌曲
+  // 单曲追加（长按 OK）：把这一首塞到播放列表末尾，不动前面的歌。
+  // 注：追加是按「当时已播/未播」的语义放在列表尾部，播完会继续走后面的歌，
+  // 所以它只适合「顺手加一首」，不适合「我想听这张歌单」——后者用短按 OK。
   const handleSinglePlay = async(item: LX.Music.MusicInfoOnline) => {
     const currentList = await getListMusics(LIST_IDS.TEMP)
     let playIndex = currentList.findIndex(m => m.id === item.id)
@@ -190,6 +211,7 @@ function TVDetail({ componentId, payload }: Props) {
             <TVText variant="sectionTitle" style={styles.listTitle}>{tvText.songList}</TVText>
             <TVText variant="caption" color={tvColors.primaryHigh}>{statsText}</TVText>
           </View>
+          {list.length ? <TVText variant="caption" color={tvColors.dimText} style={styles.listHint}>{tvText.detailPlayHint}</TVText> : null}
           <FlatList
             ref={listRef}
             data={list}
@@ -213,7 +235,8 @@ function TVDetail({ componentId, payload }: Props) {
                   badge={index < 3 ? tvText.hotChart : undefined}
                   hasTVPreferredFocus={preferFirstRow && index === 0}
                   onFocus={() => { handleFocus(index) }}
-                  onPress={() => { void handleSinglePlay(item) }}
+                  onPress={() => { void handlePlay(index) }}
+                  onLongPress={() => { void handleSinglePlay(item) }}
                   nextFocusUp={index === 0 ? getActiveTabHandle() ?? playAllFocus.getNodeHandle() ?? undefined : getRowHandle(prevKey) ?? undefined}
                   nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
                   nextFocusDown={getRowHandle(nextKey) ?? undefined}
@@ -283,6 +306,7 @@ const styles: Record<string, ViewStyle | TextStyle | ImageStyle | any> = {
     borderColor: 'rgba(255,255,255,0.24)',
   },
   listHeader: { minHeight: tvSize(42), flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: tvSize(16) },
+  listHint: { marginBottom: tvSize(10) },
   listTitle: { fontSize: tvFont(25) },
   list: { flex: 1 },
   listContent: { paddingTop: tvSize(14), paddingBottom: tvSize(18), gap: tvSize(10) },

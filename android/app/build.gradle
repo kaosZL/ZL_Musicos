@@ -183,14 +183,16 @@ android {
             // Example: versionCode 1 will generate 1001 for armeabi-v7a, 1002 for x86, etc.
             def versionCodes = ["armeabi-v7a": 1, "x86": 2, "arm64-v8a": 3, "x86_64": 4]
             def abi = output.getFilter(OutputFile.ABI)
+            // 本地魔改包标记：官方发布的 APK 名称不含此标记，避免下载时拿错包
+            def localTag = "-lulu"
             if (abi == null) {  // null for the universal-debug, universal-release variants
                 output.outputFileName =
-                        "${applicationName}-v${defaultConfig.versionName}-universal.apk"
+                        "${applicationName}-v${defaultConfig.versionName}${localTag}-universal.apk"
             } else {
                 output.versionCodeOverride =
                         defaultConfig.versionCode * 1000 + versionCodes.get(abi)
                 output.outputFileName =
-                        "${applicationName}-v${defaultConfig.versionName}-${abi}.apk"
+                        "${applicationName}-v${defaultConfig.versionName}${localTag}-${abi}.apk"
             }
 
         }

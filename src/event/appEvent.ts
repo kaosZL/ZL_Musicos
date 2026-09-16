@@ -38,6 +38,13 @@ export class AppEvent extends Event {
   }
 
   /**
+   * 歌单导入结果（设置页导入完成后广播，首页「我的歌单」用于显示上一次导入的结果）
+   */
+  songlistImportResult(result: { ok: boolean, message: string }) {
+    this.emit('songlistImportResult', result)
+  }
+
+  /**
    * 音乐信息切换
    */
   musicToggled() {

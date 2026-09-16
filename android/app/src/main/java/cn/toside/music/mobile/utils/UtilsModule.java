@@ -460,6 +460,12 @@ public class UtilsModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
+  public void pushLanSonglists(String songlistsJson, Promise promise) {
+    LanImportServer.setSonglists(songlistsJson);
+    promise.resolve(null);
+  }
+
+  @ReactMethod
   public void generateQRCodeBase64(String text, int size, Promise promise) {
     try {
       BitMatrix matrix = new QRCodeWriter()

@@ -11,6 +11,8 @@ import { Alert } from 'react-native'
 import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
 import { tvColors } from '@/theme/tv'
 import { usePlayerMusicInfo } from '@/store/player/hook'
+import { useMyList } from '@/store/list/hook'
+import listState from '@/store/list/state'
 import { useSettingValue } from '@/store/setting/hook'
 import { clearListMusics, removeListMusics } from '@/core/list'
 import { playList } from '@/core/player/player'
@@ -138,6 +140,12 @@ function TVQueue({ componentId }: { componentId: string }) {
 
   const playModeLabel = PLAY_MODE_LABELS[playMode] ?? '列表循环'
 
+  // 队列的出处：从「我的歌单」播进来的话，tempListMeta.id 就是那个歌单的 id。
+  // 显示出来用户才能确认「我现在放的到底是不是我那张歌单」。
+  const myLists = useMyList()
+  const queueSourceName = myLists.find(l => l.id === listState.tempListMeta.id)?.name
+  const queueHint = `${queueSourceName ? `${tvText.queueFromSonglist}「${queueSourceName}」 · ` : ''}OK 播放歌曲 · 长按 OK 从列表删除`
+
   useTVRemoteActions({
     playPause: () => {
       if (currentMusicInfo.id) {
@@ -172,7 +180,7 @@ function TVQueue({ componentId }: { componentId: string }) {
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={<TVText variant="meta">{tvText.emptyQueueHint}</TVText>}
             ListHeaderComponent={fetchedMusicList.length ? (
-              <TVText variant="caption" color={tvColors.dimText} style={styles.hint}>OK 播放歌曲 · 长按 OK 从列表删除</TVText>
+              <TVText variant="caption" color={tvColors.dimText} style={styles.hint}>{queueHint}</TVText>
             ) : null}
             renderItem={({ item, index }) => {
               const itemKey = getQueueItemKey(item, index)

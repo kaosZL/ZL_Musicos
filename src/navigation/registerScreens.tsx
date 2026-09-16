@@ -14,6 +14,8 @@ import {
   TVHistory,
   TVSettings,
   TVDetail,
+  TVMyList,
+  TVRename,
 } from '@/screens'
 import { Provider } from '@/store/Provider'
 import TVRemoteFocusController from '@/components/TV/TVRemoteFocusController'
@@ -34,6 +36,8 @@ import {
   TV_HISTORY_SCREEN,
   TV_SETTINGS_SCREEN,
   TV_DETAIL_SCREEN,
+  TV_MYLIST_SCREEN,
+  TV_RENAME_SCREEN,
 } from './screenNames'
 import VersionModal from './components/VersionModal'
 import PactModal from './components/PactModal'
@@ -72,6 +76,8 @@ export default () => {
   Navigation.registerComponent(TV_HISTORY_SCREEN, () => WrappedComponent(TVHistory))
   Navigation.registerComponent(TV_SETTINGS_SCREEN, () => WrappedComponent(TVSettings))
   Navigation.registerComponent(TV_DETAIL_SCREEN, () => WrappedComponent(TVDetail))
+  Navigation.registerComponent(TV_MYLIST_SCREEN, () => WrappedComponent(TVMyList))
+  Navigation.registerComponent(TV_RENAME_SCREEN, () => WrappedComponent(TVRename))
 
   console.info('All screens have been registered...')
 }
