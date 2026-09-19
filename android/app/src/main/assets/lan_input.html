@@ -85,7 +85,7 @@ async function doImport() {
   const script = document.getElementById('srcScript').value
   if (!url && !script.trim()) return showMsg('请填写链接或粘贴脚本', true)
   try {
-    const r = await fetch('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(url ? { url } : { script }) })
+    const r = await fetch('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify(url ? { url } : { script }) })
     const d = await r.json()
     if (d.ok) {
       document.getElementById('srcUrl').value = ''
@@ -337,12 +337,12 @@ async function refresh() {
 
 async function removeSource(id, name) {
   if (!confirm('确定删除「' + name + '」吗？')) return
-  await fetch('/api/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+  await fetch('/api/remove', { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ id }) })
   refresh()
 }
 
 async function activate(id) {
-  await fetch('/api/activate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+  await fetch('/api/activate', { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ id }) })
   refresh()
 }
 

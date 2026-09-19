@@ -160,6 +160,29 @@ public class LanImportServer extends NanoHTTPD {
     if (lanListener != null) lanListener.onLanAction(action, payload == null ? "" : payload);
   }
 
+  /**
+   * NanoHTTPD 2.3.1 按 Content-Type 里的 charset 解码 POST body（页面端所有请求都带 charset=utf-8，
+   * 中文可无损通过）。之前这里曾「一律按 ISO-8859-1 重解码」，反而把已正确的中文破坏成一串问号
+   * （晴天 → ??，每个汉字变一个问号）。现在只在字符串里出现 Latin-1 高位区字符（U+0080–U+00FF，
+   * UTF-8 被误解成 ISO-8859-1 的典型乱码特征）且重解码不产生替换符时才修复。
+   */
+  private static String ensureUtf8(String payload) {
+    if (payload == null || payload.isEmpty()) return payload;
+    boolean hasLatin1High = false;
+    for (int i = 0; i < payload.length(); i++) {
+      char c = payload.charAt(i);
+      if (c >= 0x80 && c <= 0xFF) { hasLatin1High = true; break; }
+    }
+    if (!hasLatin1High) return payload;
+    try {
+      String repaired = new String(payload.getBytes("ISO-8859-1"), StandardCharsets.UTF_8);
+      if (repaired.indexOf('\uFFFD') < 0) return repaired;
+    } catch (Exception ignored) {
+      // 保持原样
+    }
+    return payload;
+  }
+
   @Override
   public Response serve(IHTTPSession session) {
     Method method = session.getMethod();
@@ -182,15 +205,7 @@ public class LanImportServer extends NanoHTTPD {
         return json("{\"ok\":false,\"message\":\"请求解析失败\"}");
       }
       String payload = body.get("postData");
-      // Fix Issue #8: NanoHTTPD parseBody decodes POST body as ISO-8859-1 by default.
-      // Re-decode from ISO-8859-1 bytes to UTF-8 to correctly handle Chinese source names.
-      if (payload != null && !payload.isEmpty()) {
-        try {
-          payload = new String(payload.getBytes("ISO-8859-1"), StandardCharsets.UTF_8);
-        } catch (Exception ignored) {
-          // fall back to original payload
-        }
-      }
+      payload = ensureUtf8(payload);
       if ("/api/import".equals(uri)) {
         notify("import", payload);
         return json("{\"ok\":true,\"message\":\"已提交，电视正在导入\"}");

@@ -246,7 +246,8 @@ const matchSongs = async(
   onProgress?: (message: string) => void,
 ) => {
   const matched: LX.Music.MusicInfo[] = []
-  let skipped = 0
+  // 没匹配上的歌名记下来：结算时点名告知，而不是只给一个数量
+  const missed: Array<{ name: string, singer: string }> = []
   let cursor = 0
   const total = songs.length
 
@@ -256,7 +257,7 @@ const matchSongs = async(
       cursor += 1
       const result = await matchOneSong(songs[index])
       if (result) matched.push(result)
-      else skipped += 1
+      else missed.push(songs[index])
       if (onProgress && (index + 1) % 5 === 0) {
         onProgress(`正在匹配歌曲 ${index + 1}/${total}…`)
       }
@@ -264,7 +265,14 @@ const matchSongs = async(
   }
 
   await Promise.all(Array.from({ length: Math.min(SEARCH_CONCURRENCY, total) }, worker))
-  return { matched, skipped }
+  return { matched, missed }
+}
+
+/** 未匹配歌曲的点名展示：最多列 5 首，多了就「等 N 首」，避免结果弹窗被刷爆 */
+const formatMissedNames = (missed: Array<{ name: string, singer: string }>) => {
+  const names = missed.map(s => `${s.name}${s.singer ? ` - ${s.singer}` : ''}`)
+  if (names.length <= 5) return names.join('、')
+  return `${names.slice(0, 5).join('、')} 等共 ${names.length} 首`
 }
 
 const createListsFromParsed = async(
@@ -430,11 +438,13 @@ export const importSonglist = async(
 
   let matchedCount = 0
   let skippedCount = 0
+  let missedNames = ''
   if (songs.length) {
     const targets = songs.slice(0, MAX_SEARCH_LINES)
-    const { matched, skipped } = await matchSongs(targets, onProgress)
+    const { matched, missed } = await matchSongs(targets, onProgress)
     matchedCount = matched.length
-    skippedCount = skipped + Math.max(0, songs.length - MAX_SEARCH_LINES)
+    skippedCount = missed.length + Math.max(0, songs.length - MAX_SEARCH_LINES)
+    if (missed.length) missedNames = formatMissedNames(missed)
     if (matched.length) {
       items.push({
         name: nameHint || defaultListName(),
@@ -470,7 +480,10 @@ export const importSonglist = async(
   const summaries: string[] = []
   if (outcome.listNames.length) summaries.push(`已导入 ${outcome.listNames.length} 个歌单`)
   if (matchedCount) summaries.push(`匹配到 ${matchedCount} 首`)
-  if (skippedCount) summaries.push(`跳过 ${skippedCount} 首（未找到高置信度匹配）`)
+  if (skippedCount) {
+    // 用现有音源搜过但没找到的歌，点名告知（老板 09-19 要求：不存在应该告知）
+    summaries.push(`未匹配 ${skippedCount} 首：${missedNames || '均未在当前音源找到'}`)
+  }
   if (failedLinks.count) summaries.push(`${failedLinks.count} 个链接拉取失败`)
   return {
     ok: true,

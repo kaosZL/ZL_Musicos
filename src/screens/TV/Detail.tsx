@@ -104,6 +104,20 @@ function TVDetail({ componentId, payload }: Props) {
     return () => { mounted = false }
   }, [payload])
 
+  // 本地歌单（userlist）内容变化时实时刷新：
+  // 之前只在挂载时读一次，从播放列表加完歌再回来，看到的还是旧快照，误以为没加进去
+  useEffect(() => {
+    if (payload.type !== 'userlist') return
+    const handleMusicUpdate = async(ids: string[]) => {
+      if (!Array.isArray(ids) || !ids.includes(payload.id)) return
+      const fresh = await getListMusics(payload.id)
+      setList(fresh as unknown as LX.Music.MusicInfoOnline[])
+      setTotal(fresh.length)
+    }
+    global.app_event.on('myListMusicUpdate', handleMusicUpdate)
+    return () => { global.app_event.off('myListMusicUpdate', handleMusicUpdate) }
+  }, [payload])
+
   const getRowKey = useCallback((item: LX.Music.MusicInfoOnline, index: number) => `${item.source}_${item.id}_${index}`, [])
   const getRowHandle = (key?: string | null) => key && rowRefs.current[key] ? findNodeHandle(rowRefs.current[key]) : null
   const bindRowRef = (key: string, syncFirst = false) => (node: FocusNode) => {

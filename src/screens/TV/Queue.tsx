@@ -15,7 +15,7 @@ import { useMyList } from '@/store/list/hook'
 import { getUserLists } from '@/utils/listManage'
 import listState from '@/store/list/state'
 import { useSettingValue } from '@/store/setting/hook'
-import { clearListMusics, removeListMusics, addListMusics } from '@/core/list'
+import { clearListMusics, removeListMusics, addListMusics, getListMusics } from '@/core/list'
 import { playList } from '@/core/player/player'
 import { LIST_IDS, MUSIC_TOGGLE_MODE_LIST } from '@/config/constant'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
@@ -63,13 +63,25 @@ function TVQueue({ componentId }: { componentId: string }) {
 
   const handleAddToSonglist = async(listId: string) => {
     if (!songlistDialog) return
-    const { musicInfos } = songlistDialog
+    const { musicInfos, label } = songlistDialog
     setSonglistDialog(null)
     try {
       await addListMusics(listId, musicInfos, 'new')
+      // 回读校验：写入是静默去重的，不核对的话会出现「提示成功、歌单里却没这首歌」
+      const listAfter = await getListMusics(listId)
+      const idSet = new Set(listAfter.map(m => m.id))
+      const landed = musicInfos.filter(m => idSet.has(m.id)).length
+      if (landed < musicInfos.length) {
+        showLocalDialog({
+          title: '已存在或未写入',
+          message: `${musicInfos.length - landed} 首已在歌单里或未写入，「${label}」现共 ${listAfter.length} 首，可到「我的歌单」核对`,
+          buttons: [{ label: '确定', tone: 'primary' }],
+        })
+        return
+      }
       showLocalDialog({
         title: '添加成功',
-        message: `已将「${songlistDialog.label}」添加到歌单（${musicInfos.length} 首）`,
+        message: `已将「${label}」添加到歌单（${musicInfos.length} 首）`,
         buttons: [{ label: '确定', tone: 'primary' }],
       })
     } catch (err) {
