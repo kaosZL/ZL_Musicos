@@ -104,16 +104,24 @@ function TVQueue({ componentId }: { componentId: string }) {
         })
         return
       }
+      // 只展示最近创建的几个：弹窗按钮太多难选；自动命名的歌单名几乎一样，
+      // 按钮里必须带歌曲数才能分出哪张是哪张（老板 09-19 实测：加完歌不知道加到哪张了）
       const maxButtons = 5
-      const visible = lists.slice(0, maxButtons)
+      const start = Math.max(0, lists.length - maxButtons)
+      const visible = lists.slice(start)
+      const counted = await Promise.all(visible.map(async(list) => ({
+        id: list.id,
+        name: list.name,
+        count: (await getListMusics(list.id)).length,
+      })))
       showLocalDialog({
         title: '选择要添加到的歌单',
-        message: `将「${label}」${musicInfos.length > 1 ? `（${musicInfos.length} 首）` : ''}添加到：`,
+        message: `将「${label}」${musicInfos.length > 1 ? `（${musicInfos.length} 首）` : ''}添加到：${lists.length > visible.length ? `（共 ${lists.length} 个歌单，仅列出最近的 ${visible.length} 个）` : ''}`,
         buttons: [
-          ...visible.map(list => ({
-            label: list.name,
+          ...counted.map(item => ({
+            label: `${item.name}（${item.count} 首）`,
             tone: 'primary' as const,
-            onPress: () => { void handleAddToSonglist(list.id) },
+            onPress: () => { void handleAddToSonglist(item.id) },
           })),
           { label: '取消', tone: 'dark' as const },
         ],

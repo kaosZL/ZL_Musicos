@@ -9,7 +9,7 @@ import Focusable from '@/components/TV/Focusable'
 import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
 import { tvColors, tvSize } from '@/theme/tv'
 import { useMyList } from '@/store/list/hook'
-import { removeUserList } from '@/core/list'
+import { removeUserList, getListMusics } from '@/core/list'
 import { LIST_IDS } from '@/config/constant'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { pushTVDetailScreen, pushTVPlayerScreen, pushTVRenameScreen, pushTVSettingsScreen } from '@/navigation/navigation'
@@ -44,6 +44,29 @@ function TVMyList({ componentId }: { componentId: string }) {
     () => allLists.filter((item): item is LX.List.UserListInfo => item.id !== LIST_IDS.DEFAULT && item.id !== LIST_IDS.LOVE),
     [allLists],
   )
+  // 卡片带歌曲数：自动命名的歌单名几乎一样，没数量分不出哪张是哪张（09-19 实测：加完歌不知道加到哪张了）；
+  // 歌单内容/列表结构变化时实时重算，从播放列表加完歌回本页，数量立刻更新
+  const [songCounts, setSongCounts] = useState<Record<string, number>>({})
+  useEffect(() => {
+    let mounted = true
+    const load = async() => {
+      const entries = await Promise.all(userSonglists.map(async(list): Promise<[string, number]> => [list.id, (await getListMusics(list.id)).length]))
+      if (!mounted) return
+      setSongCounts(Object.fromEntries(entries))
+    }
+    void load()
+    const handleMusicUpdate = (ids: string[]) => {
+      if (ids.some(id => userSonglists.some(list => list.id === id))) void load()
+    }
+    const handleListsChanged = () => { void load() }
+    global.app_event.on('myListMusicUpdate', handleMusicUpdate)
+    global.state_event.on('mylistUpdated', handleListsChanged)
+    return () => {
+      mounted = false
+      global.app_event.off('myListMusicUpdate', handleMusicUpdate)
+      global.state_event.off('mylistUpdated', handleListsChanged)
+    }
+  }, [userSonglists])
   // 手机端操作歌单的结果（由设置页广播），直接显示在本页
   const [importResult, setImportResult] = useState<SonglistResult | null>(() => lastSonglistResultCache)
   const [localDialog, setLocalDialog] = useState<TVDialogRequest | null>(null)
@@ -229,7 +252,7 @@ function TVMyList({ componentId }: { componentId: string }) {
                   key={`mylist_${item.id}`}
                   ref={getCardRefCallback(`mylist_${item.id}`) as any}
                   title={item.name}
-                  subtitle={item.source ? getSourceName(item.source) : tvText.songlist}
+                  subtitle={`${item.source ? getSourceName(item.source) : tvText.songlist} · ${songCounts[item.id] ?? '…'} 首`}
                   meta={tvText.longPressManage}
                   size="medium"
                   tint={index % 2 ? tvColors.primary : tvColors.purple}
