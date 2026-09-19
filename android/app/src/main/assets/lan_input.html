@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>ZL-Music 音源导入</title>
+<title>ZL-Music 导入</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0d1117; color: #e6edf3; padding: 20px; max-width: 640px; margin: 0 auto; }
@@ -21,6 +21,8 @@
   button.danger { background: #b62324; }
   .msg { font-size: 13px; margin-top: 10px; color: #7ee787; min-height: 18px; }
   .msg.err { color: #ffa198; }
+  .hint { font-size: 12px; color: #8b949e; margin-top: 10px; line-height: 1.6; }
+  input[type=file] { padding: 10px; font-size: 13px; }
   .item { background: rgba(255,255,255,0.05); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
   .item .name { font-size: 15px; font-weight: 600; }
   .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 8px; margin-left: 6px; background: #1f6feb33; color: #79c0ff; }
@@ -31,7 +33,7 @@
 </style>
 </head>
 <body>
-<h1>ZL-Music 音源导入</h1>
+<h1>ZL-Music 导入</h1>
 <p class="tip">请确保手机与电视/盒子处于同一局域网 · 提交后电视端立即生效</p>
 
 <section>
@@ -42,6 +44,28 @@
   <textarea id="srcScript" placeholder="// 粘贴完整音源 JS 脚本"></textarea>
   <button onclick="doImport()">导入到电视</button>
   <p id="importMsg" class="msg"></p>
+</section>
+
+<section>
+  <h2>导入歌单</h2>
+  <label>方式一：粘贴歌单链接 / 歌单 ID / 歌曲清单（一行一个）</label>
+  <textarea id="slText" placeholder="https://music.163.com/playlist?id=123456&#10;或者：&#10;晴天 - 周杰伦&#10;稻香 - 周杰伦"></textarea>
+  <label>方式二：选择文件</label>
+  <input id="slFile" type="file">
+  <label>歌单名称（选填，不填自动命名）</label>
+  <input id="slName" placeholder="例如：车载歌单" autocapitalize="off" autocorrect="off" maxlength="40">
+  <button onclick="doImportSonglist()">导入歌单到电视</button>
+  <p id="songlistMsg" class="msg"></p>
+  <p class="hint">支持：各平台歌单链接（网易云 / QQ音乐 / 酷狗 / 酷我 / 咪咕）、洛雪导出的歌单文件（.json / .lxmc）、压缩包或 .crx 里的歌单文件，以及「歌名 - 歌手」纯文本清单。</p>
+</section>
+
+<section>
+  <h2>歌单改名 / 删除</h2>
+  <button class="ghost" onclick="loadSonglists()">读取电视上的歌单</button>
+  <div id="slList"><p class="empty">点上面的按钮读取</p></div>
+  <button onclick="saveSonglists()">保存改名</button>
+  <p id="renameMsg" class="msg"></p>
+  <p class="hint">改完点「保存改名」，电视端「我的歌单」会立即更新。电视遥控器输入不了中文，所以改名放在手机页做；导入错了的歌单也可以在这里点「删除这个歌单」直接删掉（删了不可恢复）。</p>
 </section>
 
 <section>
@@ -73,6 +97,233 @@ async function doImport() {
     }
   } catch (e) {
     showMsg('网络错误，请重试', true)
+  }
+}
+
+function showSonglistMsg(text, isErr) {
+  const el = document.getElementById('songlistMsg')
+  el.textContent = text
+  el.className = isErr ? 'msg err' : 'msg'
+}
+
+// 把二进制转成 base64（分块处理，避免超长参数把 String.fromCharCode 打爆）
+function bufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk))
+  }
+  return btoa(binary)
+}
+
+// 按内容嗅探，而不是按后缀名：zip / crx 找 PK 头，gzip 看魔数，其余按文本处理
+function sniffKind(bytes) {
+  if (bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) return 'gzip'
+  const scan = Math.min(bytes.length - 3, 65536)
+  for (let i = 0; i < scan; i++) {
+    if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x03 && bytes[i + 3] === 0x04) return 'zip'
+  }
+  const probe = Math.min(bytes.length, 4096)
+  for (let i = 0; i < probe; i++) {
+    if (bytes[i] === 0) return 'binary'
+  }
+  return 'text'
+}
+
+// UTF-8 优先，乱码较多时回退 GBK（国内 txt 歌单很常见）
+function decodeTextSmart(buffer) {
+  const bytes = new Uint8Array(buffer)
+  try {
+    const utf8 = new TextDecoder('utf-8').decode(bytes)
+    const broken = (utf8.match(/\uFFFD/g) || []).length
+    if (broken <= 2) return utf8
+    return new TextDecoder('gbk').decode(bytes)
+  } catch (e) {
+    return new TextDecoder('utf-8').decode(bytes)
+  }
+}
+
+async function doImportSonglist() {
+  const text = document.getElementById('slText').value
+  const listName = document.getElementById('slName').value.trim()
+  const input = document.getElementById('slFile')
+  const file = input.files && input.files[0]
+  const MAX_BYTES = 20 * 1024 * 1024
+  const payload = { text: text, listName: listName, fileName: '', fileText: '', fileBase64: '' }
+  if (file) {
+    if (file.size > MAX_BYTES) return showSonglistMsg('文件太大（超过 20MB），请换一个小一点的文件', true)
+    payload.fileName = file.name
+    try {
+      const buffer = await file.arrayBuffer()
+      const kind = sniffKind(new Uint8Array(buffer))
+      if (kind === 'text') payload.fileText = decodeTextSmart(buffer)
+      else payload.fileBase64 = bufferToBase64(buffer)
+    } catch (e) {
+      return showSonglistMsg('读取文件失败，请重试', true)
+    }
+  }
+  if (!payload.text.trim() && !payload.fileText.trim() && !payload.fileBase64) {
+    return showSonglistMsg('请粘贴链接或歌单清单，或者选择一个文件', true)
+  }
+  showSonglistMsg('正在提交到电视…')
+  try {
+    const r = await fetch('/api/songlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(payload)
+    })
+    const d = await r.json()
+    if (d && d.ok) {
+      document.getElementById('slText').value = ''
+      document.getElementById('slFile').value = ''
+      document.getElementById('slName').value = ''
+      showSonglistMsg('已提交，请查看电视上的导入结果')
+    } else {
+      showSonglistMsg((d && d.message) || '提交失败', true)
+    }
+  } catch (e) {
+    showSonglistMsg('网络错误，请重试', true)
+  }
+}
+
+// 歌单改名：原始名称快照，用来判断哪些被改动过
+let slOriginal = {}
+
+function showRenameMsg(text, isErr) {
+  const el = document.getElementById('renameMsg')
+  el.textContent = text
+  el.className = isErr ? 'msg err' : 'msg'
+}
+
+// 读取电视端推送过来的「我的歌单」快照（原生层缓存，电视端歌单有变化时会重新推送）
+async function fetchSonglists() {
+  const r = await fetch('/api/songlists')
+  const d = await r.json()
+  return (d && d.lists) || []
+}
+
+// 渲染歌单列表：一个名称输入框 + 一个删除按钮
+function renderSonglists(lists) {
+  const box = document.getElementById('slList')
+  slOriginal = {}
+  if (!lists.length) {
+    box.innerHTML = '<p class="empty">电视上还没有自建歌单，先在「导入歌单」里导一个</p>'
+    return
+  }
+  box.innerHTML = ''
+  lists.forEach(item => {
+    slOriginal[item.id] = item.name
+    const wrap = document.createElement('div')
+    wrap.className = 'item'
+    const label = document.createElement('label')
+    label.textContent = '歌单名称'
+    const input = document.createElement('input')
+    input.className = 'slNameInput'
+    input.dataset.id = item.id
+    input.value = item.name
+    input.setAttribute('autocapitalize', 'off')
+    input.setAttribute('autocorrect', 'off')
+    input.maxLength = 40
+    wrap.appendChild(label)
+    wrap.appendChild(input)
+    const ops = document.createElement('div')
+    ops.className = 'ops'
+    const delBtn = document.createElement('button')
+    delBtn.className = 'danger'
+    delBtn.textContent = '删除这个歌单'
+    delBtn.onclick = () => removeSonglist(item.id, item.name)
+    ops.appendChild(delBtn)
+    wrap.appendChild(ops)
+    box.appendChild(wrap)
+  })
+}
+
+async function loadSonglists() {
+  showRenameMsg('正在读取…')
+  try {
+    const lists = await fetchSonglists()
+    renderSonglists(lists)
+    showRenameMsg(lists.length ? '已读取 ' + lists.length + ' 个歌单，改完点下方的「保存改名」' : '')
+  } catch (e) {
+    showRenameMsg('读取失败，请确认电视端仍停在扫码导入页', true)
+  }
+}
+
+// 提交之后回读快照确认是否真的生效。
+// 电视端如果已经切到别的页面，「手机扫码导入」的监听就不在了，提交会成功但不会有任何变化，
+// 所以必须回读核对，否则用户会以为改好了。
+async function confirmApplied(check, okText) {
+  await new Promise(resolve => setTimeout(resolve, 900))
+  let lists
+  try {
+    lists = await fetchSonglists()
+  } catch (e) {
+    showRenameMsg('已提交，但读不到电视端的结果，请看电视屏幕上的提示', true)
+    return
+  }
+  if (check(lists)) {
+    renderSonglists(lists)
+    showRenameMsg(okText)
+  } else {
+    // 失败时不重渲染，保留用户刚才的输入，方便他们重试
+    showRenameMsg('电视端没有响应：请确认电视停在设置页的「手机扫码导入」（显示二维码）界面，再重试一次', true)
+  }
+}
+
+// 删除歌单：点了确认立即生效，不走下面的「保存改名」
+async function removeSonglist(id, name) {
+  if (!confirm('确定删除歌单「' + name + '」吗？歌单和它里面的歌曲都会从电视上移除，无法恢复。')) return
+  showRenameMsg('正在删除…')
+  try {
+    const r = await fetch('/api/songlist-remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ ids: [id] })
+    })
+    const d = await r.json()
+    if (!d || !d.ok) {
+      showRenameMsg((d && d.message) || '删除失败', true)
+      return
+    }
+    await confirmApplied(lists => !lists.some(item => item.id === id), '已删除，电视端「我的歌单」已更新')
+  } catch (e) {
+    showRenameMsg('网络错误，请重试', true)
+  }
+}
+
+// 只提交改动过的条目
+async function saveSonglists() {
+  const inputs = document.querySelectorAll('.slNameInput')
+  const renames = []
+  inputs.forEach(input => {
+    const id = input.dataset.id
+    const name = input.value.trim()
+    if (!id || !name || slOriginal[id] === name) return
+    renames.push({ id: id, name: name })
+  })
+  if (!renames.length) {
+    showRenameMsg('没有修改任何名称', true)
+    return
+  }
+  showRenameMsg('正在保存…')
+  try {
+    const r = await fetch('/api/songlist-rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ renames: renames })
+    })
+    const d = await r.json()
+    if (!d || !d.ok) {
+      showRenameMsg((d && d.message) || '提交失败', true)
+      return
+    }
+    await confirmApplied(
+      lists => renames.every(item => lists.some(list => list.id === item.id && list.name === item.name)),
+      '已生效，电视端「我的歌单」已更新'
+    )
+  } catch (e) {
+    showRenameMsg('网络错误，请重试', true)
   }
 }
 

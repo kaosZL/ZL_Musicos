@@ -32,6 +32,11 @@ const Key = forwardRef<ComponentRef<typeof Focusable>, ComponentProps<typeof Foc
 const TVSearchKeyboard = ({ onKeyPress, onBackspace, onClear, onSubmit, firstKeyRef, onFirstKeyReady, nextFocusUp, topRowFocusUpTargets, nextFocusRight }: Props) => {
   const keyRows = useMemo(() => [...rows, [tvText.space, tvText.backspace, tvText.clear, tvText.search]], [])
   const keyRefs = useRef<Record<string, ComponentRef<typeof Focusable> | null>>({})
+  // 已通知过 onFirstKeyReady 的节点，用于去重。
+  // bindKeyRef 每次渲染都会返回新函数，React 每次提交都会先以 null、再以节点调用它；
+  // 若无条件通知，onFirstKeyReady（搜索页传的是 queueFocusRefresh）就会
+  // setState → 再渲染 → 再通知，形成每帧一次的重渲染死循环，输入时明显发滞。
+  const firstKeyNodeRef = useRef<ComponentRef<typeof Focusable> | null>(null)
   const getKeyId = (rowIndex: number, colIndex: number) => `${rowIndex}_${colIndex}`
   const getKeyHandle = (rowIndex: number, colIndex: number, clampColumn = false) => {
     const row = keyRows[rowIndex]
@@ -46,7 +51,11 @@ const TVSearchKeyboard = ({ onKeyPress, onBackspace, onClear, onSubmit, firstKey
     keyRefs.current[getKeyId(rowIndex, colIndex)] = node
     if (rowIndex === 0 && colIndex === 0 && firstKeyRef) {
       firstKeyRef.current = node
-      if (node) onFirstKeyReady?.()
+      // 只在节点真正变化时通知一次，避免上面说明的重渲染死循环
+      if (node && firstKeyNodeRef.current !== node) {
+        firstKeyNodeRef.current = node
+        onFirstKeyReady?.()
+      }
     }
   }
   const getKeyPress = (label: string) => {

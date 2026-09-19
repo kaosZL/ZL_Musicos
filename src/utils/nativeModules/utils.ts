@@ -145,6 +145,10 @@ export const generateQRCodeBase64 = (text: string, size = 560) => UtilsModule.ge
 
 export const pushLanSources = (sourcesJson: string) => UtilsModule.pushLanSources(sourcesJson) as Promise<void>
 
+export const pushLanSonglists = async(songlistsJson: string): Promise<void> => {
+  await UtilsModule.pushLanSonglists(songlistsJson)
+}
+
 export const onLanSourceEvent = (handler: (event: { action: string, payload: string }) => void): (() => void) => {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   const eventEmitter = new NativeEventEmitter(UtilsModule)

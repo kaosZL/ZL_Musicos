@@ -14,6 +14,8 @@ import {
   TV_HISTORY_SCREEN,
   TV_SETTINGS_SCREEN,
   TV_DETAIL_SCREEN,
+  TV_MYLIST_SCREEN,
+  TV_RENAME_SCREEN,
   PACT_MODAL,
   SYNC_MODE_MODAL,
 } from './screenNames'
@@ -576,6 +578,71 @@ export const pushTVDetailScreen = (componentId: string, payload: TVDetailPayload
       name: TV_DETAIL_SCREEN,
       passProps: {
         payload,
+      },
+      options: {
+        topBar: {
+          visible: false,
+          height: 0,
+          drawBehind: false,
+        },
+        statusBar: {
+          drawBehind: true,
+          visible: false,
+          style: getStatusBarStyle(theme.isDark),
+        },
+        navigationBar: {
+          backgroundColor: TV_BACKGROUND_COLOR,
+        },
+        layout: {
+          componentBackgroundColor: TV_BACKGROUND_COLOR,
+        },
+        animations: {
+          push: TV_PUSH_ANIMATION,
+          pop: TV_POP_ANIMATION,
+        },
+      },
+    },
+  })
+}
+
+export const pushTVMyListScreen = (componentId: string) => {
+  const theme = themeState.theme
+  void Navigation.push(componentId, {
+    component: {
+      name: TV_MYLIST_SCREEN,
+      options: {
+        topBar: {
+          visible: false,
+          height: 0,
+          drawBehind: false,
+        },
+        statusBar: {
+          drawBehind: true,
+          visible: false,
+          style: getStatusBarStyle(theme.isDark),
+        },
+        navigationBar: {
+          backgroundColor: TV_BACKGROUND_COLOR,
+        },
+        layout: {
+          componentBackgroundColor: TV_BACKGROUND_COLOR,
+        },
+        animations: {
+          push: TV_PUSH_ANIMATION,
+          pop: TV_POP_ANIMATION,
+        },
+      },
+    },
+  })
+}
+
+export const pushTVRenameScreen = (componentId: string, payload: { id: string, name: string }) => {
+  const theme = themeState.theme
+  void Navigation.push(componentId, {
+    component: {
+      name: TV_RENAME_SCREEN,
+      passProps: {
+        ...payload,
       },
       options: {
         topBar: {

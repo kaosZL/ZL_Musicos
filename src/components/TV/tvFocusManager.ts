@@ -151,6 +151,38 @@ const getCandidateScore = (from: FocusRect, to: FocusRect, direction: Direction)
   }
 }
 
+/**
+ * 两个矩形在垂直方向是否有重叠（用于左右移动判定「同一排」）。
+ */
+const hasVerticalOverlap = (from: FocusRect, to: FocusRect) =>
+  Math.min(from.y + from.height, to.y + to.height) > Math.max(from.y, to.y)
+
+/**
+ * 两个矩形在水平方向是否有重叠（用于上下移动判定「同一列」）。
+ */
+const hasHorizontalOverlap = (from: FocusRect, to: FocusRect) =>
+  Math.min(from.x + from.width, to.x + to.width) > Math.max(from.x, to.x)
+
+/**
+ * 从候选里挑出「同排 / 同列」的那些。
+ *
+ * 为什么需要这一步：getCandidateScore 里主轴差 ×1000、副轴差 ×1，
+ * 于是「副轴偏离」的权重几乎为 0 —— 只要在主轴方向上近 1px（1000 分），
+ * 就足以压过一个副轴偏离几百像素的候选。
+ * 典型翻车现场：顶部导航条（tab）与下方内容卡片在水平方向上落在同一段 x 区间时，
+ * 从卡片按「右」会被导航条抢走（导航条水平上近几像素，竖直上偏了三五百像素），
+ * 反之从导航条按「左」也会跳到下方卡片上。用户表现就是「遥控器选不中那张卡」。
+ * 这里先只看「有重叠」的候选（同一排 / 同一列），没有重叠候选时才退回原来的全局打分。
+ */
+const getSameBandCandidates = (from: FocusRect, candidates: Array<{ target: FocusTarget, score: number }>, direction: Direction) => {
+  const horizontalMove = direction === 'left' || direction === 'right'
+  const inBand = candidates.filter(({ target }) => {
+    if (!target.rect) return false
+    return horizontalMove ? hasVerticalOverlap(from, target.rect) : hasHorizontalOverlap(from, target.rect)
+  })
+  return inBand.length ? inBand : candidates
+}
+
 export const setActiveTVFocusScope = (scopeId: string) => {
   if (activeScopeId !== scopeId) {
     clearActiveTarget()
@@ -242,12 +274,21 @@ export const moveTVFocus = async(direction: Direction) => {
     return true
   }
 
-  let best: { target: FocusTarget, score: number } | null = null
+  const candidates: Array<{ target: FocusTarget, score: number }> = []
   for (const target of measured) {
     if (target.id === active.id || !target.rect) continue
     const score = getCandidateScore(active.rect, target.rect, direction)
     if (score == null) continue
-    if (!best || score < best.score) best = { target, score }
+    candidates.push({ target, score })
+  }
+  if (!candidates.length) return false
+
+  // 同排（左右移动）/ 同列（上下移动）优先，避免顶部导航条抢走同一排的卡片，详见 getSameBandCandidates
+  const pool = getSameBandCandidates(active.rect, candidates, direction)
+
+  let best: { target: FocusTarget, score: number } | null = null
+  for (const candidate of pool) {
+    if (!best || candidate.score < best.score) best = candidate
   }
 
   if (!best) return false

@@ -34,6 +34,12 @@ type TabNode = ComponentRef<typeof Focusable> | null
 
 const TVTopTabs = ({ items, activeId, subtitle, hasTVPreferredFocus, nextFocusDown, activeTabRef, onActiveTabReady }: Props) => {
   const tabRefs = useRef<Record<string, TabNode>>({})
+  // 已通知过 onActiveTabReady 的节点，用于去重。
+  // 下面的 ref 是内联函数，React 每次提交都会先以 null、再以节点调用它；
+  // 若无条件通知，onActiveTabReady（各屏传的都是 queueFocusRefresh）就会
+  // setState → 再渲染 → 再通知，形成每帧一次的重渲染死循环，
+  // 整个 TV 界面发滞、遥控器换焦点明显变慢。
+  const readyNodeRef = useRef<TabNode>(null)
   const activeIndex = Math.max(0, items.findIndex(item => item.id === activeId))
   const getHandle = (index: number) => {
     const item = items[index]
@@ -56,7 +62,11 @@ const TVTopTabs = ({ items, activeId, subtitle, hasTVPreferredFocus, nextFocusDo
               tabRefs.current[item.id] = node
               if (item.id === activeId && activeTabRef) {
                 activeTabRef.current = node
-                if (node) onActiveTabReady?.()
+                // 只在节点真正变化时通知一次，避免上面说明的重渲染死循环
+                if (node && readyNodeRef.current !== node) {
+                  readyNodeRef.current = node
+                  onActiveTabReady?.()
+                }
               }
             }}
             item={item}
@@ -96,7 +106,7 @@ const styles: Record<string, ViewStyle | TextStyle> = {
   },
   tab: {
     minHeight: tvSize(48),
-    paddingHorizontal: tvSize(20),
+    paddingHorizontal: tvSize(16),
     borderRadius: tvTokens.radiusPill,
     alignItems: 'center',
     justifyContent: 'center',

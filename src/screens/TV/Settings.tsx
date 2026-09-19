@@ -1,21 +1,24 @@
-import { memo, useEffect, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
 import { Image, ScrollView, View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVText from '@/components/TV/TVText'
 import TVButton from '@/components/TV/TVButton'
 import TVSettingsPane from '@/components/TV/TVSettingsPane'
-import { showTVDialog, type TVDialogButtonConfig } from '@/components/TV/TVDialog'
+import TVDialog, { showTVDialog, type TVDialogButtonConfig, type TVDialogRequest } from '@/components/TV/TVDialog'
 import Focusable from '@/components/TV/Focusable'
-import { tvColors, tvFont, tvSize } from '@/theme/tv'
+import { tvColors, tvSize } from '@/theme/tv'
 import { useSettingValue } from '@/store/setting/hook'
 import { usePlayerMusicInfo } from '@/store/player/hook'
+import { useMyList } from '@/store/list/hook'
 import { useStatus, useUserApiList } from '@/store/userApi/hook'
 import apiSourceInfo from '@/utils/musicSdk/api-source-info'
+import { LIST_IDS } from '@/config/constant'
 import { setApiSource } from '@/core/apiSource'
 import { updateSetting } from '@/core/common'
+import { removeUserList, updateUserList } from '@/core/list'
 import { httpFetch } from '@/utils/request'
-import { generateQRCodeBase64, onLanSourceEvent, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
+import { generateQRCodeBase64, onLanSourceEvent, pushLanSonglists, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
 import { importUserApi, removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
@@ -24,6 +27,7 @@ import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { dot, tvText } from './labels'
+import { importSonglist } from './songlistImport'
 import { createTVTabs, getSourceName } from './utils'
 import { TV_CURRENT_VERSION, checkTVUpdate, downloadTVUpdate, getDownloadedTVUpdatePath, installTVUpdate, type TVUpdateInfo } from './update'
 
@@ -37,6 +41,12 @@ interface SourceItem {
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
 type TVUpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'error'
+// 原生局域网服务（LanImportServer）是【单例】，生命周期比本页长：
+// 一旦起来就会一直跑到 stopServer() 为止。因此同一时刻只能有一个 Settings 实例「拥有」这个会话，
+// 否则从设置页再 push 一个设置页时，同一次手机提交会被两个实例各处理一遍（歌单被导入两遍）。
+// 这个 token 记录「当前会话的归属实例」。
+let lanSessionOwner: symbol | null = null
+
 const DEFAULT_SOURCE_FOCUS_KEY = '__default__'
 const getFocusKey = (id: string) => id || DEFAULT_SOURCE_FOCUS_KEY
 const getHandleFromMap = (mapRef: MutableRefObject<FocusRefMap>, key?: string | null) => {
@@ -78,6 +88,13 @@ function TVSettings({ componentId }: { componentId: string }) {
   const [qrImage, setQrImage] = useState('')
   const [lanRunning, setLanRunning] = useState(false)
   const [lanMessage, setLanMessage] = useState('')
+  const [lanMessageOk, setLanMessageOk] = useState(false)
+  // 手机侧操作（导入/改名/删除）的最终结果弹窗。
+  // 用本页自己的 TVDialog 而不是全局 tipDialog：全局 showTVDialog 只会投给「最后挂载的
+  // TVDialogHost」，而各屏 pop 时它的 cleanup 会把 activeListener 置 null、且不再重注册，
+  // 于是全局弹窗有可能静默失效 —— 用户就又变成「啥也没看到」。本页自己弹最稳。
+  const [lanResultDialog, setLanResultDialog] = useState<TVDialogRequest | null>(null)
+  const lanInstanceToken = useRef<symbol>(Symbol('tv-settings'))
   const lanButtonFocus = useTVFocusRef()
   const lanHandlerRef = useRef<((action: string, payload: string) => void) | null>(null)
   const sourceScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
@@ -117,6 +134,12 @@ function TVSettings({ componentId }: { componentId: string }) {
   ]), [defaultSources, presetSources])
 
   const userApiById = useMemo(() => new Map(userApiList.map(item => [item.id, item])), [userApiList])
+  // 「我的歌单」快照：推给原生层缓存，手机页读取后在手机上改名（TV 屏上无法输入中文）
+  const allLists = useMyList()
+  const userSonglists = useMemo(
+    () => allLists.filter((item): item is LX.List.UserListInfo => item.id !== LIST_IDS.DEFAULT && item.id !== LIST_IDS.LOVE),
+    [allLists],
+  )
   const allSources = useMemo<SourceItem[]>(() => [
     ...userApiList.map(item => ({
       id: item.id,
@@ -231,14 +254,31 @@ function TVSettings({ componentId }: { componentId: string }) {
     }
   }
 
-  const pushLanSourcesSnapshot = () => {
+  const pushLanSourcesSnapshot = useCallback(() => {
     try {
-      pushLanSources(JSON.stringify({
+      void pushLanSources(JSON.stringify({
         sources: allSources.map(src => ({ id: src.id, name: src.name, active: apiSource === src.id, isUser: userApiById.has(src.id) })),
       }))
     } catch (err: unknown) {
       // 快照推送失败静默忽略
     }
+  }, [allSources, apiSource, userApiById])
+
+  const pushLanSonglistsSnapshot = useCallback(() => {
+    try {
+      void pushLanSonglists(JSON.stringify({
+        lists: userSonglists.map(item => ({ id: item.id, name: item.name })),
+      }))
+    } catch (err: unknown) {
+      // 快照推送失败静默忽略
+    }
+  }, [userSonglists])
+
+  // 手机侧操作的最终结果除了写页面常显文案，再弹一次本页弹窗 —— 用户就是靠这个知道「到底成没成」。
+  // 之前只写 setLanMessage，而它在右栏最下方、导入结束时也不会自动滚动过去，用户根本看不到，
+  // 只能靠「歌单卡有没有出现」来猜。
+  const showLanResult = (title: string, message: string) => {
+    setLanResultDialog({ title, message, buttons: [{ label: tvText.knowIt, tone: 'primary' }] })
   }
 
   const handleLanSourceEvent = async(action: string, payload: string) => {
@@ -252,6 +292,7 @@ function TVSettings({ componentId }: { componentId: string }) {
           return
         }
         await importUserApi(script)
+        setLanMessageOk(true)
         setLanMessage('手机导入成功')
       } else if (action === 'remove') {
         const data = JSON.parse(payload || '{}') as { id?: string }
@@ -259,35 +300,160 @@ function TVSettings({ componentId }: { componentId: string }) {
       } else if (action === 'activate') {
         const data = JSON.parse(payload || '{}') as { id?: string }
         if (data.id) setApiSource(data.id)
+      } else if (action === 'songlist') {
+        const data = JSON.parse(payload || '{}') as {
+          text?: string
+          fileText?: string
+          listName?: string
+          fileName?: string
+        }
+        // 原生层已经把压缩包 / base64 展开过，这里 text + fileText 拼一起再解析
+        const rawText = [data.text ?? '', data.fileText ?? ''].filter(item => item.trim()).join('\n')
+        if (!rawText.trim()) {
+          setLanMessageOk(false)
+          setLanMessage('手机提交的歌单内容为空')
+          global.app_event.songlistImportResult({ ok: false, message: '手机提交的歌单内容为空' })
+          showLanResult(tvText.importFailed, '手机提交的歌单内容为空')
+          return
+        }
+        setLanMessageOk(false)
+        const outcome = await importSonglist(rawText, {
+          listName: data.listName,
+          fileName: data.fileName,
+          onProgress: setLanMessage,
+        })
+        setLanMessageOk(outcome.ok)
+        setLanMessage(outcome.message)
+        // 同时广播给首页「我的歌单」，让用户不用回到设置页也能看到导入结果
+        global.app_event.songlistImportResult({ ok: outcome.ok, message: outcome.message })
+        showLanResult(outcome.ok ? tvText.importSuccess : tvText.importFailed, outcome.message)
+      } else if (action === 'songlist-rename') {
+        // 手机页改名：拿本地列表补全其余字段（locationUpdateTime 等），只覆盖 name
+        const data = JSON.parse(payload || '{}') as { renames?: Array<{ id?: string, name?: string }> }
+        const infos: LX.List.UserListInfo[] = []
+        for (const item of data.renames ?? []) {
+          if (!item.id) continue
+          const name = item.name?.trim()
+          if (!name) continue
+          const target = userSonglists.find(list => list.id === item.id)
+          if (!target || target.name === name) continue
+          infos.push({ ...target, name })
+        }
+        if (!infos.length) {
+          setLanMessageOk(false)
+          setLanMessage('没有需要修改的歌单名')
+          return
+        }
+        await updateUserList(infos)
+        const renamedMessage = `已重命名 ${infos.length} 个歌单`
+        setLanMessageOk(true)
+        setLanMessage(renamedMessage)
+        global.app_event.songlistImportResult({ ok: true, message: renamedMessage })
+        showLanResult(tvText.renameDone, renamedMessage)
+      } else if (action === 'songlist-remove') {
+        // 手机页删除歌单：这里是唯一的删除入口，删完同步广播给首页
+        const data = JSON.parse(payload || '{}') as { id?: string, ids?: Array<string | undefined> }
+        const ids: string[] = []
+        for (const id of data.ids ?? []) { if (id) ids.push(id) }
+        if (!ids.length && data.id) ids.push(data.id)
+        // 手机页拿到的是上一次推送的快照，可能已经过期（比如刚在电视上删过）
+        const existingIds = ids.filter(id => userSonglists.some(list => list.id === id))
+        if (!existingIds.length) {
+          setLanMessageOk(false)
+          setLanMessage(ids.length ? '电视上已经没有这些歌单了，请重新读取' : '没有指定要删除的歌单')
+          return
+        }
+        await removeUserList(existingIds)
+        const removedMessage = existingIds.length > 1 ? `已删除 ${existingIds.length} 个歌单` : '已删除歌单'
+        setLanMessageOk(true)
+        setLanMessage(removedMessage)
+        global.app_event.songlistImportResult({ ok: true, message: removedMessage })
+        showLanResult(tvText.deleteSonglistDone, removedMessage)
       }
     } catch (err: unknown) {
-      setLanMessage(err instanceof Error ? err.message : '手机操作失败')
+      const message = err instanceof Error ? err.message : '手机操作失败'
+      setLanMessageOk(false)
+      setLanMessage(message)
+      global.app_event.songlistImportResult({ ok: false, message })
+      showLanResult(tvText.importFailed, message)
     }
   }
   lanHandlerRef.current = (action: string, payload: string) => { void handleLanSourceEvent(action, payload) }
 
+  // 订阅跟「本页是否挂载」走，而不是跟「二维码是否打开」走。
+  // 旧写法（`if (!lanRunning) return` + 依赖 lanRunning）有两个丢事件窗口：
+  //   ① 原生服务是单例、本页卸载时并不会停服 —— 订阅被 cleanup 移除后，手机页面还开着、
+  //      还能继续「提交成功」，而电视侧 JS 已经没人接（原生只 emit、不回放）
+  //   ② 就算留在本页，重新按「手机扫码导入」时 setLanRunning(true) 排在两个 await 之后
+  //      （startLanImportServer + generateQRCodeBase64），这期间到达的事件一样会被丢掉
+  // 现在改成挂载即订阅，并在卸载时把「订阅没了 → 服务也停掉」这条对齐。
+  useEffect(() => {
+    const token = lanInstanceToken.current
+    const off = onLanSourceEvent((event) => {
+      // 只让当前会话的归属实例处理，避免「设置页里再 push 一个设置页」时同一件事被处理两遍
+      if (lanSessionOwner !== token) return
+      void lanHandlerRef.current?.(event.action, event.payload)
+    })
+    return () => {
+      off()
+      // 生命周期对齐：本页一离开，订阅就没了；此时必须把原生服务一起停掉，
+      // 否则手机页面还能继续「提交成功」，而电视上永远不会有人响应。
+      if (lanSessionOwner === token) {
+        lanSessionOwner = null
+        void stopLanImportServer()
+      }
+    }
+  }, [])
+
+  // 快照推送：扫码页一打开就立刻推一次，之后内容一变就补推（手机页读它做「歌单改名 / 删除」）
   useEffect(() => {
     if (!lanRunning) return
     pushLanSourcesSnapshot()
-    return onLanSourceEvent((event) => { void lanHandlerRef.current?.(event.action, event.payload) })
-  }, [lanRunning, allSources, apiSource, userApiById])
+  }, [lanRunning, pushLanSourcesSnapshot])
+
+  useEffect(() => {
+    if (!lanRunning) return
+    pushLanSonglistsSnapshot()
+  }, [lanRunning, pushLanSonglistsSnapshot])
 
   const handleOpenLanImport = async() => {
     setLanMessage('')
+    setLanMessageOk(false)
     try {
       const { ip, port } = await startLanImportServer(9527)
+      // 立刻接管会话：订阅在挂载时就已经挂上（见上面的 effect），所以从这一刻起
+      // 手机推来的事件就有人处理，不必等二维码渲染完成 —— 消除「按了按钮、二维码还没出来时提交」的窗口
+      lanSessionOwner = lanInstanceToken.current
+      pushLanSourcesSnapshot()
+      pushLanSonglistsSnapshot()
       const qr = await generateQRCodeBase64(`http://${ip}:${port}`, 560)
       setQrImage(qr)
       setLanRunning(true)
-      pushLanSourcesSnapshot()
       setTimeout(() => { rightScrollRef.current?.scrollToEnd({ animated: true }) }, 300)
     } catch (err: unknown) {
-      setLanMessage(err instanceof Error ? err.message : '启动失败')
+      const detail = err instanceof Error ? err.message : ''
+      const message = detail ? `${tvText.lanStartFailed}：${detail}` : tvText.lanStartFailed
+      setLanMessageOk(false)
+      setLanMessage(message)
+      // 启动失败必须让用户【看到】：旧代码只写 setLanMessage，而它在右栏最下方、不会自动滚过去，
+      // 于是「端口被占 / 服务起不来」在用户眼里就是「按了按钮没反应」
+      setLanResultDialog({
+        title: tvText.lanStartFailed,
+        message,
+        buttons: [{ label: tvText.knowIt, tone: 'primary' }],
+      })
     }
   }
 
   const handleCloseLanImport = () => {
-    stopLanImportServer()
+    // 停服也必须走 owner 判定（与卸载 cleanup 的守卫语义一致）：
+    // 非 owner 实例本来就没在跑服务 —— 它是被压在栈下的另一个设置页，正由 owner 在跑。
+    // 若在这里无条件 stopServer()，会把 owner 还在用的服务停掉：owner 页面上二维码仍挂着
+    // （lanRunning 仍为 true），服务却已经死了，变成「假存活」。
+    if (lanSessionOwner === lanInstanceToken.current) {
+      lanSessionOwner = null
+      void stopLanImportServer()
+    }
     setLanRunning(false)
     setQrImage('')
   }
@@ -424,17 +590,41 @@ function TVSettings({ componentId }: { componentId: string }) {
 
           <TVSettingsPane title={tvText.importApi} subtitle={tvText.inputRemoteApi} style={styles.importPanel}>
             {importMessage ? <TVText variant="caption" color={importMessage === tvText.importSuccess ? tvColors.primaryHigh : tvColors.warn} style={styles.message}>{importMessage}</TVText> : null}
+            {/* 手机扫码的结果放在按钮【上方】并且做成显眼的框：
+                旧位置在面板最下方，右栏内容一长就被顶出可视区、且导入结束时不会自动滚过去，
+                用户看不到「已导入 N 个歌单」，只能靠歌单卡有没有出现来猜 —— 这就是「没反应」的观感来源 */}
+            {lanMessage ? (
+              <View style={[styles.lanResult, lanMessageOk ? styles.lanResultOk : styles.lanResultWarn]}>
+                <TVText variant="body" color={lanMessageOk ? tvColors.primaryHigh : tvColors.warn}>{lanMessage}</TVText>
+              </View>
+            ) : null}
             <TVButton ref={lanButtonFocus.ref as any} label={lanRunning ? '关闭二维码' : '手机扫码导入'} tone={lanRunning ? 'danger' : 'dark'} onPress={() => { void (lanRunning ? handleCloseLanImport() : handleOpenLanImport()) }} nextFocusUp={updateButtonFocus.getNodeHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} />
             {qrImage ? (
               <View style={styles.qrWrap}>
                 <Image source={{ uri: qrImage }} style={styles.qrImage} />
-                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>手机扫码打开导入页，粘贴源链接或脚本导入</TVText>
+                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>手机扫码打开页面，可导入音源/歌单，也能给已导入的歌单改名、删除</TVText>
+                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>改名必须在手机上做：电视遥控器输不了中文</TVText>
                 <TVText variant="caption" color={tvColors.warn} style={styles.line}>⚠ 请确保手机与电视连接同一局域网（WiFi）</TVText>
               </View>
             ) : null}
           </TVSettingsPane>
         </ScrollView>
       </View>
+      {/* 手机侧操作的结果弹窗：必须让人不可能错过（页面上的常显文案是兜底） */}
+      <TVDialog
+        visible={!!lanResultDialog}
+        resetKey={lanResultDialog}
+        title={lanResultDialog?.title ?? ''}
+        message={lanResultDialog?.message}
+        buttons={(lanResultDialog?.buttons ?? []).map(btn => ({
+          ...btn,
+          onPress: () => {
+            setLanResultDialog(null)
+            btn.onPress?.()
+          },
+        }))}
+        onDismiss={() => { setLanResultDialog(null) }}
+      />
     </TVAppleScaffold>
   )
 }
@@ -456,6 +646,10 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   importPanel: { flex: 1 },
   line: { marginTop: tvSize(9) },
   message: { marginTop: tvSize(14) },
+  // 手机扫码结果框：放在按钮上方，带边框与底色，保证不用滚动就能看到
+  lanResult: { marginTop: tvSize(14), marginBottom: tvSize(14), paddingVertical: tvSize(12), paddingHorizontal: tvSize(16), borderRadius: tvSize(12), borderWidth: 1 },
+  lanResultOk: { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: tvColors.primaryHigh },
+  lanResultWarn: { backgroundColor: 'rgba(241,195,109,0.10)', borderColor: tvColors.warn },
   qrWrap: { alignItems: 'center', gap: tvSize(12), marginTop: tvSize(14) },
   qrImage: { width: tvSize(320), height: tvSize(320), backgroundColor: '#FFFFFF', borderRadius: tvSize(16) },
 }

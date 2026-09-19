@@ -18,3 +18,11 @@ export type TVDetailPayload =
     subtitle?: string
     songlist: ListInfoItem
   }
+  | {
+    type: 'userlist'
+    id: string
+    title: string
+    subtitle?: string
+    source?: LX.OnlineSource
+    userlist: LX.List.UserListInfo
+  }

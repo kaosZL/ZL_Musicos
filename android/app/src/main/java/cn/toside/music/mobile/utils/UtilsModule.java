@@ -436,11 +436,17 @@ public class UtilsModule extends ReactContextBaseJavaModule {
   @ReactMethod
   public void startLanImportServer(int port, Promise promise) {
     try {
-      LanImportServer.start(port > 0 ? port : 9527, reactContext.getApplicationContext(), (action, payload) ->
+      // start() 现在返回【实际监听】的端口（请求端口被占用时会向后顺延），
+      // 并且失败时会把内部状态复位后抛异常 —— 不会再出现「半死实例把后续启动全堵死」。
+      int actualPort = LanImportServer.start(port > 0 ? port : 9527, reactContext.getApplicationContext(), (action, payload) ->
         utilsEvent.sendLanSourceEvent(action, payload));
+      if (actualPort <= 0) {
+        promise.reject("LAN_SERVER_ERROR", "局域网服务没能监听任何端口，请重试");
+        return;
+      }
       WritableMap params = Arguments.createMap();
       params.putString("ip", getLanIp());
-      params.putInt("port", LanImportServer.getServerPort());
+      params.putInt("port", actualPort);
       promise.resolve(params);
     } catch (Exception e) {
       promise.reject("LAN_SERVER_ERROR", e);
@@ -456,6 +462,12 @@ public class UtilsModule extends ReactContextBaseJavaModule {
   @ReactMethod
   public void pushLanSources(String sourcesJson, Promise promise) {
     LanImportServer.setSources(sourcesJson);
+    promise.resolve(null);
+  }
+
+  @ReactMethod
+  public void pushLanSonglists(String songlistsJson, Promise promise) {
+    LanImportServer.setSonglists(songlistsJson);
     promise.resolve(null);
   }
 
