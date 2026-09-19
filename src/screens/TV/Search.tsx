@@ -15,6 +15,7 @@ import searchMusicState from '@/store/search/music/state'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { getListMusics, setTempList } from '@/core/list'
 import { playList } from '@/core/player/player'
+import { getData, saveData } from '@/plugins/storage'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
@@ -68,12 +69,14 @@ function TVSearch({ componentId }: { componentId: string }) {
   const getHistoryHandle = (id?: string | null) => getHandleFromMap(historyRefs, id)
   const bindHistoryRef = (id: string) => (node: FocusNode) => { historyRefs.current[id] = node }
 
-  // 搜索历史：加载 & 记录
+  const TV_SEARCH_HISTORY_KEY = 'tv_search_history'
+  // 搜索历史：加载 & 记录。
+  // 持久化必须走项目自带的 storage 插件：RN 环境没有 localStorage，
+  // 直接用 globalThis.localStorage 是静默空操作，历史离开页面就丢（09-19 审查发现）
   useEffect(() => {
-    try {
-      const saved = globalThis.localStorage?.getItem('tv_search_history')
-      if (saved) setSearchHistory(JSON.parse(saved))
-    } catch { }
+    void getData<string[]>(TV_SEARCH_HISTORY_KEY).then(saved => {
+      if (Array.isArray(saved) && saved.length) setSearchHistory(saved.filter(k => typeof k === 'string'))
+    }).catch(() => { })
   }, [])
 
   const recordSearch = useCallback((keyword: string) => {
@@ -81,7 +84,7 @@ function TVSearch({ componentId }: { componentId: string }) {
     if (!k) return
     setSearchHistory(prev => {
       const next = [k, ...prev.filter(h => h !== k)].slice(0, 8)
-      try { globalThis.localStorage?.setItem('tv_search_history', JSON.stringify(next)) } catch { }
+      void saveData(TV_SEARCH_HISTORY_KEY, next).catch(() => { })
       return next
     })
   }, [])

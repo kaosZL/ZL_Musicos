@@ -82,7 +82,9 @@ function TVDetail({ componentId, payload }: Props) {
       }
       if (payload.type === 'userlist') {
         const localList = await getListMusics(payload.id)
-        return { list: localList as unknown as LX.Music.MusicInfoOnline[], total: localList.length }
+        // 必须复制快照：getListMusics 返回的是歌单活数组的引用，
+        // 后续刷新时 setList(同引用) 会被 React 的 Object.is 短路而跳过重渲染（09-19 审查发现）
+        return { list: [...localList] as unknown as LX.Music.MusicInfoOnline[], total: localList.length }
       }
       const result = await getSonglistDetail(payload.id, payload.source, 1)
       return { list: result.list, total: result.total }
@@ -110,9 +112,12 @@ function TVDetail({ componentId, payload }: Props) {
     if (payload.type !== 'userlist') return
     const handleMusicUpdate = async(ids: string[]) => {
       if (!Array.isArray(ids) || !ids.includes(payload.id)) return
-      const fresh = await getListMusics(payload.id)
-      setList(fresh as unknown as LX.Music.MusicInfoOnline[])
-      setTotal(fresh.length)
+      try {
+        const fresh = await getListMusics(payload.id)
+        // 同上：复制快照，避免 setList(同引用) 被 Object.is 短路
+        setList([...fresh] as unknown as LX.Music.MusicInfoOnline[])
+        setTotal(fresh.length)
+      } catch { /* 刷新失败保持现有展示 */ }
     }
     global.app_event.on('myListMusicUpdate', handleMusicUpdate)
     return () => { global.app_event.off('myListMusicUpdate', handleMusicUpdate) }

@@ -171,7 +171,11 @@ public class LanImportServer extends NanoHTTPD {
     boolean hasLatin1High = false;
     for (int i = 0; i < payload.length(); i++) {
       char c = payload.charAt(i);
-      if (c >= 0x80 && c <= 0xFF) { hasLatin1High = true; break; }
+      // 已含 Latin-1 之外的多字节字符（如中文）→ 解码本来就正确，不动。
+      // 这一步很关键：否则「é + 中文」这类混合内容会被误判成乱码，
+      // 重解码时中文被 ISO-8859-1 编码成 '?' 反而被毁掉（09-19 审查发现）
+      if (c >= 0x100) return payload;
+      if (c >= 0x80) hasLatin1High = true;
     }
     if (!hasLatin1High) return payload;
     try {
