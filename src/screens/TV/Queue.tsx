@@ -12,9 +12,10 @@ import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
 import { tvColors } from '@/theme/tv'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { useMyList } from '@/store/list/hook'
+import { getUserLists } from '@/utils/listManage'
 import listState from '@/store/list/state'
 import { useSettingValue } from '@/store/setting/hook'
-import { clearListMusics, removeListMusics } from '@/core/list'
+import { clearListMusics, removeListMusics, addListMusics } from '@/core/list'
 import { playList } from '@/core/player/player'
 import { LIST_IDS, MUSIC_TOGGLE_MODE_LIST } from '@/config/constant'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
@@ -46,6 +47,7 @@ function TVQueue({ componentId }: { componentId: string }) {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const playModeFocus = useTVFocusRef()
   const clearFocus = useTVFocusRef()
+  const addAllFocus = useTVFocusRef()
   const firstQueueFocus = useTVFocusRef()
   const activeTabFocus = useRef<FocusNode>(null)
   const tabRefresh = useTVFocusRefresh()
@@ -53,6 +55,65 @@ function TVQueue({ componentId }: { componentId: string }) {
   const listRef = useRef<FlatList<LX.Music.MusicInfo>>(null)
   const queueRefs = useRef<FocusRefMap>({})
   const [localDialog, setLocalDialog] = useState<TVDialogRequest | null>(null)
+  const [songlistDialog, setSonglistDialog] = useState<{ musicInfos: LX.Music.MusicInfo[]; label: string } | null>(null)
+
+  const showSonglistPicker = (musicInfos: LX.Music.MusicInfo[], label: string) => {
+    setSonglistDialog({ musicInfos, label })
+  }
+
+  const handleAddToSonglist = async(listId: string) => {
+    if (!songlistDialog) return
+    const { musicInfos } = songlistDialog
+    setSonglistDialog(null)
+    try {
+      await addListMusics(listId, musicInfos, 'new')
+      showLocalDialog({
+        title: '添加成功',
+        message: `已将「${songlistDialog.label}」添加到歌单（${musicInfos.length} 首）`,
+        buttons: [{ label: '确定', tone: 'primary' }],
+      })
+    } catch (err) {
+      showLocalDialog({
+        title: '添加失败',
+        message: err instanceof Error ? err.message : '未知错误',
+        buttons: [{ label: '确定', tone: 'primary' }],
+      })
+    }
+  }
+
+  const openSonglistPicker = async(musicInfos: LX.Music.MusicInfo[], label: string) => {
+    try {
+      const lists = await getUserLists()
+      if (!lists.length) {
+        showLocalDialog({
+          title: '暂无歌单',
+          message: '还没有自建歌单。请先在歌单导入或手机页创建歌单。',
+          buttons: [{ label: '确定', tone: 'primary' }],
+        })
+        return
+      }
+      const maxButtons = 5
+      const visible = lists.slice(0, maxButtons)
+      showLocalDialog({
+        title: '选择要添加到的歌单',
+        message: `将「${label}」${musicInfos.length > 1 ? `（${musicInfos.length} 首）` : ''}添加到：`,
+        buttons: [
+          ...visible.map(list => ({
+            label: list.name,
+            tone: 'primary' as const,
+            onPress: () => { void handleAddToSonglist(list.id) },
+          })),
+          { label: '取消', tone: 'dark' as const },
+        ],
+      })
+    } catch {
+      showLocalDialog({
+        title: '获取歌单失败',
+        message: '无法读取歌单列表',
+        buttons: [{ label: '确定', tone: 'primary' }],
+      })
+    }
+  }
 
   // 页面挂载后补一次延迟刷新，确保所有按钮/行的 nextFocus 句柄就位（
   // 首次渲染时 ref 为空 → getNodeHandle 返回 null → nextFocusUp 为 undefined → 引擎找不到目标）
@@ -112,11 +173,12 @@ function TVQueue({ componentId }: { componentId: string }) {
 
   const handleRemoveMusic = (item: LX.Music.MusicInfo, index: number) => {
     showLocalDialog({
-      title: '从播放列表删除',
-      message: `确定删除「${item.name ?? '未知歌曲'}」吗？`,
+      title: item.name ?? '未知歌曲',
+      message: '选择要执行的操作',
       buttons: [
+        { label: '加入我的歌单', tone: 'primary', onPress: () => { void openSonglistPicker([item], item.name ?? '未知歌曲') } },
+        { label: '从播放列表删除', tone: 'danger', onPress: () => { void removeListMusics(LIST_IDS.TEMP, [item.id]) } },
         { label: '取消', tone: 'dark' },
-        { label: '删除', tone: 'danger', onPress: () => { void removeListMusics(LIST_IDS.TEMP, [item.id]) } },
       ],
     })
   }
@@ -144,7 +206,7 @@ function TVQueue({ componentId }: { componentId: string }) {
   // 显示出来用户才能确认「我现在放的到底是不是我那张歌单」。
   const myLists = useMyList()
   const queueSourceName = myLists.find(l => l.id === listState.tempListMeta.id)?.name
-  const queueHint = `${queueSourceName ? `${tvText.queueFromSonglist}「${queueSourceName}」 · ` : ''}OK 播放歌曲 · 长按 OK 从列表删除`
+  const queueHint = `${queueSourceName ? `${tvText.queueFromSonglist}「${queueSourceName}」 · ` : ''}OK 播放歌曲 · 长按 OK 加入歌单/删除`
 
   useTVRemoteActions({
     playPause: () => {
@@ -167,8 +229,9 @@ function TVQueue({ componentId }: { componentId: string }) {
               <TVText variant="body" style={styles.subtitle}>{fetchedMusicList.length} 首 · {playModeLabel}</TVText>
             </View>
             <View style={styles.actions}>
-              <TVButton ref={playModeFocus.ref as any} label={`模式: ${playModeLabel}`} tone="dark" onPress={handleCyclePlayMode} hasTVPreferredFocus nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusRight={clearFocus.getNodeHandle() ?? undefined} />
-              <TVButton ref={clearFocus.ref as any} label={tvText.clearList} tone={fetchedMusicList.length ? 'ghost' : 'dark'} onPress={handleClear} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusLeft={playModeFocus.getNodeHandle() ?? undefined} />
+              <TVButton ref={playModeFocus.ref as any} label={`模式: ${playModeLabel}`} tone="dark" onPress={handleCyclePlayMode} hasTVPreferredFocus nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusRight={addAllFocus.getNodeHandle() ?? undefined} />
+              <TVButton ref={addAllFocus.ref as any} label="全部加入歌单" tone={fetchedMusicList.length ? 'ghost' : 'dark'} onPress={() => { void openSonglistPicker(fetchedMusicList, `播放列表全部 ${fetchedMusicList.length} 首`) }} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusLeft={playModeFocus.getNodeHandle() ?? undefined} nextFocusRight={clearFocus.getNodeHandle() ?? undefined} />
+              <TVButton ref={clearFocus.ref as any} label={tvText.clearList} tone={fetchedMusicList.length ? 'ghost' : 'dark'} onPress={handleClear} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusLeft={addAllFocus.getNodeHandle() ?? undefined} />
             </View>
           </View>
           <FlatList

@@ -182,6 +182,15 @@ public class LanImportServer extends NanoHTTPD {
         return json("{\"ok\":false,\"message\":\"请求解析失败\"}");
       }
       String payload = body.get("postData");
+      // Fix Issue #8: NanoHTTPD parseBody decodes POST body as ISO-8859-1 by default.
+      // Re-decode from ISO-8859-1 bytes to UTF-8 to correctly handle Chinese source names.
+      if (payload != null && !payload.isEmpty()) {
+        try {
+          payload = new String(payload.getBytes("ISO-8859-1"), StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+          // fall back to original payload
+        }
+      }
       if ("/api/import".equals(uri)) {
         notify("import", payload);
         return json("{\"ok\":true,\"message\":\"已提交，电视正在导入\"}");

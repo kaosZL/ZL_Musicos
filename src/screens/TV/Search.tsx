@@ -46,6 +46,8 @@ const getHandleFromMap = (mapRef: MutableRefObject<FocusRefMap>, key?: string | 
 function TVSearch({ componentId }: { componentId: string }) {
   const musicInfo = usePlayerMusicInfo()
   const [text, setText] = useState('')
+  const [searchHistory, setSearchHistory] = useState<string[]>([])
+  const historyRefs = useRef<FocusRefMap>({})
   const [results, setResults] = useState<LX.Music.MusicInfoOnline[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -63,6 +65,26 @@ function TVSearch({ componentId }: { componentId: string }) {
   const listRef = useRef<FlatList<LX.Music.MusicInfoOnline>>(null)
   const resultRefs = useRef<FocusRefMap>({})
   const hotRefs = useRef<FocusRefMap>({})
+  const getHistoryHandle = (id?: string | null) => getHandleFromMap(historyRefs, id)
+  const bindHistoryRef = (id: string) => (node: FocusNode) => { historyRefs.current[id] = node }
+
+  // 搜索历史：加载 & 记录
+  useEffect(() => {
+    try {
+      const saved = globalThis.localStorage?.getItem('tv_search_history')
+      if (saved) setSearchHistory(JSON.parse(saved))
+    } catch { }
+  }, [])
+
+  const recordSearch = useCallback((keyword: string) => {
+    const k = keyword.trim()
+    if (!k) return
+    setSearchHistory(prev => {
+      const next = [k, ...prev.filter(h => h !== k)].slice(0, 8)
+      try { globalThis.localStorage?.setItem('tv_search_history', JSON.stringify(next)) } catch { }
+      return next
+    })
+  }, [])
   const sourceRefs = useRef<FocusRefMap>({})
 
   const sourceTabs = useMemo(() => {
@@ -128,6 +150,7 @@ function TVSearch({ componentId }: { componentId: string }) {
       return
     }
     if (keyword !== text.trim()) setText(keyword)
+    recordSearch(keyword)
     if (targetPage > 1) setLoadingMore(true)
     else setLoading(true)
     setError('')
@@ -218,6 +241,18 @@ function TVSearch({ componentId }: { componentId: string }) {
               </Focusable>
             ))}
           </ScrollView>
+          {searchHistory.length > 0 && (
+            <>
+              <TVText variant="cardTitle" style={styles.blockTitle}>搜索历史</TVText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hotWrap} contentContainerStyle={styles.hotContent}>
+                {searchHistory.map((kw, index) => (
+                  <Focusable key={`hist_${kw}`} ref={bindHistoryRef(kw) as any} style={styles.hotItem} onPress={() => { void handleSearch(1, kw) }} nextFocusLeft={getHistoryHandle(searchHistory[index - 1]) ?? lastHotHandle} nextFocusRight={getHistoryHandle(searchHistory[index + 1]) ?? firstResultHandle} nextFocusUp={lastHotHandle} nextFocusDown={keyboardHandle}>
+                    <TVText variant="body">{kw}</TVText>
+                  </Focusable>
+                ))}
+              </ScrollView>
+            </>
+          )}
           <TVSearchKeyboard firstKeyRef={firstKeyboardKeyFocus} onFirstKeyReady={queueFocusRefresh} onKeyPress={handleKeyboardKey} onBackspace={() => { setText(value => value.slice(0, -1)) }} onClear={() => { setText('') }} onSubmit={() => { void handleSearch() }} nextFocusUp={lastHotHandle} topRowFocusUpTargets={keyboardTopRowFocusUps} nextFocusRight={firstResultHandle} />
         </TVGlassPanel>
         <TVGlassPanel style={styles.resultPanel}>
