@@ -132,6 +132,13 @@ public class LanImportServer extends NanoHTTPD {
     songlistsJson = (json == null || json.isEmpty()) ? "{\"lists\":[]}" : json;
   }
 
+  /** 手机页导出歌单的结果缓存：JS 侧打包好后回填，手机页轮询取走（09-20 需求） */
+  private static volatile String songlistExportResult = "{\"ok\":false,\"message\":\"pending\"}";
+
+  public static void setSonglistExport(String json) {
+    songlistExportResult = (json == null || json.isEmpty()) ? "{\"ok\":false,\"message\":\"empty\"}" : json;
+  }
+
   private static byte[] getPage() {
     if (pageHtml == null) {
       try {
@@ -201,6 +208,10 @@ public class LanImportServer extends NanoHTTPD {
     if (Method.GET.equals(method) && "/api/songlists".equals(uri)) {
       return json(songlistsJson);
     }
+    // 手机页轮询歌单导出结果（导出是异步的：POST → 通知 JS 打包 → 回填 → 这里取走）
+    if (Method.GET.equals(method) && "/api/songlist-export-result".equals(uri)) {
+      return json(songlistExportResult);
+    }
     if (Method.POST.equals(method)) {
       Map<String, String> body = new HashMap<>();
       try {
@@ -235,6 +246,11 @@ public class LanImportServer extends NanoHTTPD {
       if ("/api/songlist-remove".equals(uri)) {
         // 歌单删除：纯 JSON（{ids:[...]}），不需要解压展开
         notify("songlist-remove", payload);
+        return json("{\"ok\":true,\"message\":\"已提交\"}");
+      }
+      if ("/api/songlist-export".equals(uri)) {
+        // 歌单导出：通知 JS 侧打包成洛雪格式，手机页轮询 /api/songlist-export-result 取结果
+        notify("songlist-export", payload);
         return json("{\"ok\":true,\"message\":\"已提交\"}");
       }
     }

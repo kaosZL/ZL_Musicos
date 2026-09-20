@@ -49,6 +49,7 @@ function TVSearch({ componentId }: { componentId: string }) {
   const [text, setText] = useState('')
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const historyRefs = useRef<FocusRefMap>({})
+  const clearHistoryFocus = useTVFocusRef()
   const [results, setResults] = useState<LX.Music.MusicInfoOnline[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -87,6 +88,19 @@ function TVSearch({ componentId }: { componentId: string }) {
       void saveData(TV_SEARCH_HISTORY_KEY, next).catch(() => { })
       return next
     })
+  }, [])
+
+  // 历史管理（09-20 需求）：长按单条删除、一键清空
+  const removeHistory = useCallback((keyword: string) => {
+    setSearchHistory(prev => {
+      const next = prev.filter(h => h !== keyword)
+      void saveData(TV_SEARCH_HISTORY_KEY, next).catch(() => { })
+      return next
+    })
+  }, [])
+  const clearHistory = useCallback(() => {
+    setSearchHistory([])
+    void saveData(TV_SEARCH_HISTORY_KEY, []).catch(() => { })
   }, [])
   const sourceRefs = useRef<FocusRefMap>({})
 
@@ -249,10 +263,13 @@ function TVSearch({ componentId }: { componentId: string }) {
               <TVText variant="cardTitle" style={styles.blockTitle}>搜索历史</TVText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hotWrap} contentContainerStyle={styles.hotContent}>
                 {searchHistory.map((kw, index) => (
-                  <Focusable key={`hist_${kw}`} ref={bindHistoryRef(kw) as any} style={styles.hotItem} onPress={() => { void handleSearch(1, kw) }} nextFocusLeft={getHistoryHandle(searchHistory[index - 1]) ?? lastHotHandle} nextFocusRight={getHistoryHandle(searchHistory[index + 1]) ?? firstResultHandle} nextFocusUp={lastHotHandle} nextFocusDown={keyboardHandle}>
+                  <Focusable key={`hist_${kw}`} ref={bindHistoryRef(kw) as any} style={styles.hotItem} onPress={() => { void handleSearch(1, kw) }} onLongPress={() => { removeHistory(kw) }} nextFocusLeft={getHistoryHandle(searchHistory[index - 1]) ?? lastHotHandle} nextFocusRight={getHistoryHandle(searchHistory[index + 1]) ?? clearHistoryFocus.getNodeHandle()} nextFocusUp={lastHotHandle} nextFocusDown={keyboardHandle}>
                     <TVText variant="body">{kw}</TVText>
                   </Focusable>
                 ))}
+                <Focusable ref={clearHistoryFocus.ref as any} style={styles.hotItem} onPress={() => { clearHistory() }} nextFocusLeft={getHistoryHandle(searchHistory[searchHistory.length - 1]) ?? lastHotHandle} nextFocusRight={firstResultHandle} nextFocusUp={lastHotHandle} nextFocusDown={keyboardHandle}>
+                  <TVText variant="body" color={tvColors.warn}>清空历史</TVText>
+                </Focusable>
               </ScrollView>
             </>
           )}

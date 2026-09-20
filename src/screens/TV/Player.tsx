@@ -229,7 +229,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
   const progressRef = useRef(progress)
   progressRef.current = progress
   useEffect(() => {
-    return onTVRemoteEvent(({ eventType, eventKeyAction }) => {
+    return onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
       const isSeekKey = eventType === 'left' || eventType === 'right'
       const isSelectKey = eventType === 'select'
       if (!isSeekKey && !isSelectKey) return
@@ -242,12 +242,13 @@ function TVPlayer({ componentId }: { componentId: string }) {
       }
       const dir = eventType === 'left' ? 'left' : 'right'
       if (eventKeyAction === 2) {
-        // 长按重复：连续快进/快退 5s
+        // 长按重复：前 4 次 ±5s 精调，之后升到 ±30s 大步长（09-20 需求）
         seekRepeatFiredRef.current[dir] = true
         revealControls()
         const current = progressRef.current.nowPlayTime || 0
         const max = progressRef.current.maxPlayTime || 0
-        const delta = eventType === 'right' ? 5 : -5
+        const step = (repeatCount ?? 0) < 4 ? 5 : 30
+        const delta = eventType === 'right' ? step : -step
         const target = Math.max(0, Math.min(max, current + delta))
         void setCurrentTime(target)
       } else if (eventKeyAction === 0) {

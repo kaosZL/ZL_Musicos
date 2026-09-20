@@ -16,9 +16,9 @@ import apiSourceInfo from '@/utils/musicSdk/api-source-info'
 import { LIST_IDS } from '@/config/constant'
 import { setApiSource } from '@/core/apiSource'
 import { updateSetting } from '@/core/common'
-import { removeUserList, updateUserList } from '@/core/list'
+import { removeUserList, updateUserList, getListMusics } from '@/core/list'
 import { httpFetch } from '@/utils/request'
-import { generateQRCodeBase64, onLanSourceEvent, pushLanSonglists, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
+import { generateQRCodeBase64, onLanSourceEvent, pushLanSonglists, pushLanSonglistExport, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
 import { importUserApi, removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
@@ -30,6 +30,7 @@ import { dot, tvText } from './labels'
 import { importSonglist } from './songlistImport'
 import { createTVTabs, getSourceName } from './utils'
 import { TV_CURRENT_VERSION, checkTVUpdate, downloadTVUpdate, getDownloadedTVUpdatePath, installTVUpdate, type TVUpdateInfo } from './update'
+import { setSleepTimer, setStopAfterCurrent, clearSleepTimer, getSleepTimerState } from '@/core/tvSleepTimer'
 
 interface SourceItem {
   id: string
@@ -97,6 +98,15 @@ function TVSettings({ componentId }: { componentId: string }) {
   const lanInstanceToken = useRef<symbol>(Symbol('tv-settings'))
   const lanButtonFocus = useTVFocusRef()
   const lanHandlerRef = useRef<((action: string, payload: string) => void) | null>(null)
+  // 定时关闭（09-20 需求）：状态存在模块单例里，页面每秒刷新显示剩余时间
+  const [sleepState, setSleepState] = useState(() => getSleepTimerState())
+  const [, setSleepTick] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(() => { setSleepState(getSleepTimerState()); setSleepTick(t => t + 1) }, 1000)
+    return () => { clearInterval(timer) }
+  }, [])
+  const sleepRemaining = sleepState.deadline > Date.now() ? Math.ceil((sleepState.deadline - Date.now()) / 60000) : 0
+  const sleepActive = sleepRemaining > 0 || sleepState.stopAfterCurrent
   const sourceScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
   const rightScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
   const sourceLayoutRef = useRef<Record<string, number>>({})
@@ -264,11 +274,15 @@ function TVSettings({ componentId }: { componentId: string }) {
     }
   }, [allSources, apiSource, userApiById])
 
-  const pushLanSonglistsSnapshot = useCallback(() => {
+  const pushLanSonglistsSnapshot = useCallback(async() => {
     try {
-      void pushLanSonglists(JSON.stringify({
-        lists: userSonglists.map(item => ({ id: item.id, name: item.name })),
-      }))
+      // 带上每个歌单的歌曲数（09-20 需求）：手机页与 TV 卡片信息对齐
+      const lists = await Promise.all(userSonglists.map(async(item) => ({
+        id: item.id,
+        name: item.name,
+        count: (await getListMusics(item.id)).length,
+      })))
+      void pushLanSonglists(JSON.stringify({ lists }))
     } catch (err: unknown) {
       // 快照推送失败静默忽略
     }
@@ -369,6 +383,21 @@ function TVSettings({ componentId }: { componentId: string }) {
         setLanMessage(removedMessage)
         global.app_event.songlistImportResult({ ok: true, message: removedMessage })
         showLanResult(tvText.deleteSonglistDone, removedMessage)
+      } else if (action === 'songlist-export') {
+        // 手机页导出歌单（09-20 需求）：打包成洛雪 playList_v2 JSON，手机端下载保存
+        const data = JSON.parse(payload || '{}') as { id?: string }
+        const id = data.id ?? ''
+        const info = userSonglists.find(list => list.id === id)
+        if (!info) {
+          void pushLanSonglistExport(JSON.stringify({ ok: false, message: '歌单不存在，请重新读取' }))
+          return
+        }
+        const songs = await getListMusics(id)
+        const lxData = {
+          type: 'playList_v2',
+          data: [{ name: info.name, id, source: info.source, sourceListId: info.sourceListId, list: songs }],
+        }
+        void pushLanSonglistExport(JSON.stringify({ ok: true, id, name: info.name, payload: JSON.stringify(lxData) }))
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '手机操作失败'
@@ -413,7 +442,7 @@ function TVSettings({ componentId }: { componentId: string }) {
 
   useEffect(() => {
     if (!lanRunning) return
-    pushLanSonglistsSnapshot()
+    void pushLanSonglistsSnapshot()
   }, [lanRunning, pushLanSonglistsSnapshot])
 
   const handleOpenLanImport = async() => {
@@ -425,7 +454,7 @@ function TVSettings({ componentId }: { componentId: string }) {
       // 手机推来的事件就有人处理，不必等二维码渲染完成 —— 消除「按了按钮、二维码还没出来时提交」的窗口
       lanSessionOwner = lanInstanceToken.current
       pushLanSourcesSnapshot()
-      pushLanSonglistsSnapshot()
+      void pushLanSonglistsSnapshot()
       const qr = await generateQRCodeBase64(`http://${ip}:${port}`, 560)
       setQrImage(qr)
       setLanRunning(true)
@@ -588,6 +617,22 @@ function TVSettings({ componentId }: { componentId: string }) {
             <TVText variant="caption" color={updateStatus === 'error' ? tvColors.warn : tvColors.primaryHigh} style={styles.message}>{updateMessage || tvText.installConfirmTip}</TVText>
           </TVSettingsPane>
 
+          {/* 定时关闭（09-20 需求）：睡前听歌自动停 */}
+          <TVSettingsPane title="定时关闭" subtitle="睡前听歌自动停">
+            <TVText variant="caption" color={sleepActive ? tvColors.primaryHigh : tvColors.subtext}>
+              {sleepActive
+                ? (sleepState.stopAfterCurrent ? '已开启：播完当前这首就停' : `已开启：${sleepRemaining} 分钟后停止`)
+                : '未开启'}
+            </TVText>
+            <View style={styles.sleepRow}>
+              <TVButton label="播完即停" tone={sleepState.stopAfterCurrent ? 'primary' : 'dark'} onPress={() => { setStopAfterCurrent(); setSleepState(getSleepTimerState()) }} />
+              <TVButton label="30 分钟" tone="dark" onPress={() => { setSleepTimer(30); setSleepState(getSleepTimerState()) }} />
+              <TVButton label="60 分钟" tone="dark" onPress={() => { setSleepTimer(60); setSleepState(getSleepTimerState()) }} />
+              <TVButton label="90 分钟" tone="dark" onPress={() => { setSleepTimer(90); setSleepState(getSleepTimerState()) }} />
+              {sleepActive ? <TVButton label="取消定时" tone="danger" onPress={() => { clearSleepTimer(); setSleepState(getSleepTimerState()) }} /> : null}
+            </View>
+          </TVSettingsPane>
+
           <TVSettingsPane title={tvText.importApi} subtitle={tvText.inputRemoteApi} style={styles.importPanel}>
             {importMessage ? <TVText variant="caption" color={importMessage === tvText.importSuccess ? tvColors.primaryHigh : tvColors.warn} style={styles.message}>{importMessage}</TVText> : null}
             {/* 手机扫码的结果放在按钮【上方】并且做成显眼的框：
@@ -643,6 +688,7 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   rightContent: { gap: tvSize(18), paddingBottom: tvSize(20) },
   updatePanel: { minHeight: tvSize(270) },
   updateMeta: { gap: tvSize(8), marginBottom: tvSize(18) },
+  sleepRow: { flexDirection: 'row', flexWrap: 'wrap', gap: tvSize(10), marginTop: tvSize(14) },
   importPanel: { flex: 1 },
   line: { marginTop: tvSize(9) },
   message: { marginTop: tvSize(14) },

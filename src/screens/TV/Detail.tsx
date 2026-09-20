@@ -42,11 +42,17 @@ function TVDetail({ componentId, payload }: Props) {
   const [error, setError] = useState('')
   const [total, setTotal] = useState(0)
   const [preferFirstRow, setPreferFirstRow] = useState(false)
+  // 重试令牌：加载失败点「重试」时 +1，触发重新拉取；分页状态：加载更多 + 每页条数
+  const [retryToken, setRetryToken] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [listLimit, setListLimit] = useState(30)
   const listRef = useRef<FlatList<LX.Music.MusicInfoOnline>>(null)
   const rowRefs = useRef<FocusRefMap>({})
   const playAllFocus = useTVFocusRef()
   const backFocus = useTVFocusRef()
   const firstRowFocus = useTVFocusRef()
+  const retryFocus = useTVFocusRef()
+  const loadMoreFocus = useTVFocusRef()
   const queueFocusRefresh = useTVFocusRefresh()
   const activeTabFocus = useRef<FocusNode>(null)
   const getActiveTabHandle = () => (activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null)
@@ -76,25 +82,26 @@ function TVDetail({ componentId, payload }: Props) {
     let mounted = true
     setLoading(true)
     setError('')
-    const load = async(): Promise<{ list: LX.Music.MusicInfoOnline[], total: number }> => {
+    const load = async(): Promise<{ list: LX.Music.MusicInfoOnline[], total: number, limit: number }> => {
       if (payload.type === 'board') {
         const result = await getBoardListDetail(payload.id, 1)
-        return { list: result.list, total: result.total }
+        return { list: result.list, total: result.total, limit: result.limit || 30 }
       }
       if (payload.type === 'userlist') {
         const localList = await getListMusics(payload.id)
         // 必须复制快照：getListMusics 返回的是歌单活数组的引用，
         // 后续刷新时 setList(同引用) 会被 React 的 Object.is 短路而跳过重渲染（09-19 审查发现）
-        return { list: [...localList] as unknown as LX.Music.MusicInfoOnline[], total: localList.length }
+        return { list: [...localList] as unknown as LX.Music.MusicInfoOnline[], total: localList.length, limit: 0 }
       }
       const result = await getSonglistDetail(payload.id, payload.source, 1)
-      return { list: result.list, total: result.total }
+      return { list: result.list, total: result.total, limit: result.limit || 30 }
     }
 
     load().then(result => {
       if (!mounted) return
       setList(result.list)
       setTotal(result.total)
+      if (result.limit) setListLimit(result.limit)
     }).catch((err: unknown) => {
       if (!mounted) return
       setList([])
@@ -105,7 +112,27 @@ function TVDetail({ componentId, payload }: Props) {
     })
 
     return () => { mounted = false }
-  }, [payload])
+  }, [payload, retryToken])
+
+  // 在线歌单/榜单分页：首屏只拿第一页（约 30 首），滚到底点「加载更多」拉下一页（09-20 需求）
+  const isOnlineList = payload.type === 'board' || payload.type === 'songlist'
+  const hasMore = isOnlineList && !loading && !error && total > list.length && listLimit > 0
+  const handleLoadMore = async() => {
+    if (!hasMore || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const nextPage = Math.floor(list.length / listLimit) + 1
+      const result = payload.type === 'board'
+        ? await getBoardListDetail(payload.id, nextPage)
+        : await getSonglistDetail(payload.id, payload.source, nextPage)
+      // 分页接口偶尔重复返回边界歌曲，按 source+id 去重后追加
+      const seen = new Set(list.map(m => `${m.source}_${m.id}`))
+      const fresh = result.list.filter(m => !seen.has(`${m.source}_${m.id}`))
+      setList(prev => [...prev, ...fresh])
+      if (result.total) setTotal(result.total)
+    } catch { /* 加载更多失败保持现状，可重点「重试」重新拉首页 */ }
+    finally { setLoadingMore(false) }
+  }
 
   // 本地歌单（userlist）内容变化时实时刷新：
   // 之前只在挂载时读一次，从播放列表加完歌再回来，看到的还是旧快照，误以为没加进去
@@ -266,7 +293,30 @@ function TVDetail({ componentId, payload }: Props) {
             showsVerticalScrollIndicator={false}
             removeClippedSubviews={false}
             contentContainerStyle={styles.listContent}
-            ListEmptyComponent={!loading ? <TVText variant="meta" style={styles.empty}>{error || tvText.loadFailed}</TVText> : null}
+            ListEmptyComponent={!loading ? (
+              <View style={styles.emptyBox}>
+                <TVText variant="meta" style={styles.empty}>{error || tvText.loadFailed}</TVText>
+                {error ? (
+                  <TVButton
+                    ref={retryFocus.ref as any}
+                    label="重试"
+                    tone="primary"
+                    hasTVPreferredFocus
+                    onPress={() => { setRetryToken(t => t + 1) }}
+                    nextFocusUp={getActiveTabHandle() ?? playAllFocus.getNodeHandle() ?? undefined}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+            ListFooterComponent={hasMore ? (
+              <TVButton
+                ref={loadMoreFocus.ref as any}
+                label={loadingMore ? tvText.loading : tvText.loadMore}
+                tone="dark"
+                style={styles.loadMore}
+                onPress={() => { void handleLoadMore() }}
+              />
+            ) : null}
             renderItem={({ item, index }) => {
               const key = getRowKey(item, index)
               const prevKey = list[index - 1] ? getRowKey(list[index - 1], index - 1) : null
@@ -370,6 +420,8 @@ const styles: Record<string, ViewStyle | TextStyle | ImageStyle | any> = {
   list: { flex: 1 },
   listContent: { paddingTop: tvSize(14), paddingBottom: tvSize(18), gap: tvSize(10) },
   empty: { marginTop: tvSize(18) },
+  emptyBox: { marginTop: tvSize(18), gap: tvSize(12), alignItems: 'flex-start' },
+  loadMore: { marginTop: tvSize(8), alignSelf: 'stretch' },
 }
 
 export default memo(TVDetail)

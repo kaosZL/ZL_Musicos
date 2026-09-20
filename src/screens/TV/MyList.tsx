@@ -47,16 +47,25 @@ function TVMyList({ componentId }: { componentId: string }) {
   // 卡片带歌曲数：自动命名的歌单名几乎一样，没数量分不出哪张是哪张（09-19 实测：加完歌不知道加到哪张了）；
   // 歌单内容/列表结构变化时实时重算，从播放列表加完歌回本页，数量立刻更新
   const [songCounts, setSongCounts] = useState<Record<string, number>>({})
+  // 卡片封面：取每个歌单第一首歌的专辑图（没有则保持占位图）；「我的收藏」一并计数（09-20 需求）
+  const [cardCovers, setCardCovers] = useState<Record<string, string>>({})
   useEffect(() => {
     let mounted = true
     const load = async() => {
-      const entries = await Promise.all(userSonglists.map(async(list): Promise<[string, number]> => [list.id, (await getListMusics(list.id)).length]))
+      const targetIds = [LIST_IDS.LOVE, ...userSonglists.map(list => list.id)]
+      const results = await Promise.all(targetIds.map(async(id): Promise<[string, number, string]> => {
+        const musics = await getListMusics(id)
+        const first = musics[0] as unknown as { meta?: { picUrl?: string | null } } | undefined
+        const pic = first?.meta?.picUrl ?? ''
+        return [id, musics.length, pic]
+      }))
       if (!mounted) return
-      setSongCounts(Object.fromEntries(entries))
+      setSongCounts(Object.fromEntries(results.map(([id, count]) => [id, count])))
+      setCardCovers(Object.fromEntries(results.map(([id, , pic]) => [id, pic])))
     }
     void load()
     const handleMusicUpdate = (ids: string[]) => {
-      if (ids.some(id => userSonglists.some(list => list.id === id))) void load()
+      if (ids.some(id => id === LIST_IDS.LOVE || userSonglists.some(list => list.id === id))) void load()
     }
     const handleListsChanged = () => { void load() }
     global.app_event.on('myListMusicUpdate', handleMusicUpdate)
@@ -247,6 +256,23 @@ function TVMyList({ componentId }: { componentId: string }) {
                   {hasLists ? tvText.importSonglistTip : tvText.emptyMySonglistsHint}
                 </TVText>
               </Focusable>
+              {/* 「我的收藏」常驻卡：上游一直存在这个列表，但 TV 端此前无任何入口（09-20 需求）；
+                  红色调与自建歌单区分，封面取收藏里第一首歌的专辑图 */}
+              <TVPosterCard
+                key="mylist_love"
+                ref={getCardRefCallback('mylist_love') as any}
+                title="我的收藏"
+                subtitle={`收藏 · ${songCounts[LIST_IDS.LOVE] ?? '…'} 首`}
+                size="medium"
+                tint={tvColors.warn}
+                coverFallback="music"
+                image={cardCovers[LIST_IDS.LOVE] || undefined}
+                onPress={() => {
+                  pushTVDetailScreen(componentId, { type: 'userlist', id: LIST_IDS.LOVE, title: '我的收藏', subtitle: '收藏', userlist: { id: LIST_IDS.LOVE, name: '我的收藏', locationUpdateTime: null } as unknown as LX.List.UserListInfo })
+                }}
+                onFocus={() => { revealCardRow('mylist_love') }}
+                onLayout={(e) => { recordCardBox('mylist_love', e.nativeEvent.layout.y, e.nativeEvent.layout.height) }}
+              />
               {userSonglists.map((item, index) => (
                 <TVPosterCard
                   key={`mylist_${item.id}`}
@@ -257,6 +283,7 @@ function TVMyList({ componentId }: { componentId: string }) {
                   size="medium"
                   tint={index % 2 ? tvColors.primary : tvColors.purple}
                   coverFallback="music"
+                  image={cardCovers[item.id] || undefined}
                   onPress={() => { openMySonglist(item) }}
                   onLongPress={() => { handleManageSonglist(item) }}
                   onFocus={() => { revealCardRow(`mylist_${item.id}`) }}

@@ -60,12 +60,15 @@ function TVQueue({ componentId }: { componentId: string }) {
   // 注：musicInfos/label 必须走参数传入（旧版从 songlistDialog 状态里取，
   // 但那个状态在弹窗改为 localDialog 后已无人写入，守卫直接 return →
   // 按 OK 变成完全空操作、连结果弹窗都没有，09-20 老板实测发现）
-  const handleAddToSonglist = async(listId: string, musicInfos: LX.Music.MusicInfo[], label: string) => {
+  // 加歌位置：默认加到最前（新歌置顶更好找，09-20 需求）；弹窗里可一键切换
+  const [addPosition, setAddPosition] = useState<'top' | 'bottom'>('top')
+
+  const handleAddToSonglist = async(listId: string, musicInfos: LX.Music.MusicInfo[], label: string, position: 'top' | 'bottom' = 'top') => {
     try {
       const before = await getListMusics(listId)
       const beforeIds = new Set(before.map(m => m.id))
       const alreadyCount = musicInfos.filter(m => beforeIds.has(m.id)).length
-      await addListMusics(listId, musicInfos, 'new')
+      await addListMusics(listId, musicInfos, position === 'top' ? 'top' : 'bottom')
       const after = await getListMusics(listId)
       const afterIds = new Set(after.map(m => m.id))
       const newlyLanded = musicInfos.filter(m => afterIds.has(m.id) && !beforeIds.has(m.id)).length
@@ -102,14 +105,8 @@ function TVQueue({ componentId }: { componentId: string }) {
   const openSonglistPicker = async(musicInfos: LX.Music.MusicInfo[], label: string) => {
     try {
       const lists = await getUserLists()
-      if (!lists.length) {
-        showLocalDialog({
-          title: '暂无歌单',
-          message: '还没有自建歌单。请先在歌单导入或手机页创建歌单。',
-          buttons: [{ label: '确定', tone: 'primary' }],
-        })
-        return
-      }
+      // 「我的收藏」常驻第一项（09-20 需求）：上游一直有这个列表，之前 TV 端没有任何收藏入口
+      const loveCount = (await getListMusics(LIST_IDS.LOVE)).length
       // 只展示最近创建的几个：弹窗按钮太多难选；自动命名的歌单名几乎一样，
       // 按钮里必须带歌曲数才能分出哪张是哪张（老板 09-19 实测：加完歌不知道加到哪张了）
       const maxButtons = 5
@@ -120,15 +117,30 @@ function TVQueue({ componentId }: { componentId: string }) {
         name: list.name,
         count: (await getListMusics(list.id)).length,
       })))
+      const position = addPosition
+      const positionLabel = position === 'top' ? '最前（新歌置顶）' : '末尾'
       showLocalDialog({
         title: '选择要添加到的歌单',
-        message: `将「${label}」${musicInfos.length > 1 ? `（${musicInfos.length} 首）` : ''}添加到：${lists.length > visible.length ? `（共 ${lists.length} 个歌单，仅列出最近的 ${visible.length} 个）` : ''}`,
+        message: `将「${label}」${musicInfos.length > 1 ? `（${musicInfos.length} 首）` : ''}添加到【${positionLabel}】${lists.length > visible.length ? `，共 ${lists.length} 个歌单仅列出最近 ${visible.length} 个` : ''}`,
         buttons: [
+          {
+            label: `❤ 我的收藏（${loveCount} 首）`,
+            tone: 'primary' as const,
+            onPress: () => { void handleAddToSonglist(LIST_IDS.LOVE, musicInfos, label, position) },
+          },
           ...counted.map(item => ({
             label: `${item.name}（${item.count} 首）`,
             tone: 'primary' as const,
-            onPress: () => { void handleAddToSonglist(item.id, musicInfos, label) },
+            onPress: () => { void handleAddToSonglist(item.id, musicInfos, label, position) },
           })),
+          {
+            label: `📍 改为加到${position === 'top' ? '末尾' : '最前'}`,
+            tone: 'dark' as const,
+            onPress: () => {
+              setAddPosition(position === 'top' ? 'bottom' : 'top')
+              void openSonglistPicker(musicInfos, label)
+            },
+          },
           { label: '取消', tone: 'dark' as const },
         ],
       })

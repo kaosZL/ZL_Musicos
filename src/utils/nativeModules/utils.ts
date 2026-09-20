@@ -149,6 +149,10 @@ export const pushLanSonglists = async(songlistsJson: string): Promise<void> => {
   await UtilsModule.pushLanSonglists(songlistsJson)
 }
 
+export const pushLanSonglistExport = async(json: string): Promise<void> => {
+  await UtilsModule.pushLanSonglistExport(json)
+}
+
 export const onLanSourceEvent = (handler: (event: { action: string, payload: string }) => void): (() => void) => {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   const eventEmitter = new NativeEventEmitter(UtilsModule)

@@ -217,7 +217,7 @@ function renderSonglists(lists) {
     const wrap = document.createElement('div')
     wrap.className = 'item'
     const label = document.createElement('label')
-    label.textContent = '歌单名称'
+    label.textContent = '歌单名称' + (item.count != null ? '（' + item.count + ' 首）' : '')
     const input = document.createElement('input')
     input.className = 'slNameInput'
     input.dataset.id = item.id
@@ -229,6 +229,11 @@ function renderSonglists(lists) {
     wrap.appendChild(input)
     const ops = document.createElement('div')
     ops.className = 'ops'
+    const expBtn = document.createElement('button')
+    expBtn.className = 'ghost'
+    expBtn.textContent = '导出'
+    expBtn.onclick = () => { void exportSonglist(item.id) }
+    ops.appendChild(expBtn)
     const delBtn = document.createElement('button')
     delBtn.className = 'danger'
     delBtn.textContent = '删除这个歌单'
@@ -287,6 +292,46 @@ async function removeSonglist(id, name) {
       return
     }
     await confirmApplied(lists => !lists.some(item => item.id === id), '已删除，电视端「我的歌单」已更新')
+  } catch (e) {
+    showRenameMsg('网络错误，请重试', true)
+  }
+}
+
+// 导出歌单（09-20）：提交请求 → 电视端 JS 打包成洛雪格式 → 轮询结果 → 触发浏览器下载
+async function exportSonglist(id) {
+  showRenameMsg('正在导出…')
+  try {
+    const r = await fetch('/api/songlist-export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ id: id })
+    })
+    const d = await r.json()
+    if (!d || !d.ok) {
+      showRenameMsg((d && d.message) || '导出请求失败', true)
+      return
+    }
+    for (let i = 0; i < 16; i++) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      const rr = await fetch('/api/songlist-export-result')
+      const result = await rr.json()
+      if (result && result.ok && result.id === id) {
+        const blob = new Blob([result.payload], { type: 'application/json' })
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = (result.name || '歌单').replace(/[\\/:*?"<>|]/g, '_') + '.json'
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        showRenameMsg('已导出「' + result.name + '」，请在手机下载目录查收')
+        return
+      }
+      if (result && result.ok === false && result.message && result.message !== 'pending' && result.message !== 'empty') {
+        showRenameMsg('导出失败：' + result.message, true)
+        return
+      }
+    }
+    showRenameMsg('电视端没有响应，请确认停在扫码页后重试', true)
   } catch (e) {
     showRenameMsg('网络错误，请重试', true)
   }

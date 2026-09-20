@@ -472,6 +472,12 @@ public class UtilsModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
+  public void pushLanSonglistExport(String json, Promise promise) {
+    LanImportServer.setSonglistExport(json);
+    promise.resolve(null);
+  }
+
+  @ReactMethod
   public void generateQRCodeBase64(String text, int size, Promise promise) {
     try {
       BitMatrix matrix = new QRCodeWriter()
