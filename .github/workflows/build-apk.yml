@@ -77,3 +77,30 @@ jobs:
           fi
           gh release upload apk-lulu ZL_Musicos-lulu.apk --clobber
           echo "Download: https://github.com/${{ github.repository }}/releases/download/apk-lulu/ZL_Musicos-lulu.apk"
+
+      # master 推送：把三架构 APK 自动上传到版本号对应的 Release（v<version>）。
+      # Release 由网关侧提前建好（带完整更新说明）；这里只负责传 APK 资产，
+      # 彻底摆脱「本机下载 artifact 必截断」的问题（09-19 实证）。
+      - name: Publish versioned APKs (master)
+        if: github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          APK_DIR=android/app/build/outputs/apk/release
+          VER=$(node -p "require('./package.json').version")
+          TAG="v${VER}"
+          echo "Publishing APKs to release ${TAG}"
+          if ! gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} not found - creating a minimal one"
+            gh release create "${TAG}" --title "ZL-Musicos ${TAG}" --notes "见 Release 页更新说明" --target "$GITHUB_SHA"
+          fi
+          for ABI in arm64-v8a armeabi-v7a x86_64 x86 universal; do
+            APK=$(ls "$APK_DIR"/*"${ABI}"*.apk 2>/dev/null | head -n1 || true)
+            if [ -n "$APK" ]; then
+              cp "$APK" "ZL-Musicos-${TAG}-${ABI}.apk"
+              gh release upload "${TAG}" "ZL-Musicos-${TAG}-${ABI}.apk" --clobber
+            fi
+          done
+          echo "Release ${TAG} assets:"
+          gh release view "${TAG}" --json assets -q '.assets[].name'
