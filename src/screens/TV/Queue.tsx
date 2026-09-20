@@ -55,33 +55,39 @@ function TVQueue({ componentId }: { componentId: string }) {
   const listRef = useRef<FlatList<LX.Music.MusicInfo>>(null)
   const queueRefs = useRef<FocusRefMap>({})
   const [localDialog, setLocalDialog] = useState<TVDialogRequest | null>(null)
-  const [songlistDialog, setSonglistDialog] = useState<{ musicInfos: LX.Music.MusicInfo[]; label: string } | null>(null)
 
-  const showSonglistPicker = (musicInfos: LX.Music.MusicInfo[], label: string) => {
-    setSonglistDialog({ musicInfos, label })
-  }
-
-  const handleAddToSonglist = async(listId: string) => {
-    if (!songlistDialog) return
-    const { musicInfos, label } = songlistDialog
-    setSonglistDialog(null)
+  // 加歌到自建歌单：前后快照对比，如实区分「新加 / 已存在 / 未写入」。
+  // 注：musicInfos/label 必须走参数传入（旧版从 songlistDialog 状态里取，
+  // 但那个状态在弹窗改为 localDialog 后已无人写入，守卫直接 return →
+  // 按 OK 变成完全空操作、连结果弹窗都没有，09-20 老板实测发现）
+  const handleAddToSonglist = async(listId: string, musicInfos: LX.Music.MusicInfo[], label: string) => {
     try {
+      const before = await getListMusics(listId)
+      const beforeIds = new Set(before.map(m => m.id))
+      const alreadyCount = musicInfos.filter(m => beforeIds.has(m.id)).length
       await addListMusics(listId, musicInfos, 'new')
-      // 回读校验：写入是静默去重的，不核对的话会出现「提示成功、歌单里却没这首歌」
-      const listAfter = await getListMusics(listId)
-      const idSet = new Set(listAfter.map(m => m.id))
-      const landed = musicInfos.filter(m => idSet.has(m.id)).length
-      if (landed < musicInfos.length) {
+      const after = await getListMusics(listId)
+      const afterIds = new Set(after.map(m => m.id))
+      const newlyLanded = musicInfos.filter(m => afterIds.has(m.id) && !beforeIds.has(m.id)).length
+      if (newlyLanded === 0 && alreadyCount === musicInfos.length) {
         showLocalDialog({
-          title: '已存在或未写入',
-          message: `${musicInfos.length - landed} 首已在歌单里或未写入，「${label}」现共 ${listAfter.length} 首，可到「我的歌单」核对`,
+          title: '无需重复添加',
+          message: `「${label}」的 ${musicInfos.length} 首都已在这个歌单里（现共 ${after.length} 首）`,
+          buttons: [{ label: '确定', tone: 'primary' }],
+        })
+        return
+      }
+      if (newlyLanded + alreadyCount < musicInfos.length) {
+        showLocalDialog({
+          title: '部分未写入',
+          message: `${musicInfos.length - newlyLanded - alreadyCount} 首未写入，歌单现共 ${after.length} 首，可到「我的歌单」核对`,
           buttons: [{ label: '确定', tone: 'primary' }],
         })
         return
       }
       showLocalDialog({
         title: '添加成功',
-        message: `已将「${label}」添加到歌单（${musicInfos.length} 首）`,
+        message: `已添加 ${newlyLanded} 首${alreadyCount ? `（${alreadyCount} 首已存在跳过）` : ''}，歌单现共 ${after.length} 首`,
         buttons: [{ label: '确定', tone: 'primary' }],
       })
     } catch (err) {
@@ -121,7 +127,7 @@ function TVQueue({ componentId }: { componentId: string }) {
           ...counted.map(item => ({
             label: `${item.name}（${item.count} 首）`,
             tone: 'primary' as const,
-            onPress: () => { void handleAddToSonglist(item.id) },
+            onPress: () => { void handleAddToSonglist(item.id, musicInfos, label) },
           })),
           { label: '取消', tone: 'dark' as const },
         ],
