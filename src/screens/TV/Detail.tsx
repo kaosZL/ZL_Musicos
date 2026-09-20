@@ -6,6 +6,7 @@ import TVText from '@/components/TV/TVText'
 import TVButton from '@/components/TV/TVButton'
 import TVMusicRow from '@/components/TV/TVMusicRow'
 import TVGlassPanel from '@/components/TV/TVGlassPanel'
+import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
 import type Focusable from '@/components/TV/Focusable'
 import Image from '@/components/common/Image'
 import { tvColors, tvFont, tvSize } from '@/theme/tv'
@@ -19,7 +20,7 @@ import { getListDetail as getBoardListDetail } from '@/core/leaderboard'
 import { getListDetail as getSonglistDetail } from '@/core/songlist'
 import { handlePlay as handleBoardPlay } from '@/screens/Home/Views/Leaderboard/listAction'
 import { handlePlay as handleSonglistPlay } from '@/screens/SonglistDetail/listAction'
-import { getListMusics, setTempList } from '@/core/list'
+import { getListMusics, setTempList, removeListMusics } from '@/core/list'
 import { playList } from '@/core/player/player'
 import { LIST_IDS } from '@/config/constant'
 import type { TVDetailPayload } from './types'
@@ -169,6 +170,32 @@ function TVDetail({ componentId, payload }: Props) {
     pushTVPlayerScreen(componentId)
   }
 
+  // 长按删除歌曲（仅自建歌单，老板 09-20 需求）：弹窗确认后从歌单移除。
+  // 在线歌单/榜单不支持改远端数据，保持原来的「长按追加到播放列表」。
+  const [localDialog, setLocalDialog] = useState<TVDialogRequest | null>(null)
+  const confirmRemoveSong = (item: LX.Music.MusicInfoOnline) => {
+    setLocalDialog({
+      title: `删除：${item.name ?? '未知歌曲'}`,
+      message: `确定从该歌单删除这首歌吗？${item.singer ? `（${item.singer}）` : ''}`,
+      buttons: [
+        { label: '取消', tone: 'dark' },
+        { label: '删除', tone: 'danger', onPress: () => { void doRemoveSong(item) } },
+      ],
+    })
+  }
+  const doRemoveSong = async(item: LX.Music.MusicInfoOnline) => {
+    try {
+      await removeListMusics(payload.id, [item.id])
+      // 列表经本页的 myListMusicUpdate 订阅自动刷新，无需手动重载
+    } catch (err: unknown) {
+      setLocalDialog({
+        title: '删除失败',
+        message: err instanceof Error ? err.message : '未知错误',
+        buttons: [{ label: '确定', tone: 'primary' }],
+      })
+    }
+  }
+
   const statsText = loading
     ? tvText.loadingSongs
     : error
@@ -255,7 +282,7 @@ function TVDetail({ componentId, payload }: Props) {
                   hasTVPreferredFocus={preferFirstRow && index === 0}
                   onFocus={() => { handleFocus(index) }}
                   onPress={() => { void handlePlay(index) }}
-                  onLongPress={() => { void handleSinglePlay(item) }}
+                  onLongPress={payload.type === 'userlist' ? () => { confirmRemoveSong(item) } : () => { void handleSinglePlay(item) }}
                   nextFocusUp={index === 0 ? getActiveTabHandle() ?? playAllFocus.getNodeHandle() ?? undefined : getRowHandle(prevKey) ?? undefined}
                   nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
                   nextFocusDown={getRowHandle(nextKey) ?? undefined}
@@ -265,6 +292,19 @@ function TVDetail({ componentId, payload }: Props) {
           />
         </TVGlassPanel>
       </View>
+      <TVDialog
+        visible={!!localDialog}
+        title={localDialog?.title ?? ''}
+        message={localDialog?.message}
+        buttons={localDialog?.buttons?.map(btn => ({
+          ...btn,
+          onPress: () => {
+            setLocalDialog(null)
+            btn.onPress?.()
+          },
+        })) ?? []}
+        onDismiss={() => { setLocalDialog(null) }}
+      />
     </TVAppleScaffold>
   )
 }
