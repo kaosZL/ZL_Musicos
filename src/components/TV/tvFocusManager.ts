@@ -296,6 +296,19 @@ export const moveTVFocus = async(direction: Direction) => {
   return true
 }
 
+/** 按组件 ref 直接聚焦某个目标（测量后 setActiveTarget）。
+ * 供页面里「程序性移动焦点」的场景使用（如详情页从操作按钮下键进列表首行）。
+ * 旧做法靠 preferred 翻转+重调度间接实现，初始焦点改为仅挂载时调度后不再可用（09-22）。 */
+export const focusTVTargetByRef = async(ref: FocusTargetRef | null) => {
+  if (!ref) return false
+  const measured = await measureTargets()
+  const handle = findNodeHandle(ref)
+  const target = measured.find(item => getNativeHandle(item) === handle) ?? null
+  if (!target) return false
+  setActiveTarget(target)
+  return true
+}
+
 export const pressActiveTVTarget = () => {
   const active = activeTargetId ? targets.get(activeTargetId) : null
   if (activeScopeId && active?.scopeId !== activeScopeId) return

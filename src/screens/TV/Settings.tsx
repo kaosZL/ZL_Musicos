@@ -102,9 +102,12 @@ function TVSettings({ componentId }: { componentId: string }) {
   const [sleepState, setSleepState] = useState(() => getSleepTimerState())
   const [, setSleepTick] = useState(0)
   useEffect(() => {
+    // 定时未开启时完全不跑每秒定时器：每秒重渲染会让 Focusable 的初始焦点重调度，
+    // 焦点被抢回首个音源项（09-22 设置页焦点跳动根因）
+    if (!sleepState.deadline && !sleepState.stopAfterCurrent) return
     const timer = setInterval(() => { setSleepState(getSleepTimerState()); setSleepTick(t => t + 1) }, 1000)
     return () => { clearInterval(timer) }
-  }, [])
+  }, [sleepState.deadline, sleepState.stopAfterCurrent])
   const sleepRemaining = sleepState.deadline > Date.now() ? Math.ceil((sleepState.deadline - Date.now()) / 60000) : 0
   const sleepActive = sleepRemaining > 0 || sleepState.stopAfterCurrent
   const sourceScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)

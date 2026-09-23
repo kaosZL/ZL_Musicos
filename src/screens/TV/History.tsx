@@ -19,6 +19,7 @@ import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { dot, tvText } from './labels'
 import { createTVTabs, getSourceName } from './utils'
+import { getData, saveData } from '@/plugins/storage'
 
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
@@ -42,6 +43,12 @@ function TVHistory({ componentId }: { componentId: string }) {
   const sourceRefs = useRef<FocusRefMap>({})
   const sourceOptions = useMemo(() => searchMusicState.sources.filter(s => s !== 'all'), [searchMusicState.sources])
   const sourceTabs = useMemo(() => sourceOptions.map(s => ({ id: s, label: getSourceName(s) ?? s })), [sourceOptions])
+  // 首选源持久化（09-22 老板需求）：排行榜页选过的源记住，首页推荐架跟随同一源
+  useEffect(() => {
+    void getData<string>('tv_board_source').then(saved => {
+      if (saved && sourceOptions.includes(saved) && saved !== sourceSel) setSourceSel(saved)
+    }).catch(() => { })
+  }, [])
   const getSourceHandle = (id?: string | null) => id && sourceRefs.current[id] ? findNodeHandle(sourceRefs.current[id]) : null
   const bindSourceRef = (id: string) => (node: FocusNode) => { sourceRefs.current[id] = node }
   const handleSourceChange = (newSource: string) => {
@@ -49,6 +56,7 @@ function TVHistory({ componentId }: { componentId: string }) {
     setSourceSel(newSource)
     setSelectedIndex(0)
     setLoadingText(tvText.loading + tvText.hotChart)
+    void saveData('tv_board_source', newSource).catch(() => { })
   }
   const selectedBoard = boards[selectedIndex] ?? null
 

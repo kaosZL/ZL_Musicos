@@ -23,6 +23,7 @@ import { useNavigationComponentDidAppear } from '@/navigation/hooks'
 import { pushTVDetailScreen, pushTVPlayerScreen, pushTVSearchScreen } from '@/navigation/navigation'
 import { createTVTabs, getSourceName } from './utils'
 import { dot, tvText } from './labels'
+import { getData } from '@/plugins/storage'
 
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
@@ -58,7 +59,16 @@ function TVHome({ componentId }: { componentId: string }) {
     },
   })
 
-  const songlistSource = songlistState.sources[0]
+  // 排行榜推荐源跟随排行榜页选择（09-22 老板需求）：
+  // 持久化键 tv_board_source（History 页写入），未选过时回退 sources[0]（酷我）
+  const [boardSource, setBoardSource] = useState<LX.OnlineSource | null>(null)
+  const readBoardSource = useCallback(() => {
+    void getData<LX.OnlineSource>('tv_board_source').then(saved => {
+      if (saved && songlistState.sources.includes(saved)) setBoardSource(saved)
+    }).catch(() => { })
+  }, [])
+  useEffect(() => { readBoardSource() }, [readBoardSource])
+  const songlistSource = boardSource ?? songlistState.sources[0]
   const sortId = songlistSource ? songlistState.sortList[songlistSource]?.[0]?.id : ''
 
   useEffect(() => {
@@ -136,8 +146,10 @@ function TVHome({ componentId }: { componentId: string }) {
       appearTimerRef.current = null
       resetHomeContent()
     }, 260)
+    // 回到首页时重读排行榜页选的源，推荐架即时跟随（09-22）
+    readBoardSource()
     queueFocusRefresh()
-  }, [queueFocusRefresh, scrollToHero]))
+  }, [queueFocusRefresh, readBoardSource, scrollToHero]))
 
   const openSonglist = (songlist: ListInfoItem) => {
     pushTVDetailScreen(componentId, { type: 'songlist', id: songlist.id, source: songlist.source, title: songlist.name, subtitle: songlist.desc ?? songlist.author, songlist })

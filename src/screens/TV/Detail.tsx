@@ -7,13 +7,13 @@ import TVButton from '@/components/TV/TVButton'
 import TVMusicRow from '@/components/TV/TVMusicRow'
 import TVGlassPanel from '@/components/TV/TVGlassPanel'
 import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
+import { focusTVTargetByRef } from '@/components/TV/tvFocusManager'
 import type Focusable from '@/components/TV/Focusable'
 import Image from '@/components/common/Image'
 import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { pop } from '@/navigation'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
-import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
-import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
+import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { getListDetail as getBoardListDetail } from '@/core/leaderboard'
@@ -41,7 +41,6 @@ function TVDetail({ componentId, payload }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [total, setTotal] = useState(0)
-  const [preferFirstRow, setPreferFirstRow] = useState(false)
   // 重试令牌：加载失败点「重试」时 +1，触发重新拉取；分页状态：加载更多 + 每页条数
   const [retryToken, setRetryToken] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -58,11 +57,12 @@ function TVDetail({ componentId, payload }: Props) {
   const getActiveTabHandle = () => (activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null)
   const actionFocusedRef = useRef(false)
 
+  // 从操作按钮下键进列表首行：直接聚焦（不再靠 preferred 翻转间接实现——
+  // 初始焦点改为仅挂载时调度后，翻转不再触发焦点移动，09-22）
   const focusFirstRow = useCallback(() => {
     if (!firstRowFocus.ref.current) return
     listRef.current?.scrollToOffset({ offset: 0, animated: true })
-    setPreferFirstRow(false)
-    requestAnimationFrame(() => { setPreferFirstRow(true) })
+    void focusTVTargetByRef(firstRowFocus.ref.current)
   }, [firstRowFocus.ref])
 
   useTVNavigationBack(componentId)
@@ -162,7 +162,6 @@ function TVDetail({ componentId, payload }: Props) {
   }
 
   const handleFocus = (index: number) => {
-    if (preferFirstRow) setPreferFirstRow(false)
     listRef.current?.scrollToOffset({ offset: Math.max(0, index * ITEM_SIZE - ITEM_SIZE), animated: true })
   }
 
@@ -329,7 +328,7 @@ function TVDetail({ componentId, payload }: Props) {
                   subtitle={`${item.singer ?? tvText.unknownSinger}${dot}${item.meta.albumName ?? tvText.unknownAlbum}`}
                   meta={item.interval ?? getSourceName(item.source)}
                   badge={index < 3 ? tvText.hotChart : undefined}
-                  hasTVPreferredFocus={preferFirstRow && index === 0}
+                  hasTVPreferredFocus={false}
                   onFocus={() => { handleFocus(index) }}
                   onPress={() => { void handlePlay(index) }}
                   onLongPress={payload.type === 'userlist' ? () => { confirmRemoveSong(item) } : () => { void handleSinglePlay(item) }}

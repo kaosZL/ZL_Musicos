@@ -97,7 +97,11 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
 
   useEffect(() => {
     const node = nativeRef.current
-    const id = registerTVFocusTarget(focusScopeId, node, false)
+    // 注册时即携带 preferred：挂载路径的初始焦点调度由 registerTVFocusTarget 内部触发。
+    // 旧版性在 update effect 里重复调度，导致【任何父组件重渲染】都会把焦点抢回
+    // preferred 项——设置页睡眠定时的每秒重渲染让焦点在音源列表前两项间来回跳
+    // （09-22 老板实测）。初始焦点只该在挂载时发生一次，不随重渲染发生。
+    const id = registerTVFocusTarget(focusScopeId, node, !!hasTVPreferredFocus)
     targetIdRef.current = id
     const unsubscribe = subscribeTVTargetFocusState(id, setTVFocused)
 
@@ -122,7 +126,6 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
       onPress: onPress ? triggerTVPress : undefined,
       onLongPress: onLongPress ? handleLongPress : undefined,
     })
-    if (hasTVPreferredFocus) scheduleTVInitialFocus()
   }, [focusScopeId, hasTVPreferredFocus, nextFocusDown, nextFocusLeft, nextFocusRight, nextFocusUp, onPress, triggerTVPress])
 
   return (
