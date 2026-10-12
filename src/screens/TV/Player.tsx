@@ -13,6 +13,7 @@ import { setCurrentTime } from '@/plugins/player/utils'
 import { useSettingValue } from '@/store/setting/hook'
 import { updateSetting } from '@/core/common'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
+import { focusTVTargetByRef } from '@/components/TV/tvFocusManager'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { onTVRemoteEvent } from '@/utils/nativeModules/utils'
@@ -65,10 +66,11 @@ function TVPlayer({ componentId }: { componentId: string }) {
   const apiSource = useSettingValue('common.apiSource')
   const playMode = useSettingValue('player.togglePlayMethod')
   const [showControls, setShowControls] = useState(true)
-  const [focusToken, setFocusToken] = useState(0)
   const [hideKey, setHideKey] = useState(0)
   const hideDeadlineRef = useRef<number>(0)
   const controlFocusCountRef = useRef(0)
+  // Issue #9 方案 B：时间戳守卫——即使 count 因组件重挂载短暂归零，500ms 内也不让直控拦截
+  const controlFocusTimeRef = useRef(0)
   const prevFocus = useTVFocusRef()
   const playFocus = useTVFocusRef()
   const nextFocus = useTVFocusRef()
@@ -188,6 +190,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
 
   const handleControlFocus = useCallback(() => {
     controlFocusCountRef.current += 1
+    controlFocusTimeRef.current = Date.now()
     revealControls()
   }, [revealControls])
 
@@ -216,8 +219,8 @@ function TVPlayer({ componentId }: { componentId: string }) {
     next: () => { if (musicInfo.id) void playNext() },
     fastForward: () => { if (musicInfo.id) void playNext() },
     stop: () => { if (musicInfo.id && isPlay) togglePlay() },
-    down: () => { revealControls(); setFocusToken(t => t + 1) },
-    up: () => { revealControls(); setFocusToken(t => t + 1) },
+    down: () => { revealControls(); void focusTVTargetByRef(playFocus.ref.current) },
+    up: () => { revealControls(); void focusTVTargetByRef(playFocus.ref.current) },
     menu: () => { revealControls() },
   })
 
@@ -235,6 +238,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
       if (!isSeekKey && !isSelectKey) return
       if (!musicInfo.id) return
       if (controlFocusCountRef.current > 0) return
+      if (Date.now() - controlFocusTimeRef.current < 500) return // Issue #9：重挂载空窗期不让直控触发
       // eventKeyAction: 0=DOWN, 1=UP, 2=REPEAT(长按产生的重复事件)
       if (isSelectKey) {
         if (eventKeyAction === 1) togglePlay()
@@ -392,7 +396,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
             <View style={styles.primaryControls}>
               <TVRoundControl ref={modeFocus.ref as any} label={getPlayModeName(playMode)} iconName={getPlayModeIconName(playMode)} size={appleLayout.controlSmall} onPress={togglePlayMode} onFocus={handleControlFocus} onBlur={handleControlBlur} accessibilityLabel={getPlayModeName(playMode)} nextFocusRight={prevFocus.getNodeHandle() ?? undefined} />
               <TVRoundControl ref={prevFocus.ref as any} label={tvText.controlPrev} iconName="prevMusic" size={appleLayout.controlSmall} onPress={() => { revealControls(); void playPrev() }} onFocus={handleControlFocus} onBlur={handleControlBlur} accessibilityLabel={tvText.controlPrev} nextFocusLeft={modeFocus.getNodeHandle() ?? undefined} nextFocusRight={playFocus.getNodeHandle() ?? undefined} />
-              <TVRoundControl key={`play_${focusToken}`} ref={playFocus.ref as any} label={isPlay ? tvText.pause : tvText.playNow} iconName={isPlay ? 'pause' : 'play'} primary size={appleLayout.controlPrimary} onPress={handleTogglePlay} onFocus={handleControlFocus} onBlur={handleControlBlur} hasTVPreferredFocus nextFocusLeft={prevFocus.getNodeHandle() ?? undefined} nextFocusRight={nextFocus.getNodeHandle() ?? undefined} />
+              <TVRoundControl ref={playFocus.ref as any} label={isPlay ? tvText.pause : tvText.playNow} iconName={isPlay ? 'pause' : 'play'} primary size={appleLayout.controlPrimary} onPress={handleTogglePlay} onFocus={handleControlFocus} onBlur={handleControlBlur} hasTVPreferredFocus nextFocusLeft={prevFocus.getNodeHandle() ?? undefined} nextFocusRight={nextFocus.getNodeHandle() ?? undefined} />
               <TVRoundControl ref={nextFocus.ref as any} label={tvText.controlNext} iconName="nextMusic" size={appleLayout.controlSmall} onPress={() => { revealControls(); void playNext() }} onFocus={handleControlFocus} onBlur={handleControlBlur} accessibilityLabel={tvText.controlNext} nextFocusLeft={playFocus.getNodeHandle() ?? undefined} />
             </View>
             </TVNowPlayingDock>
