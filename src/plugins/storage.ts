@@ -43,13 +43,23 @@ const handleGetData = async<T>(partKeys: string): Promise<T> => {
   })
 }
 
+// 同 key 写串行化：saveData 是 remove→multiSet 两段异步，无串行化时两个并发保存
+// 交错（A.remove→B.remove→B.set→A.set）会让旧快照最后落盘——userList 这类
+// 「每次列表操作都全量重写」的 key 上就是数据丢失（内存正常、重启后丢歌单）
+const saveQueues = new Map<string, Promise<unknown>>()
+
 export const saveData = async(key: string, value: any) => {
   const datas: Array<[string, string]> = []
   buildData(key, value, datas)
 
-  try {
+  const task = (saveQueues.get(key) ?? Promise.resolve()).then(async() => {
     await removeData(key)
     await AsyncStorage.multiSet(datas)
+  })
+  // 失败也要放行后续保存（吞掉的是链上的错误，真正的错误仍由下方 await 抛给调用方）
+  saveQueues.set(key, task.catch(() => {}))
+  try {
+    await task
   } catch (e: any) {
     // saving error
     log.error('storage error[saveData]:', key, e.message)
@@ -69,7 +79,13 @@ export const getData = async<T = unknown>(key: string): Promise<T | null> => {
   if (value && (partKeyPrefixRxp.test(value) || partKeyArrPrefixRxp.test(value))) {
     return handleGetData<T>(value)
   } else if (value == null) return value
-  return JSON.parse(value)
+  try {
+    return JSON.parse(value) as T
+  } catch (e: any) {
+    // 单条值损坏（截断/污染）不该炸穿调用方：记日志按「无数据」处理，调用方均有 ?? 兜底
+    log.error('storage error[getData:parse]:', key, e.message)
+    return null
+  }
 }
 
 export const removeData = async(key: string) => {

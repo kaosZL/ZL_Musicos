@@ -1,4 +1,4 @@
-import { togglePlay } from '@/core/player/player'
+import { pause } from '@/core/player/player'
 import playerState from '@/store/player/state'
 
 /**
@@ -39,7 +39,9 @@ export const setSleepTimer = (minutes: number) => {
   deadline = Date.now() + minutes * 60_000
   timer = setTimeout(() => {
     clearAll()
-    void togglePlay()
+    // 只停不启：用户在到点前已手动暂停（接电话等）时，取反会把音乐重新放出来——
+    // 睡眠定时器反向效果
+    if (playerState.isPlay) void pause()
   }, minutes * 60_000)
 }
 
@@ -50,10 +52,22 @@ export const setStopAfterCurrent = () => {
   armedMusicId = (playerState.musicInfo as unknown as { id?: string | null })?.id ?? ''
   musicInfoHandler = (musicInfo) => {
     const nextId = musicInfo?.id ?? ''
-    // 只在「换歌」时触发；同一首的元数据刷新（歌词加载等）不触发
-    if (stopAfterCurrent && nextId && nextId !== armedMusicId) {
+    if (!stopAfterCurrent) return
+    // 播放停了/队列清空：布防解除（状态栏别一直挂着「播完即停」）
+    if (!nextId) {
       clearAll()
-      void togglePlay()
+      return
+    }
+    // 空播放时布防（armedMusicId 为空）：采纳第一首的 id 而不暂停，
+    // 否则用户从设置页布防后回首页放歌，第一首刚起就被秒停，像播放坏了
+    if (!armedMusicId) {
+      armedMusicId = nextId
+      return
+    }
+    // 只在「换歌」时触发；同一首的元数据刷新（歌词加载等）不触发
+    if (nextId !== armedMusicId) {
+      clearAll()
+      if (playerState.isPlay) void pause()
     }
   }
   global.state_event.on('playerMusicInfoChanged', musicInfoHandler as any)
