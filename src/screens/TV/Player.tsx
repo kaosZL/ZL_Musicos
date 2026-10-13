@@ -239,13 +239,14 @@ function TVPlayer({ componentId }: { componentId: string }) {
       if (!musicInfo.id) return
       if (controlFocusCountRef.current > 0) return
       if (Date.now() - controlFocusTimeRef.current < 500) return // Issue #9：重挂载空窗期不让直控触发
-      // eventKeyAction: 0=DOWN, 1=UP, 2=REPEAT(长按产生的重复事件)
+      // eventKeyAction 即原生 KeyEvent.getAction()：0=DOWN, 1=UP。
+      // 长按 repeat 事件 action 仍是 0、靠 repeatCount>0 识别（ACTION_MULTIPLE 不出现在方向键上）
       if (isSelectKey) {
         if (eventKeyAction === 1) togglePlay()
         return
       }
       const dir = eventType === 'left' ? 'left' : 'right'
-      if (eventKeyAction === 2) {
+      if (eventKeyAction === 0 && (repeatCount ?? 0) > 0) {
         // 长按重复：前 4 次 ±5s 精调，之后升到 ±30s 大步长（09-20 需求）
         seekRepeatFiredRef.current[dir] = true
         revealControls()
