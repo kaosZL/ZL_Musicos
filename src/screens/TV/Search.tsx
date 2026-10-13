@@ -18,6 +18,7 @@ import { playList } from '@/core/player/player'
 import { getData, saveData } from '@/plugins/storage'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
+import { focusTVTargetByRef } from '@/components/TV/tvFocusManager'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
@@ -61,6 +62,10 @@ function TVSearch({ componentId }: { componentId: string }) {
   const searchButtonFocus = useTVFocusRef()
   const firstResultFocus = useTVFocusRef()
   const firstKeyboardKeyFocus = useRef<FocusNode>(null)
+  // 顶部导航接线契约：内容首行按上直达导航栏（activeTabRef 挂 native handle 后
+  // 靠 onActiveTabReady 触发重渲染，nextFocusUp 才有值，否则退化成几何回退）
+  const activeTabFocus = useRef<FocusNode>(null)
+  const getActiveTabHandle = () => (activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null)
   const loadMoreFocus = useTVFocusRef()
   const playAllFocus = useTVFocusRef()
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null)
@@ -151,9 +156,14 @@ function TVSearch({ componentId }: { componentId: string }) {
     if (!listInfo) return
     const keyword = text.trim()
     const expectedKey = keyword ? `${listInfo.page || 1}__${keyword}` : ''
-    setResults(listInfo.key === expectedKey ? listInfo.list : [])
+    // 复制快照：listInfo.list 是 store 里的活引用，直接进 state 违反本项目铁律
+    // （上游一旦改为原地变更，setResults(同引用) 会被 Object.is 短路不刷新）
+    setResults(listInfo.key === expectedKey ? [...listInfo.list] : [])
   }, [source, text, syncPageInfo])
 
+  // 搜索请求序号守卫：上游对「已被新搜索取代」的请求返回空数组，
+  // 慢的旧请求晚到会把新关键词的结果整表清掉（搜 A 慢、改搜 B 先回时必现）
+  const searchSeqRef = useRef(0)
   const handleSearch = async(targetPage = 1, keywordOverride?: string, sourceOverride?: typeof source) => {
     let keyword = (keywordOverride ?? text).trim()
     if (keywordOverride == null && /^[a-zA-Z]+$/.test(keyword)) {
@@ -161,6 +171,7 @@ function TVSearch({ componentId }: { componentId: string }) {
       if (exact) keyword = exact.keyword
     }
     if (!keyword) {
+      searchSeqRef.current += 1
       setResults([])
       setError('')
       setPageInfo({ page: 0, maxPage: 0, total: 0 })
@@ -168,21 +179,33 @@ function TVSearch({ componentId }: { componentId: string }) {
     }
     if (keyword !== text.trim()) setText(keyword)
     recordSearch(keyword)
+    const seq = ++searchSeqRef.current
     if (targetPage > 1) setLoadingMore(true)
     else setLoading(true)
     setError('')
     try {
       const activeSource = sourceOverride ?? source
       const list = await search(keyword, targetPage, activeSource)
-      setResults(list)
+      if (seq !== searchSeqRef.current) return // 过期响应：已有更新的搜索在途/已完成，丢弃
+      setResults([...list])
       syncPageInfo(activeSource)
-      if (targetPage === 1) requestAnimationFrame(() => { listRef.current?.scrollToOffset({ offset: 0, animated: false }) })
+      if (targetPage === 1) {
+        requestAnimationFrame(() => {
+          listRef.current?.scrollToOffset({ offset: 0, animated: false })
+          // 焦点引擎已改为「preferred 不抢仍挂载的活动焦点」，搜索成功后把焦点
+          // 显式移到第一条结果（对齐此前「出结果自动跳结果区」的习惯）
+          void focusTVTargetByRef(firstResultFocus.ref.current)
+        })
+      }
     } catch (err: unknown) {
+      if (seq !== searchSeqRef.current) return
       if (targetPage === 1) setResults([])
       setError(err instanceof Error ? err.message : tvText.loadFailed)
     } finally {
-      if (targetPage > 1) setLoadingMore(false)
-      else setLoading(false)
+      if (seq === searchSeqRef.current) {
+        if (targetPage > 1) setLoadingMore(false)
+        else setLoading(false)
+      }
     }
   }
 
@@ -225,7 +248,15 @@ function TVSearch({ componentId }: { componentId: string }) {
     await handleSearch(pageInfo.page + 1)
   }
 
-  const handleKeyboardKey = (key: string) => { setText(value => `${value}${key}`) }
+  // 键盘回调全部 useCallback 固定身份：TVSearchKeyboard 是 memo 组件，
+  // 内联回调每次渲染换引用会击穿 memo，每敲一个字符整棵键盘 37 个按键全部重渲染。
+  // submit 经 ref 转发拿最新一次渲染的 handleSearch，避免空依赖闭包读到旧 text
+  const handleSearchRef = useRef(handleSearch)
+  handleSearchRef.current = handleSearch
+  const handleKeyboardKey = useCallback((key: string) => { setText(value => `${value}${key}`) }, [])
+  const handleKeyboardBackspace = useCallback(() => { setText(value => value.slice(0, -1)) }, [])
+  const handleKeyboardClear = useCallback(() => { setText('') }, [])
+  const handleKeyboardSubmit = useCallback(() => { void handleSearchRef.current() }, [])
   const hasMore = !!pageInfo.maxPage && pageInfo.page < pageInfo.maxPage
   const suggestions: HotSearchItem[] = matchHotSearch(text)
   const showSuggest = suggestions.length > 0
@@ -242,12 +273,12 @@ function TVSearch({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={musicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="search" nextFocusDown={getInputHandle() ?? searchButtonHandle} />
+      <TVTopTabs items={createTVTabs(componentId, 'search')} activeId="search" nextFocusDown={getInputHandle() ?? searchButtonHandle} activeTabRef={activeTabFocus} onActiveTabReady={queueFocusRefresh} />
       <View style={styles.root}>
         <TVGlassPanel style={styles.leftPanel}>
           <TVText variant="pageTitle" style={styles.pageTitle}>{tvText.searchTitle}</TVText>
           <View style={styles.inputRow}>
-            <TVTextInput ref={inputRef} value={text} onChangeText={setText} placeholder={tvText.searchPlaceholder} placeholderTextColor={tvColors.dimText} style={styles.input} nextFocusRight={searchButtonHandle} nextFocusDown={firstHotHandle} onSubmitEditing={() => { void handleSearch() }} />
+            <TVTextInput ref={inputRef} value={text} onChangeText={setText} placeholder={tvText.searchPlaceholder} placeholderTextColor={tvColors.dimText} style={styles.input} nextFocusUp={getActiveTabHandle() ?? undefined} nextFocusRight={searchButtonHandle} nextFocusDown={firstHotHandle} onSubmitEditing={() => { void handleSearch() }} />
             <TVButton ref={searchButtonFocus.ref as any} label={loading ? tvText.searching : tvText.search} tone="dark" onPress={() => { void handleSearch() }} hasTVPreferredFocus nextFocusLeft={getInputHandle() ?? undefined} nextFocusRight={firstResultHandle} nextFocusDown={firstHotHandle} />
           </View>
           <TVText variant="cardTitle" style={styles.blockTitle}>{showSuggest ? '猜你想搜' : tvText.hotSearch}</TVText>
@@ -273,7 +304,7 @@ function TVSearch({ componentId }: { componentId: string }) {
               </ScrollView>
             </>
           )}
-          <TVSearchKeyboard firstKeyRef={firstKeyboardKeyFocus} onFirstKeyReady={queueFocusRefresh} onKeyPress={handleKeyboardKey} onBackspace={() => { setText(value => value.slice(0, -1)) }} onClear={() => { setText('') }} onSubmit={() => { void handleSearch() }} nextFocusUp={lastHotHandle} topRowFocusUpTargets={keyboardTopRowFocusUps} nextFocusRight={firstResultHandle} />
+          <TVSearchKeyboard firstKeyRef={firstKeyboardKeyFocus} onFirstKeyReady={queueFocusRefresh} onKeyPress={handleKeyboardKey} onBackspace={handleKeyboardBackspace} onClear={handleKeyboardClear} onSubmit={handleKeyboardSubmit} nextFocusUp={lastHotHandle} topRowFocusUpTargets={keyboardTopRowFocusUps} nextFocusRight={firstResultHandle} />
         </TVGlassPanel>
         <TVGlassPanel style={styles.resultPanel}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sourceTabWrap} contentContainerStyle={styles.sourceTabContent}>

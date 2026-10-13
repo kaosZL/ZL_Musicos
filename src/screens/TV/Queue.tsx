@@ -9,7 +9,7 @@ import TVGlassPanel from '@/components/TV/TVGlassPanel'
 import type Focusable from '@/components/TV/Focusable'
 import { Alert } from 'react-native'
 import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
-import { tvColors } from '@/theme/tv'
+import { tvColors, tvSize } from '@/theme/tv'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { useMyList } from '@/store/list/hook'
 import { getUserLists } from '@/utils/listManage'
@@ -30,7 +30,7 @@ import { useTVFetchedMusicList } from './useTVFetchedMusicList'
 
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
-const ITEM_SIZE = 78
+const ITEM_SIZE = tvSize(78)
 
 const PLAY_MODE_LABELS: Record<string, string> = {
   listLoop: '列表循环',
@@ -102,7 +102,7 @@ function TVQueue({ componentId }: { componentId: string }) {
     }
   }
 
-  const openSonglistPicker = async(musicInfos: LX.Music.MusicInfo[], label: string) => {
+  const openSonglistPicker = async(musicInfos: LX.Music.MusicInfo[], label: string, nextPosition?: 'top' | 'bottom') => {
     try {
       const lists = await getUserLists()
       // 「我的收藏」常驻第一项（09-20 需求）：上游一直有这个列表，之前 TV 端没有任何收藏入口
@@ -117,7 +117,9 @@ function TVQueue({ componentId }: { componentId: string }) {
         name: list.name,
         count: (await getListMusics(list.id)).length,
       })))
-      const position = addPosition
+      // 位置必须走参数：递归重开弹窗时若从 state 闭包回读，读到的还是本次渲染的旧值，
+      // 「改为加到末尾」当场不生效（只有取消后重开才对）
+      const position = nextPosition ?? addPosition
       const positionLabel = position === 'top' ? '最前（新歌置顶）' : '末尾'
       showLocalDialog({
         title: '选择要添加到的歌单',
@@ -137,8 +139,9 @@ function TVQueue({ componentId }: { componentId: string }) {
             label: `📍 改为加到${position === 'top' ? '末尾' : '最前'}`,
             tone: 'dark' as const,
             onPress: () => {
-              setAddPosition(position === 'top' ? 'bottom' : 'top')
-              void openSonglistPicker(musicInfos, label)
+              const toggled = position === 'top' ? 'bottom' : 'top'
+              setAddPosition(toggled)
+              void openSonglistPicker(musicInfos, label, toggled)
             },
           },
           { label: '取消', tone: 'dark' as const },
@@ -165,11 +168,16 @@ function TVQueue({ componentId }: { componentId: string }) {
 
   useTVNavigationBack(componentId)
 
-  // 进入页面时自动滚动到当前播放歌曲
+  // 进入页面时自动滚动到当前播放歌曲（仅首次定位）：
+  // deps 不能带整个 fetchedMusicList——本页删歌、外部改 TEMP 都会重跑，
+  // 把视图从用户所在位置猛地拽回播放歌曲处并重置选中态
+  const locatedRef = useRef(false)
   useEffect(() => {
+    if (locatedRef.current) return
     if (!fetchedMusicList.length || !currentMusicInfo.id) return
     const playingIndex = fetchedMusicList.findIndex(m => m.id === currentMusicInfo.id)
     if (playingIndex >= 0) {
+      locatedRef.current = true
       setSelectedIndex(playingIndex)
       requestAnimationFrame(() => {
         listRef.current?.scrollToOffset({ offset: Math.max(0, playingIndex * ITEM_SIZE - ITEM_SIZE * 2), animated: false })
@@ -258,7 +266,7 @@ function TVQueue({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={currentMusicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="queue" nextFocusDown={firstQueueFocus.getNodeHandle() ?? playModeFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus} onActiveTabReady={tabRefresh} />
+      <TVTopTabs items={createTVTabs(componentId, 'queue')} activeId="queue" nextFocusDown={firstQueueFocus.getNodeHandle() ?? playModeFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus} onActiveTabReady={tabRefresh} />
       <View style={styles.root}>
         <TVGlassPanel style={styles.listPanel}>
           <View style={styles.header}>

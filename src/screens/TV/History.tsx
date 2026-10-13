@@ -66,7 +66,8 @@ function TVHistory({ componentId }: { componentId: string }) {
       try {
         const result = boardSource ? await getBoardsList(boardSource) : []
         if (!mounted) return
-        setBoards(result)
+        // 复制快照：getBoardsList 返回 store 活引用，进 state 必须复制（项目铁律）
+        setBoards([...result])
         setLoadingText(result.length ? '' : tvText.noAvailableCharts)
       } catch (err: unknown) {
         if (!mounted) return
@@ -117,7 +118,7 @@ function TVHistory({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={currentMusicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="new" nextFocusDown={getSourceHandle(sourceTabs[0]?.id) ?? firstBoardFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus as any} onActiveTabReady={queueFocusRefresh} />
+      <TVTopTabs items={createTVTabs(componentId, 'new')} activeId="new" nextFocusDown={getSourceHandle(sourceTabs[0]?.id) ?? firstBoardFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus as any} onActiveTabReady={queueFocusRefresh} />
       <View style={styles.root}>
         <TVGlassPanel style={styles.listPanel}>
          <View style={styles.header}>

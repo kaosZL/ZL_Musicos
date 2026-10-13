@@ -46,6 +46,10 @@ function TVDetail({ componentId, payload }: Props) {
   const [retryToken, setRetryToken] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
   const [listLimit, setListLimit] = useState(30)
+  // 已加载页码必须显式记账：按 list.length/limit 反推的话，接口跨页重复返回的
+  // 边界歌被去重滤掉后 length 不再是 limit 整数倍，页码会回退到已加载的页，
+  // 「加载更多」从此原地踏步（total 永远 > list.length）
+  const [loadedPage, setLoadedPage] = useState(1)
   const listRef = useRef<FlatList<LX.Music.MusicInfoOnline>>(null)
   const rowRefs = useRef<FocusRefMap>({})
   const playAllFocus = useTVFocusRef()
@@ -103,9 +107,11 @@ function TVDetail({ componentId, payload }: Props) {
       setList(result.list)
       setTotal(result.total)
       if (result.limit) setListLimit(result.limit)
+      setLoadedPage(1)
     }).catch((err: unknown) => {
       if (!mounted) return
       setList([])
+      setLoadedPage(1)
       setError(err instanceof Error ? err.message : tvText.loadFailed)
     }).finally(() => {
       if (!mounted) return
@@ -122,7 +128,7 @@ function TVDetail({ componentId, payload }: Props) {
     if (!hasMore || loadingMore) return
     setLoadingMore(true)
     try {
-      const nextPage = Math.floor(list.length / listLimit) + 1
+      const nextPage = loadedPage + 1
       const result = payload.type === 'board'
         ? await getBoardListDetail(payload.id, nextPage)
         : await getSonglistDetail(payload.id, payload.source, nextPage)
@@ -130,6 +136,7 @@ function TVDetail({ componentId, payload }: Props) {
       const seen = new Set(list.map(m => `${m.source}_${m.id}`))
       const fresh = result.list.filter(m => !seen.has(`${m.source}_${m.id}`))
       setList(prev => [...prev, ...fresh])
+      setLoadedPage(nextPage)
       if (result.total) setTotal(result.total)
     } catch { /* 加载更多失败保持现状，可重点「重试」重新拉首页 */ }
     finally { setLoadingMore(false) }
@@ -229,9 +236,12 @@ function TVDetail({ componentId, payload }: Props) {
       ? `${tvText.loadFailed}${dot}${error}`
       : `${tvText.loaded} ${list.length} ${tvText.songs}${total ? ` / ${total} ${tvText.songs}` : ''}`
 
+  // userlist 从「我的歌单」进来，tab 该高亮 mylist（之前落到 home，方向不对）
+  const activeTabId = payload.type === 'board' ? 'new' : payload.type === 'userlist' ? 'mylist' : 'home'
+
   return (
     <TVAppleScaffold image={image} immersive contentStyle={styles.scaffoldContent}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId={payload.type === 'board' ? 'new' : 'home'} subtitle={tvText.detailSubtitle} nextFocusDown={playAllFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus} onActiveTabReady={queueFocusRefresh} />
+      <TVTopTabs items={createTVTabs(componentId, activeTabId)} activeId={activeTabId} subtitle={tvText.detailSubtitle} nextFocusDown={playAllFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus} onActiveTabReady={queueFocusRefresh} />
       <View style={styles.root}>
         <View style={styles.stage}>
           <View style={styles.coverStage}>
@@ -295,17 +305,21 @@ function TVDetail({ componentId, payload }: Props) {
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={!loading ? (
               <View style={styles.emptyBox}>
-                <TVText variant="meta" style={styles.empty}>{error || tvText.loadFailed}</TVText>
                 {error ? (
-                  <TVButton
-                    ref={retryFocus.ref as any}
-                    label="重试"
-                    tone="primary"
-                    hasTVPreferredFocus
-                    onPress={() => { setRetryToken(t => t + 1) }}
-                    nextFocusUp={getActiveTabHandle() ?? playAllFocus.getNodeHandle() ?? undefined}
-                  />
-                ) : null}
+                  <>
+                    <TVText variant="meta" style={styles.empty}>{`${tvText.loadFailed}${dot}${error}`}</TVText>
+                    <TVButton
+                      ref={retryFocus.ref as any}
+                      label="重试"
+                      tone="primary"
+                      hasTVPreferredFocus
+                      onPress={() => { setRetryToken(t => t + 1) }}
+                      nextFocusUp={getActiveTabHandle() ?? playAllFocus.getNodeHandle() ?? undefined}
+                    />
+                  </>
+                ) : (
+                  <TVText variant="meta" style={styles.empty}>{tvText.emptySonglistHint}</TVText>
+                )}
               </View>
             ) : null}
             ListFooterComponent={hasMore ? (
