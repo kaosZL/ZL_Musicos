@@ -137,7 +137,7 @@ export const requestIgnoreBatteryOptimization = async() => new Promise<boolean>(
   })
 })
 
-export const startLanImportServer = (port: number) => UtilsModule.startLanImportServer(port) as Promise<{ ip: string, port: number }>
+export const startLanImportServer = (port: number) => UtilsModule.startLanImportServer(port) as Promise<{ ip: string, port: number, token: string }>
 
 export const stopLanImportServer = () => UtilsModule.stopLanImportServer() as Promise<void>
 

@@ -67,9 +67,14 @@ public class SonglistImportPayload {
     appendBlock(collected, input.optString("text", ""));
     appendBlock(collected, input.optString("fileText", ""));
 
+    boolean truncated = false;
     byte[] fileBytes = decodeBase64(input.optString("fileBase64", ""));
     if (fileBytes != null && fileBytes.length > 0) {
-      appendBlock(collected, bytesToText(fileBytes, 0, new Budget()));
+      Budget budget = new Budget();
+      appendBlock(collected, bytesToText(fileBytes, 0, budget));
+      // 超预算被静默截断时必须让 JS 侧知道：否则部分内容被丢弃、
+      // 手机端却显示「已提交」，用户以为全量导入了
+      truncated = budget.entryTruncated || budget.entries >= MAX_ARCHIVE_ENTRIES || budget.bytes >= MAX_TOTAL_BYTES;
     }
 
     try {
@@ -77,6 +82,7 @@ public class SonglistImportPayload {
       output.put("text", collected.toString());
       output.put("listName", input.optString("listName", ""));
       output.put("fileName", input.optString("fileName", ""));
+      if (truncated) output.put("truncated", true);
       return output.toString();
     } catch (Exception e) {
       return rawPayload;
@@ -87,6 +93,7 @@ public class SonglistImportPayload {
   private static final class Budget {
     int entries;
     int bytes;
+    boolean entryTruncated;
   }
 
   /**
@@ -130,7 +137,10 @@ public class SonglistImportPayload {
         while ((read = zin.read(buf)) > 0) {
           out.write(buf, 0, read);
           entryBytes += read;
-          if (entryBytes >= MAX_ENTRY_BYTES) break;
+          if (entryBytes >= MAX_ENTRY_BYTES) {
+            budget.entryTruncated = true;
+            break;
+          }
         }
         if (out.size() == 0) continue;
         appendBlock(sb, bytesToText(out.toByteArray(), depth + 1, budget));

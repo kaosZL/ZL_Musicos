@@ -25,6 +25,9 @@ public class LanImportServer extends NanoHTTPD {
   private static volatile LanListener listener;
   private static volatile byte[] pageHtml;
   private static volatile Context appContext;
+  /** 每次会话的一次性鉴权 token（编进二维码 URL）：服务绑 0.0.0.0，
+   * 不带鉴权的话同局域网任意设备都能直接 POST 删歌单/注入音源脚本 */
+  private static volatile String authToken = "";
 
   /** 未指定端口时使用。 */
   private static final int DEFAULT_PORT = 9527;
@@ -62,6 +65,8 @@ public class LanImportServer extends NanoHTTPD {
     appContext = context.getApplicationContext();
     // 无论复用还是新建都要刷新：原生服务是单例，JS 侧的组件却会被反复创建/销毁
     listener = lanListener;
+    // 每次会话换新 token：重新扫码后旧 token 立即失效（旧二维码截图也就作废了）
+    authToken = generateToken();
 
     if (instance != null && instance.isListening()) {
       return instance.getListeningPort();
@@ -118,6 +123,26 @@ public class LanImportServer extends NanoHTTPD {
   public static synchronized int getServerPort() {
     if (instance == null || !instance.isListening()) return 0;
     return instance.getListeningPort();
+  }
+
+  public static String getAuthToken() {
+    return authToken;
+  }
+
+  private static String generateToken() {
+    byte[] buf = new byte[16];
+    new java.security.SecureRandom().nextBytes(buf);
+    StringBuilder sb = new StringBuilder(32);
+    for (byte b : buf) sb.append(String.format("%02x", b));
+    return sb.toString();
+  }
+
+  /** /api/ 路径统一校验 ?t=token；页面本身不需要（JS 会从 URL 里取 token 拼到请求上） */
+  private static boolean checkToken(IHTTPSession session) {
+    if (authToken.isEmpty()) return true; // 理论上不会走到（start 时必生成）
+    java.util.List<String> values = session.getParameters().get("t");
+    String provided = values == null || values.isEmpty() ? "" : values.get(0);
+    return authToken.equals(provided);
   }
 
   public static void setSources(String json) {
@@ -198,6 +223,9 @@ public class LanImportServer extends NanoHTTPD {
   public Response serve(IHTTPSession session) {
     Method method = session.getMethod();
     String uri = session.getUri();
+    if (uri.startsWith("/api/") && !checkToken(session)) {
+      return newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json; charset=utf-8", "{\"ok\":false,\"message\":\"链接已过期，请用电视屏幕上最新的二维码重新进入\"}");
+    }
     if (Method.GET.equals(method) && ("/".equals(uri) || "/index.html".equals(uri))) {
       return newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", new String(getPage(), StandardCharsets.UTF_8));
     }
@@ -249,7 +277,10 @@ public class LanImportServer extends NanoHTTPD {
         return json("{\"ok\":true,\"message\":\"已提交\"}");
       }
       if ("/api/songlist-export".equals(uri)) {
-        // 歌单导出：通知 JS 侧打包成洛雪格式，手机页轮询 /api/songlist-export-result 取结果
+        // 歌单导出：通知 JS 侧打包成洛雪格式，手机页轮询 /api/songlist-export-result 取结果。
+        // 收到新请求必须先重置为 pending：否则第二次导出时轮询会立刻命中上一次的旧结果，
+        // 手机端下载的是旧文件却提示「已导出」
+        songlistExportResult = "{\"ok\":false,\"message\":\"pending\"}";
         notify("songlist-export", payload);
         return json("{\"ok\":true,\"message\":\"已提交\"}");
       }

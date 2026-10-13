@@ -90,10 +90,9 @@ function TVSettings({ componentId }: { componentId: string }) {
   const [lanRunning, setLanRunning] = useState(false)
   const [lanMessage, setLanMessage] = useState('')
   const [lanMessageOk, setLanMessageOk] = useState(false)
-  // 手机侧操作（导入/改名/删除）的最终结果弹窗。
-  // 用本页自己的 TVDialog 而不是全局 tipDialog：全局 showTVDialog 只会投给「最后挂载的
-  // TVDialogHost」，而各屏 pop 时它的 cleanup 会把 activeListener 置 null、且不再重注册，
-  // 于是全局弹窗有可能静默失效 —— 用户就又变成「啥也没看到」。本页自己弹最稳。
+  // 手机侧操作（导入/改名/删除）的最终结果弹窗，用本页自己的 TVDialog。
+  // （全局弹窗的「压栈返回后失效」已在 TVDialogHost 层根治——Host 改注册表、
+  // 卸载时回退到仍挂载的宿主；本页保留局部弹窗作为双保险）
   const [lanResultDialog, setLanResultDialog] = useState<TVDialogRequest | null>(null)
   const lanInstanceToken = useRef<symbol>(Symbol('tv-settings'))
   const lanButtonFocus = useTVFocusRef()
@@ -113,7 +112,10 @@ function TVSettings({ componentId }: { componentId: string }) {
   const sourceScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
   const rightScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
   const sourceLayoutRef = useRef<Record<string, number>>({})
-  useTVFocusRefresh()
+  const settingsFocusRefresh = useTVFocusRefresh()
+  // 顶部导航接线契约：音源列表首项按上直达导航栏
+  const activeTabFocus = useRef<FocusNode>(null)
+  const getActiveTabHandle = () => (activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null)
 
   useTVNavigationBack(componentId)
   useTVRemoteActions({ playPause: () => { if (musicInfo.id) pushTVPlayerScreen(componentId) } })
@@ -323,6 +325,7 @@ function TVSettings({ componentId }: { componentId: string }) {
           fileText?: string
           listName?: string
           fileName?: string
+          truncated?: boolean
         }
         // 原生层已经把压缩包 / base64 展开过，这里 text + fileText 拼一起再解析
         const rawText = [data.text ?? '', data.fileText ?? ''].filter(item => item.trim()).join('\n')
@@ -339,6 +342,8 @@ function TVSettings({ componentId }: { componentId: string }) {
           fileName: data.fileName,
           onProgress: setLanMessage,
         })
+        // 原生展开超限（总 6MB/单条目 2MB/40 条目）会静默截断，必须如实告知，否则用户以为全量导入了
+        if (data.truncated) outcome.message += '（注意：提交的内容过大被截断，只导入了前面一部分）'
         setLanMessageOk(outcome.ok)
         setLanMessage(outcome.message)
         // 同时广播给首页「我的歌单」，让用户不用回到设置页也能看到导入结果
@@ -452,13 +457,14 @@ function TVSettings({ componentId }: { componentId: string }) {
     setLanMessage('')
     setLanMessageOk(false)
     try {
-      const { ip, port } = await startLanImportServer(9527)
+      const { ip, port, token } = await startLanImportServer(9527)
       // 立刻接管会话：订阅在挂载时就已经挂上（见上面的 effect），所以从这一刻起
       // 手机推来的事件就有人处理，不必等二维码渲染完成 —— 消除「按了按钮、二维码还没出来时提交」的窗口
       lanSessionOwner = lanInstanceToken.current
       pushLanSourcesSnapshot()
       void pushLanSonglistsSnapshot()
-      const qr = await generateQRCodeBase64(`http://${ip}:${port}`, 560)
+      // URL 带一次性 token：服务绑 0.0.0.0，没鉴权的话同局域网任意设备都能删歌单/注脚本
+      const qr = await generateQRCodeBase64(`http://${ip}:${port}/?t=${encodeURIComponent(token)}`, 560)
       setQrImage(qr)
       setLanRunning(true)
       setTimeout(() => { rightScrollRef.current?.scrollToEnd({ animated: true }) }, 300)
@@ -571,7 +577,7 @@ function TVSettings({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={musicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="settings" subtitle={tvText.settings} nextFocusDown={lanButtonFocus.getNodeHandle() ?? firstSourceFocus.getNodeHandle() ?? undefined} />
+      <TVTopTabs items={createTVTabs(componentId, 'settings')} activeId="settings" subtitle={tvText.settings} nextFocusDown={lanButtonFocus.getNodeHandle() ?? firstSourceFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus} onActiveTabReady={settingsFocusRefresh} />
       <View style={styles.root}>
         <TVSettingsPane title={`${tvText.source}${dot}${tvText.userApi}`} subtitle={tvText.sourceSettingsDesc} style={styles.sourcePanel}>
           <TVText variant="caption" color={tvColors.dimText} style={styles.listHint}>OK 键使用音源 · 长按 OK 键删除/管理</TVText>
@@ -590,7 +596,7 @@ function TVSettings({ componentId }: { componentId: string }) {
                     onPress={() => { setApiSource(src.id) }}
                     onLongPress={() => { showSourceActionMenu(src) }}
                     hasTVPreferredFocus={index === 0}
-                    nextFocusUp={getSourceHandle(prevSourceId) ?? undefined}
+                    nextFocusUp={index === 0 ? getActiveTabHandle() ?? undefined : getSourceHandle(prevSourceId) ?? undefined}
                     nextFocusRight={updateButtonFocus.getNodeHandle() ?? lanButtonFocus.getNodeHandle() ?? undefined}
                     nextFocusDown={getSourceHandle(nextSourceId) ?? undefined}
                   >
