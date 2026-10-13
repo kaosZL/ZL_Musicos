@@ -113,6 +113,8 @@ function TVDetail({ componentId, payload }: Props) {
       setList([])
       setLoadedPage(1)
       setError(err instanceof Error ? err.message : tvText.loadFailed)
+      // 焦点引擎已不抢活焦点：错误态下「重试」按钮（preferred）不会自动获焦，这里显式补偿
+      requestAnimationFrame(() => { void focusTVTargetByRef(retryFocus.ref.current) })
     }).finally(() => {
       if (!mounted) return
       setLoading(false)
@@ -236,12 +238,14 @@ function TVDetail({ componentId, payload }: Props) {
       ? `${tvText.loadFailed}${dot}${error}`
       : `${tvText.loaded} ${list.length} ${tvText.songs}${total ? ` / ${total} ${tvText.songs}` : ''}`
 
-  // userlist 从「我的歌单」进来，tab 该高亮 mylist（之前落到 home，方向不对）
+  // userlist 从「我的歌单」进来，tab 该高亮 mylist（之前落到 home，方向不对）。
+  // 注意 currentId 不传：Detail 不是任何 tab 页本身，六个 tab 在这里都必须可用（一键跳转），
+  // 传了会把对应 tab 挡成 no-op
   const activeTabId = payload.type === 'board' ? 'new' : payload.type === 'userlist' ? 'mylist' : 'home'
 
   return (
     <TVAppleScaffold image={image} immersive contentStyle={styles.scaffoldContent}>
-      <TVTopTabs items={createTVTabs(componentId, activeTabId)} activeId={activeTabId} subtitle={tvText.detailSubtitle} nextFocusDown={playAllFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus} onActiveTabReady={queueFocusRefresh} />
+      <TVTopTabs items={createTVTabs(componentId)} activeId={activeTabId} subtitle={tvText.detailSubtitle} nextFocusDown={playAllFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus} onActiveTabReady={queueFocusRefresh} />
       <View style={styles.root}>
         <View style={styles.stage}>
           <View style={styles.coverStage}>

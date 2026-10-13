@@ -16,6 +16,7 @@ import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
+import { focusTVTargetByRef } from '@/components/TV/tvFocusManager'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { dot, tvText } from './labels'
 import { createTVTabs, getSourceName } from './utils'
@@ -36,6 +37,8 @@ function TVHistory({ componentId }: { componentId: string }) {
   const listRef = useRef<FlatList<BoardItem>>(null)
   const boardRefs = useRef<FocusRefMap>({})
   const queueFocusRefresh = useTVFocusRefresh()
+  // 首次加载焦点补偿只做一次（见 load effect 内注释）
+  const initialFocusDoneRef = useRef(false)
 
   useTVNavigationBack(componentId)
   const [sourceSel, setSourceSel] = useState<string>(leaderboardState.sources[0] ?? '')
@@ -69,6 +72,13 @@ function TVHistory({ componentId }: { componentId: string }) {
         // 复制快照：getBoardsList 返回 store 活引用，进 state 必须复制（项目铁律）
         setBoards([...result])
         setLoadingText(result.length ? '' : tvText.noAvailableCharts)
+        // 焦点引擎已改为「preferred 不抢仍挂载的活动焦点」：榜单行是异步挂载的 preferred，
+        // 冷加载慢时进屏初始焦点已落在顶部导航、晚到的 preferred 不再抢到首行——首次加载
+        // 成功后显式补偿。切源不补偿：焦点留在源 Tab 方便连续对比，与旧版由用户自己下键一致
+        if (!initialFocusDoneRef.current && result.length) {
+          initialFocusDoneRef.current = true
+          requestAnimationFrame(() => { void focusTVTargetByRef(firstBoardFocus.ref.current) })
+        }
       } catch (err: unknown) {
         if (!mounted) return
         setBoards([])

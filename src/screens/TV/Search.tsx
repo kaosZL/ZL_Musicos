@@ -175,6 +175,10 @@ function TVSearch({ componentId }: { componentId: string }) {
       setResults([])
       setError('')
       setPageInfo({ page: 0, maxPage: 0, total: 0 })
+      // 序号已作废在途请求的 finally（那里的复位被 seq 守卫挡住），这里必须自己复位，
+      // 否则「搜索中」永久卡住、加载更多被 loadingMore 挡死
+      setLoading(false)
+      setLoadingMore(false)
       return
     }
     if (keyword !== text.trim()) setText(keyword)

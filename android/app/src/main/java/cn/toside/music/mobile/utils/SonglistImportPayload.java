@@ -74,7 +74,8 @@ public class SonglistImportPayload {
       appendBlock(collected, bytesToText(fileBytes, 0, budget));
       // 超预算被静默截断时必须让 JS 侧知道：否则部分内容被丢弃、
       // 手机端却显示「已提交」，用户以为全量导入了
-      truncated = budget.entryTruncated || budget.entries >= MAX_ARCHIVE_ENTRIES || budget.bytes >= MAX_TOTAL_BYTES;
+      // 预算被真挡住（readArchive 的 break / 单条目超限）才标记，完成线上不做 >= 判断以免误报
+      truncated = budget.entryTruncated;
     }
 
     try {
@@ -127,7 +128,12 @@ public class SonglistImportPayload {
       byte[] buf = new byte[8192];
       ZipEntry entry;
       while ((entry = zin.getNextEntry()) != null) {
-        if (budget.entries >= MAX_ARCHIVE_ENTRIES || budget.bytes >= MAX_TOTAL_BYTES) break;
+        if (budget.entries >= MAX_ARCHIVE_ENTRIES || budget.bytes >= MAX_TOTAL_BYTES) {
+          // 还有条目没处理就被预算挡住——这才是真截断；在完成线上检查会在
+          // 「恰好 40 个条目全部处理完」时误报
+          budget.entryTruncated = true;
+          break;
+        }
         if (entry.isDirectory() || !isInterestingEntry(entry.getName())) continue;
         budget.entries++;
 
