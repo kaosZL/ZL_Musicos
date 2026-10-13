@@ -165,7 +165,7 @@ function TVHome({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={musicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="home" hasTVPreferredFocus nextFocusDown={playFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus as any} onActiveTabReady={queueFocusRefresh} />
+      <TVTopTabs items={createTVTabs(componentId, 'home')} activeId="home" hasTVPreferredFocus nextFocusDown={playFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus as any} onActiveTabReady={queueFocusRefresh} />
       <ScrollView ref={contentScrollRef} showsVerticalScrollIndicator={false}>
         <View onLayout={event => { sectionOffsetRef.current.hero = event.nativeEvent.layout.y }}>
           <TVHeroShelf kicker={tvText.todayRecommend} title={heroTitle} subtitle={heroSubtitle} image={musicInfo.pic}>
@@ -189,12 +189,17 @@ function TVHome({ componentId }: { componentId: string }) {
         </View>
         <View style={styles.bottomSpace} />
       </ScrollView>
+      {/* 测试包构建标记（发布纪律：先让老板确认屏幕上的标记再测功能，验证通过后随正式版移除） */}
+      <View style={styles.buildMark} pointerEvents="none">
+        <TVText variant="caption" color={tvColors.dimText}>v1.9.15 · 204</TVText>
+      </View>
     </TVAppleScaffold>
   )
 }
 
 const styles: Record<string, ViewStyle | any> = {
   bottomSpace: { height: 60 },
+  buildMark: { position: 'absolute', right: tvSize(10), bottom: tvSize(6) },
 }
 
 export default memo(TVHome)
