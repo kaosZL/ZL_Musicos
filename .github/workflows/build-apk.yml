@@ -30,6 +30,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # 黑屏防线：Metro 打包不查类型，「漏 import → 实机 ReferenceError → 黑屏」CI 照样绿
+      # （2026-10-14 v1.9.16 事故：Home.tsx 用了未 import 的 TVText，实机黑屏）。
+      # 全量 tsc 有存量类型错误（TV fork 的类型适配），这里只拦「未定义标识符/拼错属性」
+      # 这一类会运行时炸的：TS2304/TS2552（找不到名字）、TS2551（属性拼错）
+      - name: Typecheck (undefined identifiers)
+        run: |
+          TSC_OUT=$(npx tsc --noEmit 2>&1 || true)
+          BAD=$(echo "$TSC_OUT" | grep -E "TS2304|TS2551|TS2552" || true)
+          if [ -n "$BAD" ]; then
+            echo "$BAD"
+            echo "::error::存在未定义标识符/拼错属性——漏 import 只会在实机黑屏，Metro 不查类型"
+            exit 1
+          fi
+
       - name: Bundle JS (重新编译，覆盖仓库里的旧 bundle)
         run: npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
 

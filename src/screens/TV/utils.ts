@@ -27,7 +27,7 @@ const sourceNames: Record<string, string> = {
 export const createTVTabs = (componentId: string, currentId?: string): TVTabItem[] => [
   { id: 'home', label: tvText.recommend, onPress: () => { if (currentId === 'home') return; void popToRoot(componentId) } },
   { id: 'new', label: tvText.charts, onPress: () => { if (currentId === 'new') return; pushTVHistoryScreen(componentId) } },
-  { id: 'mylist', label: tvText.mySongLists, onPress: () => { if (currentId === 'mylist') return; pushTVMyListScreen(componentId) } },
+  { id: 'mylist', label: tvText.mySonglists, onPress: () => { if (currentId === 'mylist') return; pushTVMyListScreen(componentId) } },
   { id: 'search', label: tvText.search, onPress: () => { if (currentId === 'search') return; pushTVSearchScreen(componentId) } },
   { id: 'queue', label: '播放列表', onPress: () => { if (currentId === 'queue') return; pushTVQueueScreen(componentId) } },
   { id: 'settings', label: tvText.settings, onPress: () => { if (currentId === 'settings') return; pushTVSettingsScreen(componentId) } },
