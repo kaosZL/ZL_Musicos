@@ -9,7 +9,6 @@ import TVNowPlayingDock from '@/components/TV/TVNowPlayingDock'
 import { getTVLayoutMetrics, tvColors, tvSize } from '@/theme/tv'
 import { useIsPlay, usePlayerMusicInfo, useProgress } from '@/store/player/hook'
 import { playNext, playPrev, togglePlay } from '@/core/player/player'
-import { setCurrentTime } from '@/plugins/player/utils'
 import { useSettingValue } from '@/store/setting/hook'
 import { updateSetting } from '@/core/common'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
@@ -236,12 +235,11 @@ function TVPlayer({ componentId }: { componentId: string }) {
   })
 
   // 播放页遥控直控（对齐 Apple Music TV 交互）：
-  // 控制栏未呼出/焦点不在控制按钮上时——OK=播放/暂停，左右短按=上一首/下一首，左右长按=快退/快进 5s
+  // 控制栏未呼出/焦点不在控制按钮上时——OK=播放/暂停，左右短按=上一首/下一首。
+  // 长按左右不做任何事（快进快退功能已按需求移除；长按产生的 repeat 只记账，
+  // 让随后松开按键不触发切歌，避免「想长按结果松手切歌」的误触）
   // 焦点在控制栏按钮上时（controlFocusCountRef > 0）不拦截，交给按钮本身处理
-  const seekRepeatFiredRef = useRef({ left: false, right: false })
-  // 进度读 ref，避免播放中每秒重挂遥控事件订阅
-  const progressRef = useRef(progress)
-  progressRef.current = progress
+  const holdFiredRef = useRef({ left: false, right: false })
   useEffect(() => {
     return onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
       const isSeekKey = eventType === 'left' || eventType === 'right'
@@ -258,22 +256,15 @@ function TVPlayer({ componentId }: { componentId: string }) {
       }
       const dir = eventType === 'left' ? 'left' : 'right'
       if (eventKeyAction === 0 && (repeatCount ?? 0) > 0) {
-        // 长按重复：前 4 次 ±5s 精调，之后升到 ±30s 大步长（09-20 需求）
-        seekRepeatFiredRef.current[dir] = true
-        revealControls()
-        const current = progressRef.current.nowPlayTime || 0
-        const max = progressRef.current.maxPlayTime || 0
-        const step = (repeatCount ?? 0) < 4 ? 5 : 30
-        const delta = eventType === 'right' ? step : -step
-        const target = Math.max(0, Math.min(max, current + delta))
-        void setCurrentTime(target)
+        // 长按重复：只标记，松开时不切歌（快进快退功能已移除）
+        holdFiredRef.current[dir] = true
       } else if (eventKeyAction === 0) {
         // 按下：重置本次长按标记
-        seekRepeatFiredRef.current[dir] = false
+        holdFiredRef.current[dir] = false
       } else if (eventKeyAction === 1) {
         // 松开：长按后的松开不切歌；短按直接切歌
-        if (seekRepeatFiredRef.current[dir]) {
-          seekRepeatFiredRef.current[dir] = false
+        if (holdFiredRef.current[dir]) {
+          holdFiredRef.current[dir] = false
           return
         }
         if (eventType === 'left') void playPrev()

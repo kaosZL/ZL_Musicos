@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
-import { Image, ScrollView, View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
+import { BackHandler, Image, ScrollView, View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVText from '@/components/TV/TVText'
@@ -18,11 +18,12 @@ import { setApiSource } from '@/core/apiSource'
 import { updateSetting } from '@/core/common'
 import { removeUserList, updateUserList, getListMusics } from '@/core/list'
 import { httpFetch } from '@/utils/request'
-import { generateQRCodeBase64, onLanSourceEvent, pushLanSonglists, pushLanSonglistExport, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
+import { generateQRCodeBase64, onLanSourceEvent, onTVRemoteEvent, pushLanSonglists, pushLanSonglistExport, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
 import { importUserApi, removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
+import { setTVDialogActive } from '@/components/TV/tvFocusManager'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
@@ -30,7 +31,6 @@ import { dot, tvText } from './labels'
 import { importSonglist } from './songlistImport'
 import { createTVTabs, getSourceName } from './utils'
 import { TV_CURRENT_VERSION, checkTVUpdate, downloadTVUpdate, getDownloadedTVUpdatePath, installTVUpdate, type TVUpdateInfo } from './update'
-import { setSleepTimer, setStopAfterCurrent, clearSleepTimer, getSleepTimerState } from '@/core/tvSleepTimer'
 
 interface SourceItem {
   id: string
@@ -93,18 +93,6 @@ function TVSettings({ componentId }: { componentId: string }) {
   const lanInstanceToken = useRef<symbol>(Symbol('tv-settings'))
   const lanButtonFocus = useTVFocusRef()
   const lanHandlerRef = useRef<((action: string, payload: string) => void) | null>(null)
-  // 定时关闭（09-20 需求）：状态存在模块单例里，页面每秒刷新显示剩余时间
-  const [sleepState, setSleepState] = useState(() => getSleepTimerState())
-  const [, setSleepTick] = useState(0)
-  useEffect(() => {
-    // 定时未开启时完全不跑每秒定时器：每秒重渲染会让 Focusable 的初始焦点重调度，
-    // 焦点被抢回首个音源项（09-22 设置页焦点跳动根因）
-    if (!sleepState.deadline && !sleepState.stopAfterCurrent) return
-    const timer = setInterval(() => { setSleepState(getSleepTimerState()); setSleepTick(t => t + 1) }, 1000)
-    return () => { clearInterval(timer) }
-  }, [sleepState.deadline, sleepState.stopAfterCurrent])
-  const sleepRemaining = sleepState.deadline > Date.now() ? Math.ceil((sleepState.deadline - Date.now()) / 60000) : 0
-  const sleepActive = sleepRemaining > 0 || sleepState.stopAfterCurrent
   const sourceScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
   const rightScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
   const sourceLayoutRef = useRef<Record<string, number>>({})
@@ -464,7 +452,6 @@ function TVSettings({ componentId }: { componentId: string }) {
       const qr = await generateQRCodeBase64(`http://${ip}:${port}/?t=${encodeURIComponent(token)}`, 560)
       setQrImage(qr)
       setLanRunning(true)
-      setTimeout(() => { rightScrollRef.current?.scrollToEnd({ animated: true }) }, 300)
     } catch (err: unknown) {
       const detail = err instanceof Error ? err.message : ''
       const message = detail ? `${tvText.lanStartFailed}：${detail}` : tvText.lanStartFailed
@@ -492,6 +479,30 @@ function TVSettings({ componentId }: { componentId: string }) {
     setLanRunning(false)
     setQrImage('')
   }
+
+  // 二维码弹层期间接管按键：弹层里没有可聚焦项，焦点控制器让路（setTVDialogActive），
+  // OK 短按 / 返回键直接关闭。400ms 防抖忽略打开弹层那次按键的余波（与 TVDialog 同理）
+  useEffect(() => {
+    if (!qrImage) return
+    setTVDialogActive(true)
+    const openedAt = Date.now()
+    const unsub = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
+      // 每个事件都重新断言弹窗激活：导入结果的 TVDialog 关闭时会把标志置回 false，
+      // 不补这一句的话焦点控制器会穿透到被弹层遮住的页面上误触按钮
+      setTVDialogActive(true)
+      if (eventKeyAction !== 1 || repeatCount > 0) return
+      if (eventType === 'select' && Date.now() - openedAt > 400) handleCloseLanImport()
+    })
+    const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleCloseLanImport()
+      return true
+    })
+    return () => {
+      setTVDialogActive(false)
+      unsub()
+      backSub.remove()
+    }
+  }, [qrImage])
 
   const handleRemove = async(id: string) => {
     setImportMessage('')
@@ -623,22 +634,6 @@ function TVSettings({ componentId }: { componentId: string }) {
             <TVText variant="caption" color={updateStatus === 'error' ? tvColors.warn : tvColors.primaryHigh} style={styles.message}>{updateMessage || tvText.installConfirmTip}</TVText>
           </TVSettingsPane>
 
-          {/* 定时关闭（09-20 需求）：睡前听歌自动停 */}
-          <TVSettingsPane title="定时关闭" subtitle="睡前听歌自动停">
-            <TVText variant="caption" color={sleepActive ? tvColors.primaryHigh : tvColors.subtext}>
-              {sleepActive
-                ? (sleepState.stopAfterCurrent ? '已开启：播完当前这首就停' : `已开启：${sleepRemaining} 分钟后停止`)
-                : '未开启'}
-            </TVText>
-            <View style={styles.sleepRow}>
-              <TVButton label="播完即停" tone={sleepState.stopAfterCurrent ? 'primary' : 'dark'} onPress={() => { setStopAfterCurrent(); setSleepState(getSleepTimerState()) }} />
-              <TVButton label="30 分钟" tone="dark" onPress={() => { setSleepTimer(30); setSleepState(getSleepTimerState()) }} />
-              <TVButton label="60 分钟" tone="dark" onPress={() => { setSleepTimer(60); setSleepState(getSleepTimerState()) }} />
-              <TVButton label="90 分钟" tone="dark" onPress={() => { setSleepTimer(90); setSleepState(getSleepTimerState()) }} />
-              {sleepActive ? <TVButton label="取消定时" tone="danger" onPress={() => { clearSleepTimer(); setSleepState(getSleepTimerState()) }} /> : null}
-            </View>
-          </TVSettingsPane>
-
           <TVSettingsPane title={tvText.importApi} subtitle={tvText.inputRemoteApi} style={styles.importPanel}>
             {importMessage ? <TVText variant="caption" color={importMessage === tvText.importSuccess ? tvColors.primaryHigh : tvColors.warn} style={styles.message}>{importMessage}</TVText> : null}
             {/* 手机扫码的结果放在按钮【上方】并且做成显眼的框：
@@ -650,19 +645,20 @@ function TVSettings({ componentId }: { componentId: string }) {
               </View>
             ) : null}
             <TVButton ref={lanButtonFocus.ref as any} label={lanRunning ? '关闭二维码' : '手机扫码导入'} tone={lanRunning ? 'danger' : 'dark'} onPress={() => { void (lanRunning ? handleCloseLanImport() : handleOpenLanImport()) }} nextFocusUp={updateButtonFocus.getNodeHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} />
-            {qrImage ? (
-              <View style={styles.qrWrap}>
-                <Image source={{ uri: qrImage }} style={styles.qrImage} />
-                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>手机扫码打开页面，可导入音源/歌单，也能给已导入的歌单改名、删除</TVText>
-                <TVText variant="caption" color={tvColors.subtext} style={styles.line}>改名必须在手机上做：电视遥控器输不了中文</TVText>
-                <TVText variant="caption" color={tvColors.warn} style={styles.line}>⚠ 请确保手机与电视连接同一局域网（WiFi）</TVText>
-              </View>
-            ) : null}
           </TVSettingsPane>
         </ScrollView>
       </View>
       {/* 手机侧操作的结果弹窗统一走全局 showTVDialog（本页 Host 渲染），
           避免局部弹窗与其他全局弹窗叠加、双弹窗同时吃按键 */}
+      {qrImage ? (
+        <View style={styles.qrOverlay} pointerEvents="none">
+          <View style={styles.qrCard}>
+            <Image source={{ uri: qrImage }} style={styles.qrBigImage} />
+          </View>
+          <TVText variant="body" style={styles.qrOverlayHint}>手机扫码打开页面，可导入音源/歌单，也能给已导入的歌单改名、删除</TVText>
+          <TVText variant="caption" color={tvColors.warn} style={styles.qrOverlayHint}>⚠ 请确保手机与电视连接同一局域网（WiFi） · 按遥控器 OK 键关闭</TVText>
+        </View>
+      ) : null}
     </TVAppleScaffold>
   )
 }
@@ -681,7 +677,6 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   rightContent: { gap: tvSize(18), paddingBottom: tvSize(20) },
   updatePanel: { minHeight: tvSize(270) },
   updateMeta: { gap: tvSize(8), marginBottom: tvSize(18) },
-  sleepRow: { flexDirection: 'row', flexWrap: 'wrap', gap: tvSize(10), marginTop: tvSize(14) },
   importPanel: { flex: 1 },
   line: { marginTop: tvSize(9) },
   message: { marginTop: tvSize(14) },
@@ -689,8 +684,11 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   lanResult: { marginTop: tvSize(14), marginBottom: tvSize(14), paddingVertical: tvSize(12), paddingHorizontal: tvSize(16), borderRadius: tvSize(12), borderWidth: 1 },
   lanResultOk: { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: tvColors.primaryHigh },
   lanResultWarn: { backgroundColor: 'rgba(241,195,109,0.10)', borderColor: tvColors.warn },
-  qrWrap: { alignItems: 'center', gap: tvSize(12), marginTop: tvSize(14) },
-  qrImage: { width: tvSize(320), height: tvSize(320), backgroundColor: '#FFFFFF', borderRadius: tvSize(16) },
+  // 二维码居中弹层：全屏遮罩 + 中央白卡（此前嵌在右栏里被其他 UI 遮住一部分，扫不了码）
+  qrOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(2,3,8,0.92)', alignItems: 'center', justifyContent: 'center', zIndex: 900, elevation: 40, gap: tvSize(18), paddingHorizontal: tvSize(80) },
+  qrCard: { backgroundColor: '#FFFFFF', borderRadius: tvSize(24), padding: tvSize(28), elevation: 50 },
+  qrBigImage: { width: tvSize(420), height: tvSize(420) },
+  qrOverlayHint: { textAlign: 'center' },
 }
 
 export default memo(TVSettings)
