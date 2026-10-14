@@ -5,7 +5,7 @@ import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVText from '@/components/TV/TVText'
 import TVButton from '@/components/TV/TVButton'
 import TVSettingsPane from '@/components/TV/TVSettingsPane'
-import TVDialog, { showTVDialog, type TVDialogButtonConfig, type TVDialogRequest } from '@/components/TV/TVDialog'
+import { showTVDialog, type TVDialogButtonConfig } from '@/components/TV/TVDialog'
 import Focusable from '@/components/TV/Focusable'
 import { tvColors, tvSize } from '@/theme/tv'
 import { useSettingValue } from '@/store/setting/hook'
@@ -90,10 +90,6 @@ function TVSettings({ componentId }: { componentId: string }) {
   const [lanRunning, setLanRunning] = useState(false)
   const [lanMessage, setLanMessage] = useState('')
   const [lanMessageOk, setLanMessageOk] = useState(false)
-  // 手机侧操作（导入/改名/删除）的最终结果弹窗，用本页自己的 TVDialog。
-  // （全局弹窗的「压栈返回后失效」已在 TVDialogHost 层根治——Host 改注册表、
-  // 卸载时回退到仍挂载的宿主；本页保留局部弹窗作为双保险）
-  const [lanResultDialog, setLanResultDialog] = useState<TVDialogRequest | null>(null)
   const lanInstanceToken = useRef<symbol>(Symbol('tv-settings'))
   const lanButtonFocus = useTVFocusRef()
   const lanHandlerRef = useRef<((action: string, payload: string) => void) | null>(null)
@@ -293,11 +289,12 @@ function TVSettings({ componentId }: { componentId: string }) {
     }
   }, [userSonglists])
 
-  // 手机侧操作的最终结果除了写页面常显文案，再弹一次本页弹窗 —— 用户就是靠这个知道「到底成没成」。
-  // 之前只写 setLanMessage，而它在右栏最下方、导入结束时也不会自动滚动过去，用户根本看不到，
-  // 只能靠「歌单卡有没有出现」来猜。
+  // 手机侧操作的最终结果除了写页面常显文案，再弹一次全局 TVDialog —— 用户就是靠这个知道「到底成没成」。
+  // 之前只写 setLanMessage，而它在右栏最下方、导入结束时也不会自动滚动过去，用户根本看不到。
+  // （全局弹窗的「压栈返回后失效」已在 TVDialogHost 注册表根治；走全局还能避免与
+  // 其他全局弹窗（如音源长按菜单）同时弹出、双弹窗同时吃按键）
   const showLanResult = (title: string, message: string) => {
-    setLanResultDialog({ title, message, buttons: [{ label: tvText.knowIt, tone: 'primary' }] })
+    showTVDialog({ title, message, buttons: [{ label: tvText.knowIt, tone: 'primary' }] })
   }
 
   const handleLanSourceEvent = async(action: string, payload: string) => {
@@ -475,7 +472,7 @@ function TVSettings({ componentId }: { componentId: string }) {
       setLanMessage(message)
       // 启动失败必须让用户【看到】：旧代码只写 setLanMessage，而它在右栏最下方、不会自动滚过去，
       // 于是「端口被占 / 服务起不来」在用户眼里就是「按了按钮没反应」
-      setLanResultDialog({
+      showTVDialog({
         title: tvText.lanStartFailed,
         message,
         buttons: [{ label: tvText.knowIt, tone: 'primary' }],
@@ -664,21 +661,8 @@ function TVSettings({ componentId }: { componentId: string }) {
           </TVSettingsPane>
         </ScrollView>
       </View>
-      {/* 手机侧操作的结果弹窗：必须让人不可能错过（页面上的常显文案是兜底） */}
-      <TVDialog
-        visible={!!lanResultDialog}
-        resetKey={lanResultDialog}
-        title={lanResultDialog?.title ?? ''}
-        message={lanResultDialog?.message}
-        buttons={(lanResultDialog?.buttons ?? []).map(btn => ({
-          ...btn,
-          onPress: () => {
-            setLanResultDialog(null)
-            btn.onPress?.()
-          },
-        }))}
-        onDismiss={() => { setLanResultDialog(null) }}
-      />
+      {/* 手机侧操作的结果弹窗统一走全局 showTVDialog（本页 Host 渲染），
+          避免局部弹窗与其他全局弹窗叠加、双弹窗同时吃按键 */}
     </TVAppleScaffold>
   )
 }

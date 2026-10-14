@@ -215,7 +215,8 @@ const splitInput = (text: string) => {
       }
       const rest = line.replace(URL_RXP, '').trim()
       // 去掉链接后只剩空白/标点/分隔符 → 整行是纯链接行，没有歌名信息
-      if (!rest.replace(/[\s:：,，、|·\-—–]/g, '')) continue
+      // （横线变体要含 U+2010/2011，与 LINE_SPLITTERS 一致，否则用它们连接的纯链接行会被当成歌名）
+      if (!rest.replace(/[\s:：,，、|·\-—–‐‑]/g, '')) continue
       // 剩余文字才是歌名信息：此前拿整行去解析，URL 会被一起当成歌名搜出垃圾结果
       const song = parseSongLine(rest)
       if (song) songs.push(song)

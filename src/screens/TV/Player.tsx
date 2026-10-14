@@ -212,6 +212,17 @@ function TVPlayer({ componentId }: { componentId: string }) {
     return () => { clearInterval(interval) }
   }, [revealControls])
 
+  // 控制栏隐藏时按上/下/菜单呼出：setShowControls 是异步的，立刻 focusTVTargetByRef
+  // 时控制栏还没渲染（playFocus.ref.current 为 null）会落空；之后 preferred 调度又会被
+  // 引擎「不抢活焦点」守卫拦住（焦点在隐形歌词区）——补偿必须推迟到渲染完成后。
+  // 焦点已在控制栏按钮上时不抢（count>0 说明用户正操作按钮，交给按钮自身导航）
+  const focusPlayAfterReveal = useCallback(() => {
+    if (controlFocusCountRef.current > 0) return
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (playFocus.ref.current) void focusTVTargetByRef(playFocus.ref.current)
+    }))
+  }, [playFocus.ref])
+
   useTVRemoteActions({
     playPause: () => { if (musicInfo.id) togglePlay() },
     previous: () => { if (musicInfo.id) void playPrev() },
@@ -219,9 +230,9 @@ function TVPlayer({ componentId }: { componentId: string }) {
     next: () => { if (musicInfo.id) void playNext() },
     fastForward: () => { if (musicInfo.id) void playNext() },
     stop: () => { if (musicInfo.id && isPlay) togglePlay() },
-    down: () => { revealControls(); void focusTVTargetByRef(playFocus.ref.current) },
-    up: () => { revealControls(); void focusTVTargetByRef(playFocus.ref.current) },
-    menu: () => { revealControls() },
+    down: () => { revealControls(); focusPlayAfterReveal() },
+    up: () => { revealControls(); focusPlayAfterReveal() },
+    menu: () => { revealControls(); focusPlayAfterReveal() },
   })
 
   // 播放页遥控直控（对齐 Apple Music TV 交互）：

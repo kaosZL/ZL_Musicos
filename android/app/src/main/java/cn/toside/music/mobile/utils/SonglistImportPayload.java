@@ -106,7 +106,8 @@ public class SonglistImportPayload {
     if (depth > MAX_DEPTH || budget.bytes >= MAX_TOTAL_BYTES) return "";
 
     if (isGzip(data)) {
-      byte[] inflated = inflateGzip(data, MAX_TOTAL_BYTES - budget.bytes);
+      int limit = MAX_TOTAL_BYTES - budget.bytes;
+      byte[] inflated = inflateGzip(data, limit, budget);
       if (inflated.length == 0) return "";
       budget.bytes += inflated.length;
       return bytesToText(inflated, depth + 1, budget);
@@ -188,11 +189,11 @@ public class SonglistImportPayload {
     return -1;
   }
 
-  private static byte[] inflateGzip(byte[] data, int limit) {
+  private static byte[] inflateGzip(byte[] data, int limit, Budget budget) {
     InputStream in = null;
     try {
       in = new GZIPInputStream(new ByteArrayInputStream(data));
-      return readAll(in, limit);
+      return readAll(in, limit, budget);
     } catch (Throwable e) {
       return new byte[0];
     } finally {
@@ -200,7 +201,7 @@ public class SonglistImportPayload {
     }
   }
 
-  private static byte[] readAll(InputStream in, int limit) {
+  private static byte[] readAll(InputStream in, int limit, Budget budget) {
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     byte[] buf = new byte[8192];
     int read;
@@ -209,7 +210,11 @@ public class SonglistImportPayload {
       while ((read = in.read(buf)) > 0) {
         out.write(buf, 0, read);
         total += read;
-        if (total >= limit) break;
+        if (total >= limit) {
+          // 因预算截断（不是流自然结束）必须打标，否则 gzip 半截内容静默丢弃
+          budget.entryTruncated = true;
+          break;
+        }
       }
     } catch (Throwable ignored) {
       // Return what was read so far.

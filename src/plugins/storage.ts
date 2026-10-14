@@ -77,7 +77,14 @@ export const getData = async<T = unknown>(key: string): Promise<T | null> => {
     throw e
   }
   if (value && (partKeyPrefixRxp.test(value) || partKeyArrPrefixRxp.test(value))) {
-    return handleGetData<T>(value)
+    // 分片路径的 JSON.parse（拼回的大 JSON / partKey 列表）同样要兜底：
+    // userList 这类大 key 恰恰走分片，损坏时穿透调用方和「按无数据兜底」就自相矛盾了
+    try {
+      return await handleGetData<T>(value)
+    } catch (e: any) {
+      log.error('storage error[getData:parts]:', key, e.message)
+      return null
+    }
   } else if (value == null) return value
   try {
     return JSON.parse(value) as T
@@ -175,9 +182,16 @@ export const saveDataMultiple = async(datas: Array<[string, any]>) => {
   for (const [key, value] of datas) {
     buildData(key, value, allData)
   }
-  try {
-    await removeDataMultiple(datas.map(k => k[0]))
+  // 与 saveData 同一套按 key 串行化：先等这些 key 上所有在途写完成，
+  // 本批写完前，这些 key 的后续写也排队（防止与并发 saveData 在同 key 上交错丢写）
+  const keys = datas.map(k => k[0])
+  const task = Promise.all(keys.map(key => saveQueues.get(key) ?? Promise.resolve())).then(async() => {
+    await removeDataMultiple(keys)
     await AsyncStorage.multiSet(allData)
+  })
+  for (const key of keys) saveQueues.set(key, task.catch(() => {}))
+  try {
+    await task
   } catch (e: any) {
     // save error
     log.error('storage error[saveDataMultiple]:', e.message)

@@ -21,16 +21,16 @@ const sourceNames: Record<string, string> = {
 }
 
 /**
- * 顶部导航 tab。currentId 传当前屏自己的 tab id：按当前屏的 tab 时 no-op，
- * 否则会把同屏再压一层，返回键要多按一次（Queue 页按「播放列表」实测复现）
+ * 顶部导航 tab。currentId 传当前屏自己的 tab id：该 tab 标记 noop（不跳转、不 blur），
+ * 否则会把同屏再压一层、返回键要多按一次（Queue 页按「播放列表」实测复现）
  */
 export const createTVTabs = (componentId: string, currentId?: string): TVTabItem[] => [
-  { id: 'home', label: tvText.recommend, onPress: () => { if (currentId === 'home') return; void popToRoot(componentId) } },
-  { id: 'new', label: tvText.charts, onPress: () => { if (currentId === 'new') return; pushTVHistoryScreen(componentId) } },
-  { id: 'mylist', label: tvText.mySonglists, onPress: () => { if (currentId === 'mylist') return; pushTVMyListScreen(componentId) } },
-  { id: 'search', label: tvText.search, onPress: () => { if (currentId === 'search') return; pushTVSearchScreen(componentId) } },
-  { id: 'queue', label: '播放列表', onPress: () => { if (currentId === 'queue') return; pushTVQueueScreen(componentId) } },
-  { id: 'settings', label: tvText.settings, onPress: () => { if (currentId === 'settings') return; pushTVSettingsScreen(componentId) } },
+  { id: 'home', label: tvText.recommend, noop: currentId === 'home', onPress: () => { void popToRoot(componentId) } },
+  { id: 'new', label: tvText.charts, noop: currentId === 'new', onPress: () => { pushTVHistoryScreen(componentId) } },
+  { id: 'mylist', label: tvText.mySonglists, noop: currentId === 'mylist', onPress: () => { pushTVMyListScreen(componentId) } },
+  { id: 'search', label: tvText.search, noop: currentId === 'search', onPress: () => { pushTVSearchScreen(componentId) } },
+  { id: 'queue', label: '播放列表', noop: currentId === 'queue', onPress: () => { pushTVQueueScreen(componentId) } },
+  { id: 'settings', label: tvText.settings, noop: currentId === 'settings', onPress: () => { pushTVSettingsScreen(componentId) } },
 ]
 
 export const normalizeMusicInfo = (musicInfo?: LX.Player.PlayMusic | LX.Player.MusicInfo | LX.Music.MusicInfo | null) => {
