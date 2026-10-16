@@ -121,7 +121,7 @@ public class UtilsModule extends ReactContextBaseJavaModule {
         android.graphics.Color.RGBToHSV(r, g, b, hsv);
         hsv[1] = Math.min(hsv[1] * 0.85f, 0.75f);
         hsv[2] = Math.min(hsv[2], 0.45f);
-        int out = android.graphics.Color.HSVtoColor(hsv);
+        int out = android.graphics.Color.HSVToColor(hsv);
         promise.resolve(String.format("#%06X", 0xFFFFFF & out));
       } catch (Exception e) {
         promise.resolve(null);

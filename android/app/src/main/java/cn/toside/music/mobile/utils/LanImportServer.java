@@ -158,7 +158,7 @@ public class LanImportServer extends NanoHTTPD {
   }
 
   /** 运行日志环（手机控制台实时看）：记每个 API 请求与关键事件，最多 200 条 */
-  private static final ArrayDeque<String> runLogs = new ArrayDeque<>(200);
+  private static final java.util.ArrayDeque<String> runLogs = new java.util.ArrayDeque<>(200);
   private static final Object logLock = new Object();
 
   public static void addLog(String line) {
