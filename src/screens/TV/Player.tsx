@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ImageBackground, ScrollView, useWindowDimensions, View, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native'
+import { Animated, BackHandler, ImageBackground, ScrollView, useWindowDimensions, View, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native'
 import Image, { defaultHeaders } from '@/components/common/Image'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVText from '@/components/TV/TVText'
@@ -14,6 +14,7 @@ import { updateSetting } from '@/core/common'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { focusTVTargetByRef } from '@/components/TV/tvFocusManager'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
+import { getDominantColor } from '@/utils/nativeModules/utils'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { onTVRemoteEvent } from '@/utils/nativeModules/utils'
 import { useLrcPlay, useLrcSet } from '@/plugins/lyric'
@@ -76,6 +77,36 @@ function TVPlayer({ componentId }: { componentId: string }) {
   const modeFocus = useTVFocusRef()
   const lyricFocus = useTVFocusRef()
   const progressPercent = Math.max(0, Math.min(progress.progress * 100, 100))
+  // 专辑主色动态背景（借鉴 zl-music-tv）：换歌时从封面取主色，动画过渡浸染背景
+  const [dominant, setDominant] = useState<string | null>(null)
+  const dominantAnim = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    let alive = true
+    setDominant(null)
+    if (!musicInfo.pic) return
+    void getDominantColor(musicInfo.pic).then(color => {
+      if (alive && color) setDominant(color)
+    }).catch(() => { })
+    return () => { alive = false }
+  }, [musicInfo.pic])
+  const prevColorRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!dominant) return
+    prevColorRef.current = dominant
+    dominantAnim.setValue(0)
+    Animated.timing(dominantAnim, { toValue: 1, duration: 1200, useNativeDriver: false }).start()
+  }, [dominant, dominantAnim])
+  const backdropColor = dominant ?? '#0B0B10'
+  // 全屏歌词（借鉴 zl-music-tv）：歌词区长按 OK 进入，OK/返回退出
+  const [fullscreenLyrics, setFullscreenLyrics] = useState(false)
+  useEffect(() => {
+    if (!fullscreenLyrics) return
+    const unsubKeys = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
+      if (eventType === 'select' && eventKeyAction === 1 && repeatCount === 0) setFullscreenLyrics(false)
+    })
+    const backSub = BackHandler.addEventListener('hardwareBackPress', () => { setFullscreenLyrics(false); return true })
+    return () => { unsubKeys(); backSub.remove() }
+  }, [fullscreenLyrics])
   const sourceName = getSourceName(apiSource)
   const { width: screenWidth, height: screenHeight } = useWindowDimensions()
 
@@ -335,7 +366,13 @@ function TVPlayer({ componentId }: { componentId: string }) {
             <View style={styles.backdropImageScrim} />
           </ImageBackground>
         ) : null}
-        <View style={styles.backdropDeepWash} />
+        <Animated.View
+          style={[styles.backdropDeepWash, {
+            backgroundColor: dominant
+              ? dominantAnim.interpolate({ inputRange: [0, 1], outputRange: ['#0B0B10', backdropColor] })
+              : '#0B0B10',
+          }]}
+        />
         <View style={styles.backdropTopShade} />
         <View style={styles.backdropBottomShade} />
       </View>
@@ -367,6 +404,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
               focusStyle={styles.lyricStageFocused}
               hasTVPreferredFocus={!showControls}
               onPress={() => { revealControls() }}
+              onLongPress={() => { setFullscreenLyrics(true) }}
             >
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.lyricContent, appleLayout.lyricContent]} scrollEnabled={false}>
                 {displayLyrics.map(item => (
@@ -393,6 +431,23 @@ function TVPlayer({ componentId }: { componentId: string }) {
           </View>
         </View>
 
+        {fullscreenLyrics ? (
+          <View style={styles.fsLyricsRoot}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.fsLyricsContent}>
+              {displayLyrics.map(item => (
+                <TVText
+                  key={item.key}
+                  variant={item.active ? 'pageTitle' : 'body'}
+                  style={item.active ? [styles.fsLyricActive, { textShadowColor: backdropColor }] : styles.fsLyricDim}
+                  numberOfLines={2}
+                >
+                  {item.text}
+                </TVText>
+              ))}
+            </ScrollView>
+            <TVText variant="caption" color="rgba(247,248,251,0.35)" style={styles.fsLyricHint}>按 OK 或返回键退出全屏歌词</TVText>
+          </View>
+        ) : null}
         {showControls ? (
           <View style={[styles.dockOverlay, appleLayout.dockOverlay]}>
             <TVNowPlayingDock progressPercent={progressPercent} now={progress.nowPlayTimeStr || '00:00'} total={progress.maxPlayTimeStr || '00:00'} style={styles.dock} controlsStyle={appleLayout.dockControls}>
@@ -638,6 +693,11 @@ const styles: Record<string, ViewStyle | TextStyle | ImageStyle | any> = {
   lyricRow: { marginVertical: 3, opacity: 0.42 },
   lyricRowActive: { opacity: 1, marginVertical: 11 },
   lyricText: { textAlign: 'left' },
+  fsLyricsRoot: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 40, elevation: 40, backgroundColor: 'rgba(4,5,9,0.96)', justifyContent: 'center', paddingHorizontal: tvSize(90) },
+  fsLyricsContent: { flexGrow: 1, justifyContent: 'center', gap: tvSize(16), paddingVertical: tvSize(40) },
+  fsLyricActive: { fontSize: tvSize(34), lineHeight: tvSize(46), fontWeight: '900', color: '#F5F5F7', textAlign: 'center', textShadowRadius: 24, textShadowOffset: { width: 0, height: 0 } },
+  fsLyricDim: { fontSize: tvSize(20), lineHeight: tvSize(30), color: 'rgba(247,248,251,0.34)', textAlign: 'center' },
+  fsLyricHint: { textAlign: 'center', paddingBottom: tvSize(26) },
   lyricTextActive: { color: tvColors.lyricActive, letterSpacing: 0, textShadowColor: 'rgba(0,0,0,0.50)', textShadowRadius: 24 },
   lyricTextNear: { color: 'rgba(247,248,251,0.31)' },
   lyricTextFar: { color: 'rgba(247,248,251,0.16)' },

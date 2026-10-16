@@ -69,6 +69,16 @@
 </section>
 
 <section>
+  <h2>运行日志（实时）</h2>
+  <div class="row" style="gap:8px;flex-wrap:wrap">
+    <button class="btn btn-s" id="logCopyBtn" type="button">一键复制日志</button>
+    <button class="btn btn-s" id="logPauseBtn" type="button">暂停刷新</button>
+    <span id="logState" style="color:#888;font-size:12px;align-self:center"></span>
+  </div>
+  <div id="logBox" class="logs" style="background:#080808;border-radius:8px;padding:10px;max-height:260px;overflow-y:auto;font-family:monospace;font-size:11px;line-height:1.8;color:#9ab"></div>
+</section>
+
+<section>
   <h2>已装音源</h2>
   <div id="list"><p class="empty">加载中…</p></div>
 </section>
@@ -77,6 +87,42 @@
 // 鉴权 token：电视端二维码 URL 里带 ?t=xxx，所有 /api/ 请求原样带上（服务端校验，防同网其他设备直连操作）
 const TOKEN = new URLSearchParams(location.search).get('t') || ''
 function apiUrl(path) { return TOKEN ? path + '?t=' + encodeURIComponent(TOKEN) : path }
+
+// 运行日志控制台：3s 轮询，可暂停；一键复制（报 bug 时直接粘贴给开发者）
+let logPaused = false
+let logLines = []
+async function pollLogs() {
+  if (logPaused) return
+  try {
+    const r = await fetch(apiUrl('/api/logs'))
+    const d = await r.json()
+    if (Array.isArray(d)) {
+      logLines = d
+      const box = document.getElementById('logBox')
+      box.textContent = d.length ? d.slice(-60).join('\n') : '暂无日志——操作一下电视端或导入功能后回来看'
+      box.scrollTop = box.scrollHeight
+      document.getElementById('logState').textContent = d.length + ' 条 · ' + new Date().toLocaleTimeString()
+    }
+  } catch (e) { document.getElementById('logState').textContent = '刷新失败：' + e.message }
+}
+setInterval(pollLogs, 3000)
+pollLogs()
+document.getElementById('logPauseBtn').addEventListener('click', function () {
+  logPaused = !logPaused
+  this.textContent = logPaused ? '恢复刷新' : '暂停刷新'
+  if (!logPaused) pollLogs()
+})
+document.getElementById('logCopyBtn').addEventListener('click', function () {
+  const text = logLines.join('\n') || '（空）'
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => { this.textContent = '已复制！'; setTimeout(() => { this.textContent = '一键复制日志' }, 1500) })
+  } else {
+    const ta = document.createElement('textarea')
+    ta.value = text; document.body.appendChild(ta); ta.select()
+    document.execCommand('copy'); document.body.removeChild(ta)
+    this.textContent = '已复制！'; setTimeout(() => { this.textContent = '一键复制日志' }, 1500)
+  }
+})
 function showMsg(text, isErr) {
   const el = document.getElementById('importMsg')
   el.textContent = text

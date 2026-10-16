@@ -157,6 +157,18 @@ public class LanImportServer extends NanoHTTPD {
     songlistsJson = (json == null || json.isEmpty()) ? "{\"lists\":[]}" : json;
   }
 
+  /** 运行日志环（手机控制台实时看）：记每个 API 请求与关键事件，最多 200 条 */
+  private static final ArrayDeque<String> runLogs = new ArrayDeque<>(200);
+  private static final Object logLock = new Object();
+
+  public static void addLog(String line) {
+    String ts = new java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US).format(new java.util.Date());
+    synchronized (logLock) {
+      if (runLogs.size() >= 200) runLogs.removeFirst();
+      runLogs.addLast("[" + ts + "] " + line);
+    }
+  }
+
   /** 手机页导出歌单的结果缓存：JS 侧打包好后回填，手机页轮询取走（09-20 需求） */
   private static volatile String songlistExportResult = "{\"ok\":false,\"message\":\"pending\"}";
 
@@ -240,6 +252,20 @@ public class LanImportServer extends NanoHTTPD {
     if (Method.GET.equals(method) && "/api/songlist-export-result".equals(uri)) {
       return json(songlistExportResult);
     }
+    if (Method.GET.equals(method) && "/api/logs".equals(uri)) {
+      StringBuilder sb = new StringBuilder(4096);
+      sb.append('[');
+      synchronized (logLock) {
+        boolean first = true;
+        for (String line : runLogs) {
+          if (!first) sb.append(',');
+          sb.append('"').append(line.replace("\\", "\\\\").replace("\"", "\\\"")).append('"');
+          first = false;
+        }
+      }
+      sb.append(']');
+      return json(sb.toString());
+    }
     if (Method.POST.equals(method)) {
       Map<String, String> body = new HashMap<>();
       try {
@@ -249,6 +275,9 @@ public class LanImportServer extends NanoHTTPD {
       }
       String payload = body.get("postData");
       payload = ensureUtf8(payload);
+      if (uri.startsWith("/api/") && !uri.equals("/api/logs")) {
+        addLog(method + " " + uri);
+      }
       if ("/api/import".equals(uri)) {
         notify("import", payload);
         return json("{\"ok\":true,\"message\":\"已提交，电视正在导入\"}");

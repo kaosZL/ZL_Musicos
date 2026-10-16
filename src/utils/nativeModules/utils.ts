@@ -44,6 +44,8 @@ export const screenUnkeepAwake = () => {
 
 export const getWIFIIPV4Address = UtilsModule.getWIFIIPV4Address as () => Promise<string>
 
+export const getDominantColor = (imageUrl: string) => UtilsModule.getDominantColor(imageUrl) as Promise<string | null>
+
 export const isTVDevice = UtilsModule.isTVDevice as () => Promise<boolean>
 
 export const requestTVFocus = UtilsModule.requestTVFocus as (reactTag: number) => void

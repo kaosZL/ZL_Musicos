@@ -66,6 +66,74 @@ public class UtilsModule extends ReactContextBaseJavaModule {
     return "UtilsModule";
   }
 
+  /**
+   * 取图片主色（播放页动态背景用）：下载图片 → 缩到 32px 采样 → 按亮度分桶取最饱和桶的均值。
+   * 返回 "#RRGGBB"；任何失败 resolve null（调用方兜底用默认色）。
+   */
+  @ReactMethod
+  public void getDominantColor(String imageUrl, Promise promise) {
+    new Thread(() -> {
+      try {
+        java.net.URL url = new java.net.URL(imageUrl);
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+        conn.setConnectTimeout(6000);
+        conn.setReadTimeout(8000);
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+        int code = conn.getResponseCode();
+        if (code != 200) { promise.resolve(null); return; }
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        java.io.InputStream in = conn.getInputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+        in.close();
+        android.graphics.Bitmap full = android.graphics.BitmapFactory.decodeByteArray(bos.toByteArray(), 0, bos.size());
+        if (full == null) { promise.resolve(null); return; }
+        android.graphics.Bitmap bmp = android.graphics.Bitmap.createScaledBitmap(full, 32, 32, true);
+        if (bmp != full) full.recycle();
+        // HSV 分桶：跳过近黑/近白，取「饱和度×数量」加权最高的桶
+        int[] best = {0, 0, 0};
+        long bestScore = -1;
+        java.util.Map<Integer, int[]> buckets = new java.util.HashMap<>();
+        float[] hsv = new float[3];
+        for (int y = 0; y < 32; y++) {
+          for (int x = 0; x < 32; x++) {
+            int c = bmp.getPixel(x, y);
+            android.graphics.Color.colorToHSV(c, hsv);
+            if (hsv[2] < 0.18f || hsv[2] > 0.95f || hsv[1] < 0.15f) continue;
+            int key = (int) (hueBucket(hsv[0]) * 100);
+            int[] agg = buckets.get(key);
+            if (agg == null) { agg = new int[]{0, 0, 0, 0}; buckets.put(key, agg); }
+            agg[0] += android.graphics.Color.red(c);
+            agg[1] += android.graphics.Color.green(c);
+            agg[2] += android.graphics.Color.blue(c);
+            agg[3] += 1;
+          }
+        }
+        bmp.recycle();
+        for (int[] agg : buckets.values()) {
+          long score = (long) agg[3] * (agg[3] > 4 ? 2 : 1);
+          if (score > bestScore) { bestScore = score; best = agg; }
+        }
+        if (best[3] == 0) { promise.resolve(null); return; }
+        int r = best[0] / best[3], g = best[1] / best[3], b = best[2] / best[3];
+        // 压暗到适合做背景的亮度（V 上限 0.45）
+        android.graphics.Color.RGBToHSV(r, g, b, hsv);
+        hsv[1] = Math.min(hsv[1] * 0.85f, 0.75f);
+        hsv[2] = Math.min(hsv[2], 0.45f);
+        int out = android.graphics.Color.HSVtoColor(hsv);
+        promise.resolve(String.format("#%06X", 0xFFFFFF & out));
+      } catch (Exception e) {
+        promise.resolve(null);
+      }
+    }).start();
+  }
+
+  private static int hueBucket(float hue) {
+    // 12° 一桶共 30 桶；hue ∈ [0,360)
+    return (int) (hue / 12f) % 30;
+  }
+
   @ReactMethod
   public void isTVDevice(Promise promise) {
     try {
