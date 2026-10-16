@@ -96,7 +96,13 @@ function TVPlayer({ componentId }: { componentId: string }) {
     dominantAnim.setValue(0)
     Animated.timing(dominantAnim, { toValue: 1, duration: 1200, useNativeDriver: false }).start()
   }, [dominant, dominantAnim])
-  const backdropColor = dominant ?? '#0B0B10'
+  // 染色必须半透明：不透明平面会把顶部/底部的渐变遮罩带显形成「方块背景墙」（v1.9.20 首测反馈）
+  const hexToRgba = (hex: string, alpha: number) => {
+    const n = parseInt(hex.slice(1), 16)
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`
+  }
+  const washFrom = 'rgba(3,4,8,0.34)'   // 原版 deepWash 基色
+  const washTo = dominant ? hexToRgba(dominant, 0.55) : washFrom
   // 全屏歌词（借鉴 zl-music-tv）：歌词区长按 OK 进入，OK/返回退出
   const [fullscreenLyrics, setFullscreenLyrics] = useState(false)
   useEffect(() => {
@@ -368,9 +374,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
         ) : null}
         <Animated.View
           style={[styles.backdropDeepWash, {
-            backgroundColor: dominant
-              ? dominantAnim.interpolate({ inputRange: [0, 1], outputRange: ['#0B0B10', backdropColor] })
-              : '#0B0B10',
+            backgroundColor: dominantAnim.interpolate({ inputRange: [0, 1], outputRange: [washFrom, washTo] }),
           }]}
         />
         <View style={styles.backdropTopShade} />
