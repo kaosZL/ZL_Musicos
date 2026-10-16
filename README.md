@@ -29,6 +29,8 @@
 
 **🎮 遥控器优先** — 方向键导航、OK 播放、长按呼出菜单，全程不碰鼠标
 
+**🎨 专辑主色氛围** — 播放页背景随封面主色平滑染色，歌词区长按 OK 进入全屏歌词
+
 **🖥 4K 等比适配** — 1080p 观感基准，任意密度 4K 下比例完全一致，只更清晰
 
 **🔍 拼音搜索联想** — 输入 `zjl`、`qt` 直接联想热门歌手和歌曲，全拼匹配自动纠偏
@@ -68,6 +70,7 @@
 | **长按 OK**（歌单卡片） | 歌单管理（电视改名 / 删除） |
 | **长按 OK**（搜索历史标签） | 删除该条搜索历史 |
 | OK（播放页·控制栏未呼出） | 暂停 / 继续播放 |
+| **长按 OK**（播放页·歌词区） | 进入全屏歌词（OK / Back 退出） |
 | Back | 返回上一页 |
 | Play/Pause | 播放页暂停或继续 |
 | Previous / Rewind | 播放上一首 |
@@ -95,6 +98,9 @@
 <summary><b>🌟 全部特性（点击展开）</b></summary>
 
 - 播放页 Apple Music TV 风格沉浸式布局：左侧封面、右侧歌词、底部进度条、右下角圆形控制。
+- 专辑主色动态背景：原生层从封面提取主色（HSV 分桶取主调并压暗），播放页背景随切歌平滑渐变染色；顶/底压暗全部为平滑渐变，无矩形色带。
+- 全屏歌词：播放页歌词区长按 OK 进入大字歌词模式，OK / Back 退出。
+- 手机页运行日志：手机扫码导入页内置「运行日志」卡片，3 秒轮询实时日志、可暂停与一键复制，排查音源问题不用连 adb。
 - 完整音源管理：设置页长按 OK 呼出音源操作菜单，所有音源（用户导入 / 预置 / 内置）均可删除；删除正在使用的音源自动回退聚合音源，当前歌曲播完为止。
 - TV 风格统一弹窗：全部弹窗（操作菜单、删除确认、更新提醒、系统提示）使用统一的毛玻璃卡片风格，与整体 UI 一致。
 - 切后台自动暂停：TV 端切到后台（Home / 其他应用）自动暂停播放，切回不自动恢复；手机端保持后台播放特性。
@@ -128,12 +134,14 @@ npm install
 npm run tv:assemble
 ```
 
-构建产物位于（三种架构）：
+构建产物位于（五种架构，文件名带 `-lulu` 本地包标记，与官方发布包区分）：
 
 ```text
-android/app/build/outputs/apk/release/zl-music-<版本>-arm64-v8a.apk
-android/app/build/outputs/apk/release/zl-music-<版本>-x86_64.apk
-android/app/build/outputs/apk/release/zl-music-<版本>-universal.apk
+android/app/build/outputs/apk/release/zl-music-<版本>-lulu-arm64-v8a.apk
+android/app/build/outputs/apk/release/zl-music-<版本>-lulu-armeabi-v7a.apk
+android/app/build/outputs/apk/release/zl-music-<版本>-lulu-x86_64.apk
+android/app/build/outputs/apk/release/zl-music-<版本>-lulu-x86.apk
+android/app/build/outputs/apk/release/zl-music-<版本>-lulu-universal.apk
 ```
 
 应用包名：`cn.toside.music.mobile`
@@ -152,7 +160,7 @@ npm run tv:remote -- right right ok
 npm run tv:remote -- back
 adb shell input keyevent 82   # 模拟 Menu 键
 adb connect 127.0.0.1:62001
-adb -s 127.0.0.1:62001 install -r android/app/build/outputs/apk/release/zl-music-<版本>-x86_64.apk
+adb -s 127.0.0.1:62001 install -r android/app/build/outputs/apk/release/zl-music-<版本>-lulu-x86_64.apk
 ```
 
 **CI 云构建**：每次 push 到 master / dev 自动构建 release APK（R8 混淆 + debug 签名，可直接安装），[Actions](https://github.com/kaosZL/ZL_Musicos/actions) 页面最新成功构建底部 Artifacts 下载。
