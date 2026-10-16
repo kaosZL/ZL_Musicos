@@ -74,6 +74,9 @@
 </section>
 
 <script>
+// 鉴权 token：电视端二维码 URL 里带 ?t=xxx，所有 /api/ 请求原样带上（服务端校验，防同网其他设备直连操作）
+const TOKEN = new URLSearchParams(location.search).get('t') || ''
+function apiUrl(path) { return TOKEN ? path + '?t=' + encodeURIComponent(TOKEN) : path }
 function showMsg(text, isErr) {
   const el = document.getElementById('importMsg')
   el.textContent = text
@@ -85,7 +88,7 @@ async function doImport() {
   const script = document.getElementById('srcScript').value
   if (!url && !script.trim()) return showMsg('请填写链接或粘贴脚本', true)
   try {
-    const r = await fetch('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify(url ? { url } : { script }) })
+    const r = await fetch(apiUrl('/api/import'), { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify(url ? { url } : { script }) })
     const d = await r.json()
     if (d.ok) {
       document.getElementById('srcUrl').value = ''
@@ -168,7 +171,7 @@ async function doImportSonglist() {
   }
   showSonglistMsg('正在提交到电视…')
   try {
-    const r = await fetch('/api/songlist', {
+    const r = await fetch(apiUrl('/api/songlist'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify(payload)
@@ -198,7 +201,7 @@ function showRenameMsg(text, isErr) {
 
 // 读取电视端推送过来的「我的歌单」快照（原生层缓存，电视端歌单有变化时会重新推送）
 async function fetchSonglists() {
-  const r = await fetch('/api/songlists')
+  const r = await fetch(apiUrl('/api/songlists'))
   const d = await r.json()
   return (d && d.lists) || []
 }
@@ -281,7 +284,7 @@ async function removeSonglist(id, name) {
   if (!confirm('确定删除歌单「' + name + '」吗？歌单和它里面的歌曲都会从电视上移除，无法恢复。')) return
   showRenameMsg('正在删除…')
   try {
-    const r = await fetch('/api/songlist-remove', {
+    const r = await fetch(apiUrl('/api/songlist-remove'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({ ids: [id] })
@@ -301,7 +304,7 @@ async function removeSonglist(id, name) {
 async function exportSonglist(id) {
   showRenameMsg('正在导出…')
   try {
-    const r = await fetch('/api/songlist-export', {
+    const r = await fetch(apiUrl('/api/songlist-export'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({ id: id })
@@ -313,7 +316,7 @@ async function exportSonglist(id) {
     }
     for (let i = 0; i < 16; i++) {
       await new Promise(resolve => setTimeout(resolve, 500))
-      const rr = await fetch('/api/songlist-export-result')
+      const rr = await fetch(apiUrl('/api/songlist-export-result'))
       const result = await rr.json()
       if (result && result.ok && result.id === id) {
         const blob = new Blob([result.payload], { type: 'application/json' })
@@ -353,7 +356,7 @@ async function saveSonglists() {
   }
   showRenameMsg('正在保存…')
   try {
-    const r = await fetch('/api/songlist-rename', {
+    const r = await fetch(apiUrl('/api/songlist-rename'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({ renames: renames })
@@ -374,7 +377,7 @@ async function saveSonglists() {
 
 async function refresh() {
   try {
-    const r = await fetch('/api/sources')
+    const r = await fetch(apiUrl('/api/sources'))
     const d = await r.json()
     render(d.sources || [])
   } catch (e) { /* 静默 */ }
@@ -382,12 +385,25 @@ async function refresh() {
 
 async function removeSource(id, name) {
   if (!confirm('确定删除「' + name + '」吗？')) return
-  await fetch('/api/remove', { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ id }) })
+  try {
+    const r = await fetch(apiUrl('/api/remove'), { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ id }) })
+    const d = await r.json().catch(() => null)
+    if (!d || !d.ok) return showMsg((d && d.message) || '删除失败', true)
+    showMsg('已提交删除')
+  } catch (e) {
+    showMsg('网络错误，请重试', true)
+  }
   refresh()
 }
 
 async function activate(id) {
-  await fetch('/api/activate', { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ id }) })
+  try {
+    const r = await fetch(apiUrl('/api/activate'), { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ id }) })
+    const d = await r.json().catch(() => null)
+    if (!d || !d.ok) return showMsg((d && d.message) || '切换失败', true)
+  } catch (e) {
+    showMsg('网络错误，请重试', true)
+  }
   refresh()
 }
 

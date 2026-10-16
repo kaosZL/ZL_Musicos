@@ -43,11 +43,6 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
   const focusChangeRef = useRef(onTVFocusChange)
   const longPressFiredRef = useRef(false)
 
-  // 清理定时器
-  useEffect(() => {
-    return () => {}
-  }, [])
-
   useImperativeHandle(ref, () => nativeRef.current!, [])
 
   useEffect(() => {

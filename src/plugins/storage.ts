@@ -43,13 +43,23 @@ const handleGetData = async<T>(partKeys: string): Promise<T> => {
   })
 }
 
+// 同 key 写串行化：saveData 是 remove→multiSet 两段异步，无串行化时两个并发保存
+// 交错（A.remove→B.remove→B.set→A.set）会让旧快照最后落盘——userList 这类
+// 「每次列表操作都全量重写」的 key 上就是数据丢失（内存正常、重启后丢歌单）
+const saveQueues = new Map<string, Promise<unknown>>()
+
 export const saveData = async(key: string, value: any) => {
   const datas: Array<[string, string]> = []
   buildData(key, value, datas)
 
-  try {
+  const task = (saveQueues.get(key) ?? Promise.resolve()).then(async() => {
     await removeData(key)
     await AsyncStorage.multiSet(datas)
+  })
+  // 失败也要放行后续保存（吞掉的是链上的错误，真正的错误仍由下方 await 抛给调用方）
+  saveQueues.set(key, task.catch(() => {}))
+  try {
+    await task
   } catch (e: any) {
     // saving error
     log.error('storage error[saveData]:', key, e.message)
@@ -67,9 +77,22 @@ export const getData = async<T = unknown>(key: string): Promise<T | null> => {
     throw e
   }
   if (value && (partKeyPrefixRxp.test(value) || partKeyArrPrefixRxp.test(value))) {
-    return handleGetData<T>(value)
+    // 分片路径的 JSON.parse（拼回的大 JSON / partKey 列表）同样要兜底：
+    // userList 这类大 key 恰恰走分片，损坏时穿透调用方和「按无数据兜底」就自相矛盾了
+    try {
+      return await handleGetData<T>(value)
+    } catch (e: any) {
+      log.error('storage error[getData:parts]:', key, e.message)
+      return null
+    }
   } else if (value == null) return value
-  return JSON.parse(value)
+  try {
+    return JSON.parse(value) as T
+  } catch (e: any) {
+    // 单条值损坏（截断/污染）不该炸穿调用方：记日志按「无数据」处理，调用方均有 ?? 兜底
+    log.error('storage error[getData:parse]:', key, e.message)
+    return null
+  }
 }
 
 export const removeData = async(key: string) => {
@@ -159,9 +182,16 @@ export const saveDataMultiple = async(datas: Array<[string, any]>) => {
   for (const [key, value] of datas) {
     buildData(key, value, allData)
   }
-  try {
-    await removeDataMultiple(datas.map(k => k[0]))
+  // 与 saveData 同一套按 key 串行化：先等这些 key 上所有在途写完成，
+  // 本批写完前，这些 key 的后续写也排队（防止与并发 saveData 在同 key 上交错丢写）
+  const keys = datas.map(k => k[0])
+  const task = Promise.all(keys.map(key => saveQueues.get(key) ?? Promise.resolve())).then(async() => {
+    await removeDataMultiple(keys)
     await AsyncStorage.multiSet(allData)
+  })
+  for (const key of keys) saveQueues.set(key, task.catch(() => {}))
+  try {
+    await task
   } catch (e: any) {
     // save error
     log.error('storage error[saveDataMultiple]:', e.message)

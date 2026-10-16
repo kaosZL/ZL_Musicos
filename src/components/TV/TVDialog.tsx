@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { BackHandler, Pressable, Text, View, type TextStyle, type ViewStyle } from 'react-native'
-import { onTVRemoteEvent, requestTVFocus } from '@/utils/nativeModules/utils'
+import { onTVRemoteEvent } from '@/utils/nativeModules/utils'
 import { setTVDialogActive } from './tvFocusManager'
 import TVText from './TVText'
 import { tvColors, tvSize } from '@/theme/tv'
@@ -20,10 +20,25 @@ export interface TVDialogRequest {
 
 type TVDialogListener = (request: TVDialogRequest | null) => void
 
+// 每个屏的 scaffold 各挂一个 TVDialogHost，这里必须用注册表而不是单值：
+// 深层屏 pop 卸载时若只是把 activeListener 置 null，底屏的 Host 不会重注册，
+// 全局弹窗（showTVDialog/confirmDialog/tipDialog）从此静默失效、await 永挂——
+// 「我的歌单 → 歌单详情 → 返回 → 长按删除」确认框不弹就是这条链路（Settings.tsx 注释曾记录过）
+const dialogHosts = new Set<TVDialogListener>()
 let activeListener: TVDialogListener | null = null
 
-export const setTVDialogListener = (listener: TVDialogListener | null) => {
+/** 注册一个弹窗宿主，返回反注册函数（在 Host 卸载时调用） */
+export const setTVDialogListener = (listener: TVDialogListener) => {
+  dialogHosts.add(listener)
   activeListener = listener
+  return () => {
+    dialogHosts.delete(listener)
+    if (activeListener === listener) {
+      // 回退到仍挂载的宿主（Set 按插入序，最后一个 = 最上层屏）
+      const remaining = [...dialogHosts]
+      activeListener = remaining.length ? remaining[remaining.length - 1] : null
+    }
+  }
 }
 
 export const showTVDialog = (request: TVDialogRequest) => {
@@ -138,12 +153,7 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
 
 export const TVDialogHost = memo(() => {
   const [request, setRequest] = useState<TVDialogRequest | null>(null)
-  useEffect(() => {
-    setTVDialogListener(setRequest)
-    return () => {
-      if (activeListener === setRequest) activeListener = null
-    }
-  }, [])
+  useEffect(() => setTVDialogListener(setRequest), [])
   return (
     <TVDialog
       visible={!!request}

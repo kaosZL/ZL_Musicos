@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
-import { ScrollView, View, type TextStyle, type ViewStyle } from 'react-native'
+import { ScrollView, View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVText from '@/components/TV/TVText'
@@ -82,6 +82,9 @@ function TVMyList({ componentId }: { componentId: string }) {
   const firstCardFocus = useTVFocusRef()
   const cardRefs = useRef<FocusRefMap>({})
   const listRefresh = useTVFocusRefresh()
+  // 顶部导航接线契约：首排卡片按上直达导航栏（不接的话靠几何回退兜底，布局一变就脆）
+  const activeTabFocus = useRef<FocusNode>(null)
+  const getActiveTabHandle = () => (activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null)
 
   // ── 「聚焦即滚动」 ──────────────────────────────────────────────
   // 本页 ScrollView 原先没有任何滚动管理：卡片换行到第二排及以后时，整排在屏幕外，
@@ -208,7 +211,7 @@ function TVMyList({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={musicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="mylist" hasTVPreferredFocus nextFocusDown={firstCardFocus.getNodeHandle() ?? undefined} />
+      <TVTopTabs items={createTVTabs(componentId, 'mylist')} activeId="mylist" hasTVPreferredFocus nextFocusDown={firstCardFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus} onActiveTabReady={listRefresh} />
       {/* 聚焦即滚动：ScrollView 记录滚动位移 / 可视高度，卡片获焦时把它所在的【整排】滚进视野（见上方 revealCardRow） */}
       <ScrollView
         ref={contentScrollRef}
@@ -247,6 +250,7 @@ function TVMyList({ componentId }: { componentId: string }) {
                 onPress={() => { pushTVSettingsScreen(componentId) }}
                 onFocus={() => { revealCardRow(IMPORT_CARD_KEY) }}
                 onLayout={(e) => { recordCardBox(IMPORT_CARD_KEY, e.nativeEvent.layout.y, e.nativeEvent.layout.height) }}
+                nextFocusUp={getActiveTabHandle() ?? undefined}
               >
                 <View style={styles.importHead}>
                   <TVText variant="cardTitle" style={styles.importPlus}>＋</TVText>
@@ -272,6 +276,7 @@ function TVMyList({ componentId }: { componentId: string }) {
                 }}
                 onFocus={() => { revealCardRow('mylist_love') }}
                 onLayout={(e) => { recordCardBox('mylist_love', e.nativeEvent.layout.y, e.nativeEvent.layout.height) }}
+                nextFocusUp={getActiveTabHandle() ?? undefined}
               />
               {userSonglists.map((item, index) => (
                 <TVPosterCard
@@ -288,6 +293,7 @@ function TVMyList({ componentId }: { componentId: string }) {
                   onLongPress={() => { handleManageSonglist(item) }}
                   onFocus={() => { revealCardRow(`mylist_${item.id}`) }}
                   onLayout={(e) => { recordCardBox(`mylist_${item.id}`, e.nativeEvent.layout.y, e.nativeEvent.layout.height) }}
+                  nextFocusUp={getActiveTabHandle() ?? undefined}
                 />
               ))}
             </View>

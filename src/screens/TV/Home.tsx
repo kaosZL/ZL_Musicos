@@ -6,6 +6,7 @@ import TVHeroShelf from '@/components/TV/TVHeroShelf'
 import TVShelf from '@/components/TV/TVShelf'
 import TVPosterCard from '@/components/TV/TVPosterCard'
 import TVButton from '@/components/TV/TVButton'
+import TVText from '@/components/TV/TVText'
 import type Focusable from '@/components/TV/Focusable'
 import { tvColors, tvSize } from '@/theme/tv'
 import { setComponentId } from '@/core/common'
@@ -165,7 +166,7 @@ function TVHome({ componentId }: { componentId: string }) {
 
   return (
     <TVAppleScaffold image={musicInfo.pic}>
-      <TVTopTabs items={createTVTabs(componentId)} activeId="home" hasTVPreferredFocus nextFocusDown={playFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus as any} onActiveTabReady={queueFocusRefresh} />
+      <TVTopTabs items={createTVTabs(componentId, 'home')} activeId="home" hasTVPreferredFocus nextFocusDown={playFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus as any} onActiveTabReady={queueFocusRefresh} />
       <ScrollView ref={contentScrollRef} showsVerticalScrollIndicator={false}>
         <View onLayout={event => { sectionOffsetRef.current.hero = event.nativeEvent.layout.y }}>
           <TVHeroShelf kicker={tvText.todayRecommend} title={heroTitle} subtitle={heroSubtitle} image={musicInfo.pic}>

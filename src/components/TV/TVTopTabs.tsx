@@ -9,6 +9,8 @@ export interface TVTabItem {
   id: string
   label: string
   onPress: () => void
+  /** 当前屏自己的 tab：按了不跳转也不 blur（blur 了焦点会悬空，观感是「按键失灵」） */
+  noop?: boolean
 }
 
 interface Props {
@@ -23,6 +25,7 @@ interface Props {
 
 const TabButton = forwardRef<any, ComponentProps<typeof Focusable> & { item: TVTabItem }>(({ item, ...props }, ref) => (
   <Focusable ref={ref} style={styles.tab} focusStyle={styles.tabFocus} onPress={() => {
+    if (item.noop) return
     blurActiveTVTarget()
     item.onPress()
   }} {...props}>

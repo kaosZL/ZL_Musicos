@@ -238,6 +238,13 @@ export const subscribeTVTargetFocusState = (id: number, listener: FocusStateList
 
 export const focusPreferredTVTarget = async() => {
   const measured = await measureTargets()
+  // 已有仍挂载的活动焦点时不抢：preferred 调度只该兜底（无焦点/焦点目标已卸载），
+  // 不该覆盖。否则 FlatList 滚回顶部时 preferred 首行重挂载会把焦点从当前行拽回首行、
+  // 进屏的双次调度（260ms+580ms）也会抢回用户刚移动过的焦点
+  if (activeTargetId) {
+    const active = measured.find(target => target.id === activeTargetId)
+    if (active) return true
+  }
   // 取最后一个 preferred 目标（最近注册的——弹窗按钮比页面按钮晚注册，
   // 这样弹窗打开时初始焦点落在弹窗按钮而非背景按钮）
   let target: FocusTarget | null = null

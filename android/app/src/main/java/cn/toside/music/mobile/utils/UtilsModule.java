@@ -444,9 +444,18 @@ public class UtilsModule extends ReactContextBaseJavaModule {
         promise.reject("LAN_SERVER_ERROR", "局域网服务没能监听任何端口，请重试");
         return;
       }
+      String ip = getLanIp();
+      if (ip == null || ip.isEmpty() || "0.0.0.0".equals(ip)) {
+        // 没有可用网络时 getLanIp 兜底返回 0.0.0.0：不拒掉的话二维码会编出一个死链接，
+        // 用户扫码毫无反应还没有任何提示
+        LanImportServer.stopServer();
+        promise.reject("LAN_SERVER_ERROR", "电视当前没有可用的网络连接，请检查 WiFi 后重试");
+        return;
+      }
       WritableMap params = Arguments.createMap();
-      params.putString("ip", getLanIp());
+      params.putString("ip", ip);
       params.putInt("port", actualPort);
+      params.putString("token", LanImportServer.getAuthToken());
       promise.resolve(params);
     } catch (Exception e) {
       promise.reject("LAN_SERVER_ERROR", e);

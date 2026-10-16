@@ -43,7 +43,8 @@ const MAX_SEARCH_LINES = 300
 const SEARCH_CONCURRENCY = 3
 
 const URL_RXP = /https?:\/\/[^\s"'<>）)】\]，,]+/gi
-const LINE_SPLITTERS = [' - ', ' – ', ' – ', ' — ', ' -', '- ', '\t', '｜', '|', '／', '/', '、', '，', ',', '·']
+// 注意两个短横是不同字符：' – ' 是 U+2013 en-dash、' ‐ ' 是 U+2010 hyphen（此前 U+2013 写重了两遍）
+const LINE_SPLITTERS = [' - ', ' – ', ' ‐ ', ' — ', ' -', '- ', '\t', '｜', '|', '／', '/', '、', '，', ',', '·']
 const INDEX_PREFIX_RXP = /^\s*[(（\[]?\d{1,3}[)）\]]?\s*[.、,，)）:：]\s*/
 
 const SOURCE_HOST_RULES: Array<{ source: LX.OnlineSource, host: RegExp }> = [
@@ -212,8 +213,14 @@ const splitInput = (text: string) => {
       for (const url of urls) {
         if (!links.includes(url)) links.push(url)
       }
-      const rest = line.replace(URL_RXP, '').replace(/[\s:：,，、|]+/g, '')
-      if (!rest) continue
+      const rest = line.replace(URL_RXP, '').trim()
+      // 去掉链接后只剩空白/标点/分隔符 → 整行是纯链接行，没有歌名信息
+      // （横线变体要含 U+2010/2011，与 LINE_SPLITTERS 一致，否则用它们连接的纯链接行会被当成歌名）
+      if (!rest.replace(/[\s:：,，、|·\-—–‐‑]/g, '')) continue
+      // 剩余文字才是歌名信息：此前拿整行去解析，URL 会被一起当成歌名搜出垃圾结果
+      const song = parseSongLine(rest)
+      if (song) songs.push(song)
+      continue
     }
     const song = parseSongLine(line)
     if (song) songs.push(song)
@@ -438,12 +445,14 @@ export const importSonglist = async(
 
   let matchedCount = 0
   let skippedCount = 0
+  let overLimitCount = 0
   let missedNames = ''
   if (songs.length) {
     const targets = songs.slice(0, MAX_SEARCH_LINES)
+    overLimitCount = Math.max(0, songs.length - MAX_SEARCH_LINES)
     const { matched, missed } = await matchSongs(targets, onProgress)
     matchedCount = matched.length
-    skippedCount = missed.length + Math.max(0, songs.length - MAX_SEARCH_LINES)
+    skippedCount = missed.length
     if (missed.length) missedNames = formatMissedNames(missed)
     if (matched.length) {
       items.push({
@@ -483,6 +492,10 @@ export const importSonglist = async(
   if (skippedCount) {
     // 用现有音源搜过但没找到的歌，点名告知（老板 09-19 要求：不存在应该告知）
     summaries.push(`未匹配 ${skippedCount} 首：${missedNames || '均未在当前音源找到'}`)
+  }
+  if (overLimitCount) {
+    // 「没尝试」和「搜过没匹配到」是两回事，分开如实汇报（此前超限行被谎报成未匹配）
+    summaries.push(`超出单次导入上限（${MAX_SEARCH_LINES} 首），另有 ${overLimitCount} 首未尝试，请分批导入`)
   }
   if (failedLinks.count) summaries.push(`${failedLinks.count} 个链接拉取失败`)
   return {
