@@ -442,7 +442,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
                 <TVText
                   key={item.key}
                   variant={item.active ? 'pageTitle' : 'body'}
-                  style={item.active ? [styles.fsLyricActive, { textShadowColor: backdropColor }] : styles.fsLyricDim}
+                  style={item.active ? [styles.fsLyricActive, { textShadowColor: washTo }] : styles.fsLyricDim}
                   numberOfLines={2}
                 >
                   {item.text}
