@@ -6,6 +6,7 @@ import TVText from '@/components/TV/TVText'
 import TVRoundControl from '@/components/TV/TVRoundControl'
 import Focusable from '@/components/TV/Focusable'
 import TVNowPlayingDock from '@/components/TV/TVNowPlayingDock'
+import TVFadeOverlay from '@/components/TV/TVFadeOverlay'
 import { getTVLayoutMetrics, tvColors, tvSize } from '@/theme/tv'
 import { useIsPlay, usePlayerMusicInfo, useProgress } from '@/store/player/hook'
 import { playNext, playPrev, togglePlay } from '@/core/player/player'
@@ -377,8 +378,8 @@ function TVPlayer({ componentId }: { componentId: string }) {
             backgroundColor: dominantAnim.interpolate({ inputRange: [0, 1], outputRange: [washFrom, washTo] }),
           }]}
         />
-        <View style={styles.backdropTopShade} />
-        <View style={styles.backdropBottomShade} />
+        <TVFadeOverlay height={tvSize(170)} peak={0.32} direction="down" />
+        <TVFadeOverlay height={tvSize(300)} peak={0.34} direction="up" />
       </View>
       <View style={styles.root}>
         <View style={styles.nowPlayingArea}>
@@ -496,27 +497,10 @@ const styles: Record<string, ViewStyle | TextStyle | ImageStyle | any> = {
     bottom: 0,
     backgroundColor: 'rgba(3,4,8,0.34)',
   },
-  backdropTopShade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    height: 170,
-    backgroundColor: 'rgba(1,2,6,0.35)',
-  },
-  backdropBottomShade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 260,
-    backgroundColor: 'rgba(1,2,6,0.42)',
-  },
   nowPlayingArea: { flex: 1, minHeight: 0 },
   dockOverlay: {
     position: 'absolute',
     zIndex: 30,
-    elevation: 30,
     paddingTop: 4,
     paddingBottom: 0,
     paddingHorizontal: 0,

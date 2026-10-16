@@ -4,6 +4,7 @@ import { defaultHeaders } from '@/components/common/Image'
 import { tvColors, tvTokens } from '@/theme/tv'
 import { useTVScale } from './useTVScale'
 import { TVDialogHost } from './TVDialog'
+import TVFadeOverlay from './TVFadeOverlay'
 
 interface Props {
   image?: string | null
@@ -32,8 +33,8 @@ const TVAppleScaffold = ({ image, immersive, style, contentStyle, children }: Pr
       <View style={[styles.baseWash, image ? styles.imageBaseWash : null, immersive && image ? styles.immersiveBaseWash : null]} />
       <View style={[styles.softWash, image ? styles.imageSoftWash : null]} />
       <View style={[styles.vignette, image ? styles.imageVignette : null, immersive && image ? styles.immersiveVignette : null]} />
-      <View style={[styles.topShade, { height: s(180) }]} />
-      <View style={[styles.bottomShade, { height: immersive ? s(310) : s(260) }, immersive ? styles.immersiveBottomShade : null]} />
+      <TVFadeOverlay height={s(180)} peak={0.36} direction="down" />
+      <TVFadeOverlay height={immersive ? s(310) : s(260)} peak={immersive ? 0.46 : 0.44} direction="up" />
       <View style={[styles.content, contentStyle]}>{children}</View>
       <TVDialogHost />
     </View>
@@ -97,23 +98,6 @@ const styles: Record<string, ViewStyle> = {
   },
   immersiveVignette: {
     backgroundColor: 'rgba(1,2,5,0.24)',
-  },
-  topShade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    backgroundColor: 'rgba(1,2,5,0.36)',
-  },
-  bottomShade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(1,2,5,0.44)',
-  },
-  immersiveBottomShade: {
-    backgroundColor: 'rgba(1,2,5,0.46)',
   },
   content: {
     flex: 1,
