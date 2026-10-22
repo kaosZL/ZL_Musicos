@@ -95,15 +95,17 @@ function TVPlayer({ componentId }: { componentId: string }) {
     if (!dominant) return
     prevColorRef.current = dominant
     dominantAnim.setValue(0)
-    Animated.timing(dominantAnim, { toValue: 1, duration: 1200, useNativeDriver: false }).start()
+    // opacity 走原生驱动：useNativeDriver:false 逐帧改背景色会在换歌后 1.2s 内
+    // 卡 JS 线程（遥控按键全在 JS 线程分发，会丢按键——v1.9.21 实测按钮发钝）
+    Animated.timing(dominantAnim, { toValue: 1, duration: 1200, useNativeDriver: true }).start()
   }, [dominant, dominantAnim])
   // 染色必须半透明：不透明平面会把顶部/底部的渐变遮罩带显形成「方块背景墙」（v1.9.20 首测反馈）
   const hexToRgba = (hex: string, alpha: number) => {
     const n = parseInt(hex.slice(1), 16)
     return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`
   }
-  const washFrom = 'rgba(3,4,8,0.34)'   // 原版 deepWash 基色
-  const washTo = dominant ? hexToRgba(dominant, 0.55) : washFrom
+  const washFallback = 'rgba(3,4,8,0.34)'   // 原版 deepWash 基色
+  const washTo = dominant ? hexToRgba(dominant, 0.55) : washFallback
   // 全屏歌词（借鉴 zl-music-tv）：歌词区长按 OK 进入，OK/返回退出
   const [fullscreenLyrics, setFullscreenLyrics] = useState(false)
   useEffect(() => {
@@ -255,9 +257,18 @@ function TVPlayer({ componentId }: { componentId: string }) {
   // 焦点已在控制栏按钮上时不抢（count>0 说明用户正操作按钮，交给按钮自身导航）
   const focusPlayAfterReveal = useCallback(() => {
     if (controlFocusCountRef.current > 0) return
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (playFocus.ref.current) void focusTVTargetByRef(playFocus.ref.current)
-    }))
+    // 4K 电视渲染慢时 dock 可能 >2 帧才挂载，RAF×2 会落空；500ms 内轮询重试
+    let tries = 0
+    const tick = () => {
+      if (controlFocusCountRef.current > 0) return
+      if (playFocus.ref.current) {
+        void focusTVTargetByRef(playFocus.ref.current)
+        return
+      }
+      if (++tries > 10) return
+      setTimeout(tick, 50)
+    }
+    requestAnimationFrame(tick)
   }, [playFocus.ref])
 
   useTVRemoteActions({
@@ -373,11 +384,10 @@ function TVPlayer({ componentId }: { componentId: string }) {
             <View style={styles.backdropImageScrim} />
           </ImageBackground>
         ) : null}
-        <Animated.View
-          style={[styles.backdropDeepWash, {
-            backgroundColor: dominantAnim.interpolate({ inputRange: [0, 1], outputRange: [washFrom, washTo] }),
-          }]}
-        />
+        <View style={styles.backdropDeepWash} />
+        {dominant ? (
+          <Animated.View style={[styles.backdropTintWash, { backgroundColor: hexToRgba(dominant, 0.32), opacity: dominantAnim }]} />
+        ) : null}
         <TVFadeOverlay height={tvSize(170)} peak={0.32} direction="down" />
         <TVFadeOverlay height={tvSize(300)} peak={0.34} direction="up" />
       </View>
@@ -496,6 +506,14 @@ const styles: Record<string, ViewStyle | TextStyle | ImageStyle | any> = {
     top: 0,
     bottom: 0,
     backgroundColor: 'rgba(3,4,8,0.34)',
+  },
+  backdropTintWash: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
   },
   nowPlayingArea: { flex: 1, minHeight: 0 },
   dockOverlay: {
