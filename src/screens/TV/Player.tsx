@@ -106,11 +106,13 @@ function TVPlayer({ componentId }: { componentId: string }) {
   }
   const washFallback = 'rgba(3,4,8,0.34)'   // 原版 deepWash 基色
   const washTo = dominant ? hexToRgba(dominant, 0.55) : washFallback
-  // 歌词区方向键自指：焦点引擎从歌词区起让路（左右=直控切歌、上下/菜单=呼出栏+聚焦播放键），
-  // 否则歌词区与底部按钮行垂直重叠会被判「同排」，控制栏将隐未隐时按右键焦点会被抢进按钮行
+  // 歌词区方向键路由：
+  // 控制栏隐藏（听歌模式）——四向自指，引擎让路：左右=直控切歌、上下/菜单=呼出栏+聚焦播放键；
+  // 否则歌词区与底部按钮行垂直重叠会被判「同排」，按左右键焦点会被抢进按钮行。
+  // 控制栏呼出（操作模式）——左右键改为跳焦到上一首/下一首按钮（切歌需 OK 确认）
   const [selfHandleTick, setSelfHandleTick] = useState(0)
-  useEffect(() => { setSelfHandleTick(t => t + 1) }, [])
-  void selfHandleTick // 首帧后强制重渲染一次，让自指 nextFocus 拿到真实句柄（首帧 ref 未挂载为 null）
+  useEffect(() => { setSelfHandleTick(t => t + 1) }, [showControls])
+  void selfHandleTick // showControls 翻转/首挂载后各强制重渲染一次，让 nextFocus 拿到真实句柄（首帧 ref 未挂载为 null）
   const lyricSelfHandle = lyricFocus.getNodeHandle() ?? undefined
   // 全屏歌词（借鉴 zl-music-tv）：歌词区长按 OK 进入，OK/返回退出
   const [fullscreenLyrics, setFullscreenLyrics] = useState(false)
@@ -321,7 +323,9 @@ function TVPlayer({ componentId }: { componentId: string }) {
   // 控制栏未呼出/焦点不在控制按钮上时——OK=播放/暂停，左右短按=上一首/下一首。
   // 长按左右不做任何事（快进快退功能已按需求移除；长按产生的 repeat 只记账，
   // 让随后松开按键不触发切歌，避免「想长按结果松手切歌」的误触）
-  // 焦点在控制栏按钮上时（controlFocusCountRef > 0）不拦截，交给按钮本身处理
+  // 焦点在控制栏按钮上时（controlFocusCountRef > 0）不拦截，交给按钮本身处理。
+  // 左右切歌直控仅限控制栏隐藏态（听歌模式）；控制栏呼出（操作模式）时左右键
+  // 只做焦点导航，切歌必须焦点移到按钮上按 OK 确认（v1.9.21 老板拍板的规则）
   const holdFiredRef = useRef({ left: false, right: false })
   useEffect(() => {
     return onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
@@ -330,6 +334,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
       if (!isSeekKey && !isSelectKey) return
       if (!musicInfo.id) return
       if (controlFocusCountRef.current > 0) return
+      if (isSeekKey && showControls) return
       if (Date.now() - controlFocusTimeRef.current < 500) return // Issue #9：重挂载空窗期不让直控触发
       // eventKeyAction 即原生 KeyEvent.getAction()：0=DOWN, 1=UP。
       // 长按 repeat 事件 action 仍是 0、靠 repeatCount>0 识别（ACTION_MULTIPLE 不出现在方向键上）
@@ -354,7 +359,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
         else void playNext()
       }
     })
-  }, [musicInfo.id, revealControls])
+  }, [musicInfo.id, revealControls, showControls])
 
   const activeLyricIndex = lyricPlay.line >= 0 && lyricPlay.line < lyricLines.length ? lyricPlay.line : -1
   const fallbackLyric = isDisplayLyric(lyricPlay.text) ? lyricPlay.text.trim() : (musicInfo.id ? tvText.loading : tvText.chooseSongFirst)
@@ -456,8 +461,8 @@ function TVPlayer({ componentId }: { componentId: string }) {
               onLongPress={() => { setFullscreenLyrics(true) }}
               nextFocusUp={lyricSelfHandle}
               nextFocusDown={lyricSelfHandle}
-              nextFocusLeft={lyricSelfHandle}
-              nextFocusRight={lyricSelfHandle}
+              nextFocusLeft={showControls ? prevFocus.getNodeHandle() ?? lyricSelfHandle : lyricSelfHandle}
+              nextFocusRight={showControls ? nextFocus.getNodeHandle() ?? lyricSelfHandle : lyricSelfHandle}
             >
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.lyricContent, appleLayout.lyricContent]} scrollEnabled={false}>
                 {displayLyrics.map(item => (
