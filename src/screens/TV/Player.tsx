@@ -95,17 +95,55 @@ function TVPlayer({ componentId }: { componentId: string }) {
     if (!dominant) return
     prevColorRef.current = dominant
     dominantAnim.setValue(0)
-    Animated.timing(dominantAnim, { toValue: 1, duration: 1200, useNativeDriver: false }).start()
+    // opacity 走原生驱动：useNativeDriver:false 逐帧改背景色会在换歌后 1.2s 内
+    // 卡 JS 线程（遥控按键全在 JS 线程分发，会丢按键——v1.9.21 实测按钮发钝）
+    Animated.timing(dominantAnim, { toValue: 1, duration: 1200, useNativeDriver: true }).start()
   }, [dominant, dominantAnim])
   // 染色必须半透明：不透明平面会把顶部/底部的渐变遮罩带显形成「方块背景墙」（v1.9.20 首测反馈）
   const hexToRgba = (hex: string, alpha: number) => {
     const n = parseInt(hex.slice(1), 16)
     return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`
   }
-  const washFrom = 'rgba(3,4,8,0.34)'   // 原版 deepWash 基色
-  const washTo = dominant ? hexToRgba(dominant, 0.55) : washFrom
+  const washFallback = 'rgba(3,4,8,0.34)'   // 原版 deepWash 基色
+  const washTo = dominant ? hexToRgba(dominant, 0.55) : washFallback
+  // 歌词区方向键路由：
+  // 控制栏隐藏（听歌模式）——四向自指，引擎让路：左右=直控切歌、上下/菜单=呼出栏+聚焦播放键；
+  // 否则歌词区与底部按钮行垂直重叠会被判「同排」，按左右键焦点会被抢进按钮行。
+  // 控制栏呼出（操作模式）——左右键改为跳焦到上一首/下一首按钮（切歌需 OK 确认）
+  const [selfHandleTick, setSelfHandleTick] = useState(0)
+  useEffect(() => { setSelfHandleTick(t => t + 1) }, [showControls])
+  void selfHandleTick // showControls 翻转/首挂载后各强制重渲染一次，让 nextFocus 拿到真实句柄（首帧 ref 未挂载为 null）
+  const lyricSelfHandle = lyricFocus.getNodeHandle() ?? undefined
   // 全屏歌词（借鉴 zl-music-tv）：歌词区长按 OK 进入，OK/返回退出
   const [fullscreenLyrics, setFullscreenLyrics] = useState(false)
+  // 切歌过渡锁存：播放内核切歌要先停旧歌、取新歌链接（约 1-2s），期间 isPlay 闪断，
+  // 播放键图标会闪「已暂停」再恢复（v1.9.21 实测反馈）。切歌前 5s 内在播 → 图标维持播放态直到真正续播
+  const lastPlayingAtRef = useRef(0)
+  const pendingPlayRef = useRef(false)
+  const [pendingPlay, setPendingPlay] = useState(false)
+  const prevMusicIdRef = useRef(musicInfo.id)
+  useEffect(() => {
+    if (!isPlay) return
+    lastPlayingAtRef.current = Date.now()
+    if (pendingPlayRef.current) {
+      pendingPlayRef.current = false
+      setPendingPlay(false)
+    }
+  }, [isPlay])
+  useEffect(() => {
+    if (musicInfo.id === prevMusicIdRef.current) return
+    prevMusicIdRef.current = musicInfo.id
+    if (!musicInfo.id) return
+    if (Date.now() - lastPlayingAtRef.current > 5000) return
+    pendingPlayRef.current = true
+    setPendingPlay(true)
+    const timer = setTimeout(() => {
+      pendingPlayRef.current = false
+      setPendingPlay(false)
+    }, 8000)
+    return () => clearTimeout(timer)
+  }, [musicInfo.id])
+  const showAsPlaying = isPlay || pendingPlay
   useEffect(() => {
     if (!fullscreenLyrics) return
     const unsubKeys = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
@@ -255,9 +293,18 @@ function TVPlayer({ componentId }: { componentId: string }) {
   // 焦点已在控制栏按钮上时不抢（count>0 说明用户正操作按钮，交给按钮自身导航）
   const focusPlayAfterReveal = useCallback(() => {
     if (controlFocusCountRef.current > 0) return
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (playFocus.ref.current) void focusTVTargetByRef(playFocus.ref.current)
-    }))
+    // 4K 电视渲染慢时 dock 可能 >2 帧才挂载，RAF×2 会落空；500ms 内轮询重试
+    let tries = 0
+    const tick = () => {
+      if (controlFocusCountRef.current > 0) return
+      if (playFocus.ref.current) {
+        void focusTVTargetByRef(playFocus.ref.current)
+        return
+      }
+      if (++tries > 10) return
+      setTimeout(tick, 50)
+    }
+    requestAnimationFrame(tick)
   }, [playFocus.ref])
 
   useTVRemoteActions({
@@ -276,7 +323,9 @@ function TVPlayer({ componentId }: { componentId: string }) {
   // 控制栏未呼出/焦点不在控制按钮上时——OK=播放/暂停，左右短按=上一首/下一首。
   // 长按左右不做任何事（快进快退功能已按需求移除；长按产生的 repeat 只记账，
   // 让随后松开按键不触发切歌，避免「想长按结果松手切歌」的误触）
-  // 焦点在控制栏按钮上时（controlFocusCountRef > 0）不拦截，交给按钮本身处理
+  // 焦点在控制栏按钮上时（controlFocusCountRef > 0）不拦截，交给按钮本身处理。
+  // 左右切歌直控仅限控制栏隐藏态（听歌模式）；控制栏呼出（操作模式）时左右键
+  // 只做焦点导航，切歌必须焦点移到按钮上按 OK 确认（v1.9.21 老板拍板的规则）
   const holdFiredRef = useRef({ left: false, right: false })
   useEffect(() => {
     return onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
@@ -285,6 +334,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
       if (!isSeekKey && !isSelectKey) return
       if (!musicInfo.id) return
       if (controlFocusCountRef.current > 0) return
+      if (isSeekKey && showControls) return
       if (Date.now() - controlFocusTimeRef.current < 500) return // Issue #9：重挂载空窗期不让直控触发
       // eventKeyAction 即原生 KeyEvent.getAction()：0=DOWN, 1=UP。
       // 长按 repeat 事件 action 仍是 0、靠 repeatCount>0 识别（ACTION_MULTIPLE 不出现在方向键上）
@@ -309,7 +359,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
         else void playNext()
       }
     })
-  }, [musicInfo.id, revealControls])
+  }, [musicInfo.id, revealControls, showControls])
 
   const activeLyricIndex = lyricPlay.line >= 0 && lyricPlay.line < lyricLines.length ? lyricPlay.line : -1
   const fallbackLyric = isDisplayLyric(lyricPlay.text) ? lyricPlay.text.trim() : (musicInfo.id ? tvText.loading : tvText.chooseSongFirst)
@@ -373,11 +423,10 @@ function TVPlayer({ componentId }: { componentId: string }) {
             <View style={styles.backdropImageScrim} />
           </ImageBackground>
         ) : null}
-        <Animated.View
-          style={[styles.backdropDeepWash, {
-            backgroundColor: dominantAnim.interpolate({ inputRange: [0, 1], outputRange: [washFrom, washTo] }),
-          }]}
-        />
+        <View style={styles.backdropDeepWash} />
+        {dominant ? (
+          <Animated.View style={[styles.backdropTintWash, { backgroundColor: hexToRgba(dominant, 0.32), opacity: dominantAnim }]} />
+        ) : null}
         <TVFadeOverlay height={tvSize(170)} peak={0.32} direction="down" />
         <TVFadeOverlay height={tvSize(300)} peak={0.34} direction="up" />
       </View>
@@ -410,6 +459,10 @@ function TVPlayer({ componentId }: { componentId: string }) {
               hasTVPreferredFocus={!showControls}
               onPress={() => { revealControls() }}
               onLongPress={() => { setFullscreenLyrics(true) }}
+              nextFocusUp={lyricSelfHandle}
+              nextFocusDown={lyricSelfHandle}
+              nextFocusLeft={showControls ? prevFocus.getNodeHandle() ?? lyricSelfHandle : lyricSelfHandle}
+              nextFocusRight={showControls ? nextFocus.getNodeHandle() ?? lyricSelfHandle : lyricSelfHandle}
             >
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.lyricContent, appleLayout.lyricContent]} scrollEnabled={false}>
                 {displayLyrics.map(item => (
@@ -459,7 +512,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
             <View style={styles.primaryControls}>
               <TVRoundControl ref={modeFocus.ref as any} label={getPlayModeName(playMode)} iconName={getPlayModeIconName(playMode)} size={appleLayout.controlSmall} onPress={togglePlayMode} onFocus={handleControlFocus} onBlur={handleControlBlur} accessibilityLabel={getPlayModeName(playMode)} nextFocusRight={prevFocus.getNodeHandle() ?? undefined} />
               <TVRoundControl ref={prevFocus.ref as any} label={tvText.controlPrev} iconName="prevMusic" size={appleLayout.controlSmall} onPress={() => { revealControls(); void playPrev() }} onFocus={handleControlFocus} onBlur={handleControlBlur} accessibilityLabel={tvText.controlPrev} nextFocusLeft={modeFocus.getNodeHandle() ?? undefined} nextFocusRight={playFocus.getNodeHandle() ?? undefined} />
-              <TVRoundControl ref={playFocus.ref as any} label={isPlay ? tvText.pause : tvText.playNow} iconName={isPlay ? 'pause' : 'play'} primary size={appleLayout.controlPrimary} onPress={handleTogglePlay} onFocus={handleControlFocus} onBlur={handleControlBlur} hasTVPreferredFocus nextFocusLeft={prevFocus.getNodeHandle() ?? undefined} nextFocusRight={nextFocus.getNodeHandle() ?? undefined} />
+              <TVRoundControl ref={playFocus.ref as any} label={showAsPlaying ? tvText.pause : tvText.playNow} iconName={showAsPlaying ? 'pause' : 'play'} primary size={appleLayout.controlPrimary} onPress={handleTogglePlay} onFocus={handleControlFocus} onBlur={handleControlBlur} hasTVPreferredFocus nextFocusLeft={prevFocus.getNodeHandle() ?? undefined} nextFocusRight={nextFocus.getNodeHandle() ?? undefined} />
               <TVRoundControl ref={nextFocus.ref as any} label={tvText.controlNext} iconName="nextMusic" size={appleLayout.controlSmall} onPress={() => { revealControls(); void playNext() }} onFocus={handleControlFocus} onBlur={handleControlBlur} accessibilityLabel={tvText.controlNext} nextFocusLeft={playFocus.getNodeHandle() ?? undefined} />
             </View>
             </TVNowPlayingDock>
@@ -496,6 +549,14 @@ const styles: Record<string, ViewStyle | TextStyle | ImageStyle | any> = {
     top: 0,
     bottom: 0,
     backgroundColor: 'rgba(3,4,8,0.34)',
+  },
+  backdropTintWash: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
   },
   nowPlayingArea: { flex: 1, minHeight: 0 },
   dockOverlay: {
