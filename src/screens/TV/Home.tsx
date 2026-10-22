@@ -192,7 +192,7 @@ function TVHome({ componentId }: { componentId: string }) {
       </ScrollView>
       {/* 测试包构建标记（发布纪律：先让老板确认屏幕上的标记再测功能，验证通过后随正式版移除） */}
       <View style={styles.buildMark} pointerEvents="none">
-        <TVText variant="caption" color={tvColors.dimText}>v1.9.21 · 213</TVText>
+        <TVText variant="caption" color={tvColors.dimText}>v1.9.21 · 214</TVText>
       </View>
     </TVAppleScaffold>
   )

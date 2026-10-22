@@ -108,6 +108,34 @@ function TVPlayer({ componentId }: { componentId: string }) {
   const washTo = dominant ? hexToRgba(dominant, 0.55) : washFallback
   // 全屏歌词（借鉴 zl-music-tv）：歌词区长按 OK 进入，OK/返回退出
   const [fullscreenLyrics, setFullscreenLyrics] = useState(false)
+  // 切歌过渡锁存：播放内核切歌要先停旧歌、取新歌链接（约 1-2s），期间 isPlay 闪断，
+  // 播放键图标会闪「已暂停」再恢复（v1.9.21 实测反馈）。切歌前 5s 内在播 → 图标维持播放态直到真正续播
+  const lastPlayingAtRef = useRef(0)
+  const pendingPlayRef = useRef(false)
+  const [pendingPlay, setPendingPlay] = useState(false)
+  const prevMusicIdRef = useRef(musicInfo.id)
+  useEffect(() => {
+    if (!isPlay) return
+    lastPlayingAtRef.current = Date.now()
+    if (pendingPlayRef.current) {
+      pendingPlayRef.current = false
+      setPendingPlay(false)
+    }
+  }, [isPlay])
+  useEffect(() => {
+    if (musicInfo.id === prevMusicIdRef.current) return
+    prevMusicIdRef.current = musicInfo.id
+    if (!musicInfo.id) return
+    if (Date.now() - lastPlayingAtRef.current > 5000) return
+    pendingPlayRef.current = true
+    setPendingPlay(true)
+    const timer = setTimeout(() => {
+      pendingPlayRef.current = false
+      setPendingPlay(false)
+    }, 8000)
+    return () => clearTimeout(timer)
+  }, [musicInfo.id])
+  const showAsPlaying = isPlay || pendingPlay
   useEffect(() => {
     if (!fullscreenLyrics) return
     const unsubKeys = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
@@ -469,7 +497,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
             <View style={styles.primaryControls}>
               <TVRoundControl ref={modeFocus.ref as any} label={getPlayModeName(playMode)} iconName={getPlayModeIconName(playMode)} size={appleLayout.controlSmall} onPress={togglePlayMode} onFocus={handleControlFocus} onBlur={handleControlBlur} accessibilityLabel={getPlayModeName(playMode)} nextFocusRight={prevFocus.getNodeHandle() ?? undefined} />
               <TVRoundControl ref={prevFocus.ref as any} label={tvText.controlPrev} iconName="prevMusic" size={appleLayout.controlSmall} onPress={() => { revealControls(); void playPrev() }} onFocus={handleControlFocus} onBlur={handleControlBlur} accessibilityLabel={tvText.controlPrev} nextFocusLeft={modeFocus.getNodeHandle() ?? undefined} nextFocusRight={playFocus.getNodeHandle() ?? undefined} />
-              <TVRoundControl ref={playFocus.ref as any} label={isPlay ? tvText.pause : tvText.playNow} iconName={isPlay ? 'pause' : 'play'} primary size={appleLayout.controlPrimary} onPress={handleTogglePlay} onFocus={handleControlFocus} onBlur={handleControlBlur} hasTVPreferredFocus nextFocusLeft={prevFocus.getNodeHandle() ?? undefined} nextFocusRight={nextFocus.getNodeHandle() ?? undefined} />
+              <TVRoundControl ref={playFocus.ref as any} label={showAsPlaying ? tvText.pause : tvText.playNow} iconName={showAsPlaying ? 'pause' : 'play'} primary size={appleLayout.controlPrimary} onPress={handleTogglePlay} onFocus={handleControlFocus} onBlur={handleControlBlur} hasTVPreferredFocus nextFocusLeft={prevFocus.getNodeHandle() ?? undefined} nextFocusRight={nextFocus.getNodeHandle() ?? undefined} />
               <TVRoundControl ref={nextFocus.ref as any} label={tvText.controlNext} iconName="nextMusic" size={appleLayout.controlSmall} onPress={() => { revealControls(); void playNext() }} onFocus={handleControlFocus} onBlur={handleControlBlur} accessibilityLabel={tvText.controlNext} nextFocusLeft={playFocus.getNodeHandle() ?? undefined} />
             </View>
             </TVNowPlayingDock>
