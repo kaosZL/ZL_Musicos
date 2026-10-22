@@ -106,6 +106,12 @@ function TVPlayer({ componentId }: { componentId: string }) {
   }
   const washFallback = 'rgba(3,4,8,0.34)'   // 原版 deepWash 基色
   const washTo = dominant ? hexToRgba(dominant, 0.55) : washFallback
+  // 歌词区方向键自指：焦点引擎从歌词区起让路（左右=直控切歌、上下/菜单=呼出栏+聚焦播放键），
+  // 否则歌词区与底部按钮行垂直重叠会被判「同排」，控制栏将隐未隐时按右键焦点会被抢进按钮行
+  const [selfHandleTick, setSelfHandleTick] = useState(0)
+  useEffect(() => { setSelfHandleTick(t => t + 1) }, [])
+  void selfHandleTick // 首帧后强制重渲染一次，让自指 nextFocus 拿到真实句柄（首帧 ref 未挂载为 null）
+  const lyricSelfHandle = lyricFocus.getNodeHandle() ?? undefined
   // 全屏歌词（借鉴 zl-music-tv）：歌词区长按 OK 进入，OK/返回退出
   const [fullscreenLyrics, setFullscreenLyrics] = useState(false)
   // 切歌过渡锁存：播放内核切歌要先停旧歌、取新歌链接（约 1-2s），期间 isPlay 闪断，
@@ -448,6 +454,10 @@ function TVPlayer({ componentId }: { componentId: string }) {
               hasTVPreferredFocus={!showControls}
               onPress={() => { revealControls() }}
               onLongPress={() => { setFullscreenLyrics(true) }}
+              nextFocusUp={lyricSelfHandle}
+              nextFocusDown={lyricSelfHandle}
+              nextFocusLeft={lyricSelfHandle}
+              nextFocusRight={lyricSelfHandle}
             >
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.lyricContent, appleLayout.lyricContent]} scrollEnabled={false}>
                 {displayLyrics.map(item => (
