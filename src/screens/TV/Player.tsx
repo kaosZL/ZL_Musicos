@@ -289,11 +289,28 @@ function TVPlayer({ componentId }: { componentId: string }) {
   useEffect(() => {
     revealControls()
     const interval = setInterval(() => {
-      if (controlFocusCountRef.current > 0) return
-      if (Date.now() >= hideDeadlineRef.current) setShowControls(false)
+      if (Date.now() < hideDeadlineRef.current) return
+      // 静置 3 秒即收栏——不再因「焦点停在控制按钮上」而永不隐藏（v1.9.24）：
+      // 计数可靠化（onTVFocusChange）后，旧的 count>0 拦截会让状态栏赖着不走。
+      // 收栏时手动清零计数：按钮即将整体卸载，不会再有 blur 事件来递减。
+      // 焦点无需手动迁移：hideKey 递增触发歌词区重挂载，preferred 调度自然接管。
+      setShowControls(false)
+      controlFocusCountRef.current = 0
     }, 500)
     return () => { clearInterval(interval) }
   }, [revealControls])
+
+  // 控制栏可见时按返回 = 先收栏（消费掉这次返回），再按才退出播放页（v1.9.24）。
+  // 注册晚于 useTVNavigationBack，BackHandler 后注册先问；全屏歌词层注册更晚、优先级更高
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!showControls) return false
+      setShowControls(false)
+      controlFocusCountRef.current = 0
+      return true
+    })
+    return () => { sub.remove() }
+  }, [showControls])
 
   // Issue #11：控制栏可见期间用户可能一直在按键（直控切歌/OK 暂停）但焦点没落在
   // 控制按钮上——原逻辑只按「无按键 3 秒」收栏，操作中途收栏导致下一次按键落在
