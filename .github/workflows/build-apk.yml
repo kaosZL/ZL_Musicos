@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [master, dev, lulu]
+    branches: [master, dev]
   workflow_dispatch:
 
 permissions:
@@ -60,38 +60,6 @@ jobs:
           path: android/app/build/outputs/apk/release/*.apk
           retention-days: 30
 
-      # 把 universal 包发到 Release，提供一个免登录、不过期的固定下载直链：
-      # https://github.com/soren1985/ZL_Musicos/releases/download/apk-lulu/ZL_Musicos-lulu.apk
-      - name: Publish APK to Release
-        if: github.ref == 'refs/heads/lulu'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          APK_DIR=android/app/build/outputs/apk/release
-          ls -lh "$APK_DIR"
-          UNIVERSAL=$(ls "$APK_DIR"/*universal*.apk 2>/dev/null | head -n1)
-          if [ -z "$UNIVERSAL" ]; then
-            UNIVERSAL=$(ls "$APK_DIR"/*.apk | head -n1)
-          fi
-          echo "Publishing: $UNIVERSAL"
-          cp "$UNIVERSAL" ZL_Musicos-lulu.apk
-
-          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
-          NOTE="带「歌单导入」功能的测试包。
-          分支：lulu　提交：${SHORT_SHA}
-          构建时间：$(date -u '+%Y-%m-%d %H:%M UTC')
-
-          下载下方的 ZL_Musicos-lulu.apk 直接覆盖安装即可。签名与官方版一致，歌单、收藏、播放历史都不会丢。"
-
-          if gh release view apk-lulu >/dev/null 2>&1; then
-            gh release edit apk-lulu --title "ZL_Musicos 测试包（含歌单导入）" --notes "$NOTE" --latest
-          else
-            gh release create apk-lulu --title "ZL_Musicos 测试包（含歌单导入）" --notes "$NOTE" --target "$GITHUB_SHA"
-          fi
-          gh release upload apk-lulu ZL_Musicos-lulu.apk --clobber
-          echo "Download: https://github.com/${{ github.repository }}/releases/download/apk-lulu/ZL_Musicos-lulu.apk"
-
       # master 推送：把三架构 APK 自动上传到版本号对应的 Release（v<version>）。
       # Release 由网关侧提前建好（带完整更新说明）；这里只负责传 APK 资产，
       # 彻底摆脱「本机下载 artifact 必截断」的问题（09-19 实证）。
@@ -118,3 +86,52 @@ jobs:
           done
           echo "Release ${TAG} assets:"
           gh release view "${TAG}" --json assets -q '.assets[].name'
+
+      # master 发版后自动重写 publish/tv-version.json（v1.9.23 更新分发链）：
+      # 旧版本 App 的「检查更新」读这个清单；下载链接带国内可达镜像前缀。
+      # [skip ci] 防止这次回写再触发一轮构建。
+      - name: Refresh tv-version.json manifest (master)
+        if: github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          VER=$(node -p "require('./package.json').version")
+          TAG="v${VER}"
+          python3 - "$TAG" <<'PYEOF'
+          import json, subprocess, sys
+          tag = sys.argv[1]
+          out = subprocess.check_output(["gh", "api", f"repos/kaosZL/ZL_Musicos/releases/tags/{tag}"], text=True)
+          rel = json.loads(out)
+          mirror = "https://ghfast.top/"
+          assets = []
+          for a in rel.get("assets", []):
+              name = a["name"]
+              abi = None
+              for cand in ("arm64-v8a", "armeabi-v7a", "x86_64", "x86", "universal"):
+                  if name.lower().endswith(f"-{cand}.apk"):
+                      abi = cand
+                      break
+              if not abi:
+                  continue
+              assets.append({"abi": abi, "name": name, "url": mirror + a["browser_download_url"], "size": a["size"]})
+          manifest = {
+              "version": tag[1:],
+              "tagName": tag,
+              "releaseUrl": rel.get("html_url", ""),
+              "body": (rel.get("name") or tag),
+              "assets": assets,
+          }
+          with open("publish/tv-version.json", "w") as f:
+              json.dump(manifest, f, ensure_ascii=False, indent=2)
+          print(f"manifest written: {tag}, {len(assets)} assets")
+          PYEOF
+          if git diff --quiet publish/tv-version.json; then
+            echo "manifest unchanged, skip commit"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add publish/tv-version.json
+            git commit -m "chore: tv-version.json -> ${TAG}（CI 自动维护） [skip ci]"
+            git push
+          fi

@@ -21,10 +21,12 @@ import { exitApp } from '@/utils/tools'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { useNavigationComponentDidAppear } from '@/navigation/hooks'
-import { pushTVDetailScreen, pushTVPlayerScreen, pushTVSearchScreen } from '@/navigation/navigation'
+import { pushTVDetailScreen, pushTVPlayerScreen, pushTVSearchScreen, pushTVSettingsScreen } from '@/navigation/navigation'
 import { createTVTabs, getSourceName } from './utils'
 import { dot, tvText } from './labels'
-import { getData } from '@/plugins/storage'
+import { getData, saveData } from '@/plugins/storage'
+import { showTVDialog } from '@/components/TV/TVDialog'
+import { checkTVUpdate } from './update'
 
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
@@ -47,6 +49,28 @@ function TVHome({ componentId }: { componentId: string }) {
   useEffect(() => () => {
     if (appearTimerRef.current) clearTimeout(appearTimerRef.current)
   }, [])
+  // 启动自动检查更新（v1.9.23）：延迟 6 秒不打扰首屏焦点，每 24 小时最多一次；
+  // 静默失败——检查不了（无网/镜像全挂）绝不打扰。发现新版本弹全局 TVDialog 引导去设置页。
+  useEffect(() => {
+    const UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000
+    const timer = setTimeout(() => {
+      void getData<number>('tv_update_last_check_at').then(async last => {
+        if (last && Date.now() - last < UPDATE_CHECK_INTERVAL) return
+        await saveData('tv_update_last_check_at', Date.now())
+        const result = await checkTVUpdate()
+        if (!result.hasUpdate || !result.info) return
+        showTVDialog({
+          title: `发现新版本 v${result.info.version}`,
+          message: `${result.info.body || '优化体验，修复问题'}\n\n可在设置页查看详情并在线更新（国内网络可用）。`,
+          buttons: [
+            { label: '去更新', tone: 'primary', onPress: () => { pushTVSettingsScreen(componentId) } },
+            { label: '稍后再说', tone: 'dark' },
+          ],
+        })
+      }).catch(() => { })
+    }, 6000)
+    return () => { clearTimeout(timer) }
+  }, [componentId])
   useBackHandler(() => { exitApp(); return true })
 
   useTVRemoteActions({
@@ -192,7 +216,7 @@ function TVHome({ componentId }: { componentId: string }) {
       </ScrollView>
       {/* 测试包构建标记（发布纪律：先让老板确认屏幕上的标记再测功能，验证通过后随正式版移除） */}
       <View style={styles.buildMark} pointerEvents="none">
-        <TVText variant="caption" color={tvColors.dimText}>v1.9.23 · 218</TVText>
+        <TVText variant="caption" color={tvColors.dimText}>v1.9.23 · 219</TVText>
       </View>
     </TVAppleScaffold>
   )
