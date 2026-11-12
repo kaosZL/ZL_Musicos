@@ -15,7 +15,7 @@ import { updateSetting } from '@/core/common'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { focusTVTargetByRef } from '@/components/TV/tvFocusManager'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
-import { getDominantColor } from '@/utils/nativeModules/utils'
+import { getDominantColor, debugLog } from '@/utils/nativeModules/utils'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { onTVRemoteEvent } from '@/utils/nativeModules/utils'
 import { useLrcPlay, useLrcSet } from '@/plugins/lyric'
@@ -256,6 +256,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
   // 控制栏显隐规则（v1.9.24 老板拍板）：不自动隐藏——呼出后常驻，按返回键收起；
   // 收起后再按返回才退出播放页。上下/菜单键呼出并聚焦播放键
   const revealControls = useCallback(() => {
+    debugLog('呼出控制栏')
     setShowControls(true)
   }, [])
 
@@ -283,16 +284,25 @@ function TVPlayer({ componentId }: { componentId: string }) {
   }, [showControls])
 
   // 控制栏可见时按返回 = 收栏（消费掉这次返回），再按才退出播放页。
-  // 注册晚于 useTVNavigationBack，BackHandler 后注册先问；全屏歌词层注册更晚、优先级更高
+  // v1.9.24 反馈「切歌后返回失效」：改为挂载时注册一次 + ref 读状态——
+  // BackHandler 逆序调用（后注册先问），注册一次即永远先于导航返回被问；
+  // 旧写法随 showControls 重注册存在时序边界。链路埋了运行日志，手机页可查。
+  const showControlsRef = useRef(showControls)
+  useEffect(() => { showControlsRef.current = showControls }, [showControls])
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!showControls) return false
+      debugLog(`back键: showControls=${showControlsRef.current} 焦点计数=${controlFocusCountRef.current}`)
+      if (!showControlsRef.current) {
+        debugLog('back键: 控制栏已隐藏 → 交给导航返回')
+        return false
+      }
       setShowControls(false)
       controlFocusCountRef.current = 0
+      debugLog('back键: 收起控制栏')
       return true
     })
     return () => { sub.remove() }
-  }, [showControls])
+  }, [])
 
   // Issue #13：控制栏隐藏后封面/歌词仍按「有底栏」的版式偏居上半屏，下半空旷——
   // 隐藏时内容整体下移约半个控制栏高度，视觉再平衡（原生驱动 transform，不碰 JS 线程）
