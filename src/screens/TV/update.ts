@@ -6,12 +6,17 @@ import { getSupportedAbis, installApk } from '@/utils/nativeModules/utils'
 import { httpFetch } from '@/utils/request'
 
 const TV_UPDATE_MANIFEST_URLS = [
+  // 国内可达优先：公共 gh 镜像前缀 → 直连 → jsDelivr 兜底（v1.9.23）
+  'https://ghfast.top/https://raw.githubusercontent.com/kaosZL/ZL_Musicos/master/publish/tv-version.json',
+  'https://gh-proxy.com/https://raw.githubusercontent.com/kaosZL/ZL_Musicos/master/publish/tv-version.json',
   'https://raw.githubusercontent.com/kaosZL/ZL_Musicos/master/publish/tv-version.json',
   'https://cdn.jsdelivr.net/gh/kaosZL/ZL_Musicos@master/publish/tv-version.json',
 ]
 const GITHUB_RELEASE_LATEST_URL = 'https://api.github.com/repos/kaosZL/ZL_Musicos/releases/latest'
 const GITHUB_RELEASE_URL_PREFIX = 'https://github.com/kaosZL/ZL_Musicos/releases/tag/'
 const APK_ABIS = ['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86', 'universal'] as const
+// APK 下载镜像链（v1.9.23）：GitHub 直链在国内大概率超时，失败后依次换镜像前缀重试
+const GITHUB_DOWNLOAD_MIRRORS = ['https://ghfast.top/', 'https://gh-proxy.com/']
 export const TV_CURRENT_VERSION = currentVersion
 
 type TVUpdateAbi = typeof APK_ABIS[number]
@@ -220,22 +225,49 @@ export const downloadTVUpdate = async(info: TVUpdateInfo, onProgress: (total: nu
 
   const safeVersion = info.version.replace(/[^0-9a-z.-]/gi, '_')
   const savePath = `${temporaryDirectoryPath}/zl-music-tv-v${safeVersion}-${info.asset.abi}.apk`
-  const { jobId, promise } = downloadFile(info.asset.url, savePath, {
-    progressInterval: 500,
-    connectionTimeout: 20000,
-    readTimeout: 45000,
-    begin({ contentLength }) {
-      onProgress(contentLength, 0)
-    },
-    progress({ contentLength, bytesWritten }) {
-      onProgress(contentLength, bytesWritten)
-    },
-  })
 
-  downloadJobId = jobId
-  await promise
-  downloadedApkPath = savePath
-  return savePath
+  // 下载候选链（v1.9.23）：清单给的 URL（可能已带镜像前缀）→ GitHub 原链 → 各镜像前缀
+  const buildCandidates = (url: string) => {
+    const candidates = [url]
+    const ghIdx = url.indexOf('https://github.com/')
+    if (ghIdx > 0) {
+      const origin = url.slice(ghIdx)
+      candidates.push(origin)
+      for (const mirror of GITHUB_DOWNLOAD_MIRRORS) candidates.push(mirror + origin)
+    } else if (ghIdx === 0) {
+      for (const mirror of GITHUB_DOWNLOAD_MIRRORS) candidates.push(mirror + url)
+    }
+    return [...new Set(candidates)]
+  }
+
+  let lastError: unknown = null
+  for (const url of buildCandidates(info.asset.url)) {
+    try {
+      const { jobId, promise } = downloadFile(url, savePath, {
+        progressInterval: 500,
+        connectionTimeout: 20000,
+        readTimeout: 45000,
+        begin({ contentLength }) {
+          onProgress(contentLength, 0)
+        },
+        progress({ contentLength, bytesWritten }) {
+          onProgress(contentLength, bytesWritten)
+        },
+      })
+
+      downloadJobId = jobId
+      await promise
+      downloadedApkPath = savePath
+      return savePath
+    } catch (err: unknown) {
+      lastError = err
+      if (downloadJobId) {
+        stopDownload(downloadJobId)
+        downloadJobId = null
+      }
+    }
+  }
+  throw lastError ?? new Error('DOWNLOAD_FAILED')
 }
 
 export const installTVUpdate = async(filePath = downloadedApkPath) => {

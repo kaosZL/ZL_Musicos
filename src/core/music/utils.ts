@@ -299,11 +299,30 @@ export const handleGetOnlineMusicUrl = async({ musicInfo, quality, onToggleSourc
   // console.log(musicInfo.source)
   const targetQuality = quality ?? getPlayQuality(settingState.setting['player.playQuality'], musicInfo)
 
-  let reqPromise
-  try {
-    reqPromise = musicSdk[musicInfo.source].getMusicUrl(toOldMusicInfo(musicInfo), targetQuality).promise
-  } catch (err: any) {
-    reqPromise = Promise.reject(err)
+  // 音质降档双保险（v1.9.23）：搜索元数据标了高音质但实际取链失效（源服务器抽风/链接过期）时，
+  // 先在同源逐级降档重试（flac24bit→flac→320k→128k），全败才走原有的换源链路——
+  // 避免高音质设置下偶发卡顿/过早换源。首档保持原行为，降档候选按音源申报的音质过滤
+  const QUALITY_FALLBACK_CHAIN: LX.Quality[] = ['flac24bit', 'flac', '320k', '128k']
+  const chainStart = QUALITY_FALLBACK_CHAIN.indexOf(targetQuality)
+  const sourceQualitys = global.lx.qualityList[musicInfo.source]
+  const tryQualitys = chainStart >= 0
+    ? QUALITY_FALLBACK_CHAIN.slice(chainStart).filter((q, idx) => idx == 0 || !sourceQualitys || sourceQualitys.includes(q))
+    : [targetQuality]
+  const requestAt = (q: LX.Quality) => {
+    try {
+      return musicSdk[musicInfo.source].getMusicUrl(toOldMusicInfo(musicInfo), q).promise
+    } catch (err: any) {
+      return Promise.reject(err)
+    }
+  }
+  let reqPromise = requestAt(tryQualitys[0])
+  for (let idx = 1; idx < tryQualitys.length; idx++) {
+    const fallbackQuality = tryQualitys[idx]
+    reqPromise = reqPromise.catch((err: any) => {
+      if (err?.message == requestMsg.tooManyRequests) throw err
+      console.log(`quality fallback ${musicInfo.source} -> ${fallbackQuality}`)
+      return requestAt(fallbackQuality)
+    })
   }
   return reqPromise.then(({ url, type }: { url: string, type: LX.Quality }) => {
     return { musicInfo, url, quality: type, isFromCache: false }
