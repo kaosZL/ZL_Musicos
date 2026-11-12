@@ -19,6 +19,7 @@ import {
 } from '@/screens'
 import { Provider } from '@/store/Provider'
 import TVRemoteFocusController from '@/components/TV/TVRemoteFocusController'
+import TVKeepScreenOn from '@/components/TV/TVKeepScreenOn'
 import { TVFocusScopeContext } from '@/components/TV/tvFocusManager'
 
 import {
@@ -50,6 +51,7 @@ function WrappedComponent(Component: any) {
       <Provider>
         <TVFocusScopeContext.Provider value={componentId}>
           <TVRemoteFocusController componentId={componentId} />
+          <TVKeepScreenOn />
           <Component
             {...props}
           />

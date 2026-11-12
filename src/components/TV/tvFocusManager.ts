@@ -265,7 +265,32 @@ export const scheduleTVInitialFocus = () => {
   }, 260)
 }
 
-export const moveTVFocus = async(direction: Direction) => {
+// Issue #11：列表页按住方向键连发时，moveTVFocusInner 的 measureTargets（对全部
+// 注册目标逐个 measureInWindow 异步往返）还在途，后续 repeat 事件到达就被丢弃——
+// 老电视上尤其明显（「延迟、不跟手」）。这里做合并排队：移动在途时只记下最新
+// 方向，当前移动完成后立刻接着执行，长按即连续步进不丢帧。
+let moveInFlight = false
+let queuedMoveDirection: Direction | null = null
+
+export const moveTVFocus = async(direction: Direction): Promise<boolean> => {
+  if (moveInFlight) {
+    queuedMoveDirection = direction
+    return false
+  }
+  moveInFlight = true
+  try {
+    return await moveTVFocusInner(direction)
+  } finally {
+    moveInFlight = false
+    if (queuedMoveDirection) {
+      const next = queuedMoveDirection
+      queuedMoveDirection = null
+      void moveTVFocus(next)
+    }
+  }
+}
+
+const moveTVFocusInner = async(direction: Direction) => {
   const measured = await measureTargets()
   const active = getActiveTarget(measured)
   if (!active?.rect) {

@@ -287,6 +287,22 @@ function TVPlayer({ componentId }: { componentId: string }) {
     return () => { clearInterval(interval) }
   }, [revealControls])
 
+  // Issue #11：控制栏可见期间用户可能一直在按键（直控切歌/OK 暂停）但焦点没落在
+  // 控制按钮上——原逻辑只按「无按键 3 秒」收栏，操作中途收栏导致下一次按键落在
+  // 歌词区直控上误切歌。现在控制栏可见时任何遥控事件都重置收栏倒计时：
+  // 只在真正静置 3 秒后才隐藏。
+  useEffect(() => {
+    if (!showControls) return
+    return onTVRemoteEvent(() => { scheduleHideControls() })
+  }, [showControls, scheduleHideControls])
+
+  // Issue #13：控制栏隐藏后封面/歌词仍按「有底栏」的版式偏居上半屏，下半空旷——
+  // 隐藏时内容整体下移约半个控制栏高度，视觉再平衡（原生驱动 transform，不碰 JS 线程）
+  const contentShiftAnim = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    Animated.timing(contentShiftAnim, { toValue: showControls ? 0 : tvSize(56), duration: 280, useNativeDriver: true }).start()
+  }, [showControls, contentShiftAnim])
+
   // 控制栏隐藏时按上/下/菜单呼出：setShowControls 是异步的，立刻 focusTVTargetByRef
   // 时控制栏还没渲染（playFocus.ref.current 为 null）会落空；之后 preferred 调度又会被
   // 引擎「不抢活焦点」守卫拦住（焦点在隐形歌词区）——补偿必须推迟到渲染完成后。
@@ -431,7 +447,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
         <TVFadeOverlay height={tvSize(300)} peak={0.34} direction="up" />
       </View>
       <View style={styles.root}>
-        <View style={styles.nowPlayingArea}>
+        <Animated.View style={[styles.nowPlayingArea, { transform: [{ translateY: contentShiftAnim }] }]}>
           <View style={[styles.albumColumn, appleLayout.albumColumn]}>
             <View style={[styles.coverStage, appleLayout.coverStage]}>
               <View style={[styles.coverGlow, appleLayout.coverGlow]} />
@@ -487,7 +503,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
               </ScrollView>
             </Focusable>
           </View>
-        </View>
+        </Animated.View>
 
         {fullscreenLyrics ? (
           <View style={styles.fsLyricsRoot}>
