@@ -71,8 +71,29 @@ const getUpdateErrorText = (err: unknown) => {
   }
 }
 
+// 音乐音质四档（v1.9.23）：写 player.playQuality，核心链路按歌逐首自动降档（getPlayQuality）
+const QUALITY_OPTIONS: Array<{ q: LX.Quality, label: string, short: string }> = [
+  { q: '128k', label: '流畅 · 128K', short: '流畅' },
+  { q: '320k', label: '高清 · 320K', short: '高清' },
+  { q: 'flac', label: '无损 · FLAC', short: '无损' },
+  { q: 'flac24bit', label: 'Hi-Res · FLAC 24bit', short: 'Hi-Res' },
+]
+const qualityLabel = (q: LX.Quality) => QUALITY_OPTIONS.find(o => o.q == q)?.label ?? q
+const qualityShortLabel = (q: LX.Quality) => QUALITY_OPTIONS.find(o => o.q == q)?.short ?? q
+// 当前音源申报的最高音质：global.lx.qualityList 在源初始化时填充（只覆盖使用中的源），
+// 未安装/未初始化的源要切过去用一次才知道
+const getMaxSupportedQuality = (): LX.Quality | null => {
+  const all = new Set<LX.Quality>()
+  for (const qs of Object.values(global.lx.qualityList ?? {})) qs?.forEach(q => all.add(q))
+  for (let i = QUALITY_OPTIONS.length - 1; i >= 0; i--) {
+    if (all.has(QUALITY_OPTIONS[i].q)) return QUALITY_OPTIONS[i].q
+  }
+  return null
+}
+
 function TVSettings({ componentId }: { componentId: string }) {
   const apiSource = useSettingValue('common.apiSource')
+  const playQuality = useSettingValue('player.playQuality')
   const removedSources = useSettingValue('common.tvRemovedSources')
   const alertsMigrated = useSettingValue('common.tvUpdateAlertsOffMigrated')
   const musicInfo = usePlayerMusicInfo()
@@ -84,6 +105,7 @@ function TVSettings({ componentId }: { componentId: string }) {
   const [updateProgress, setUpdateProgress] = useState({ total: 0, current: 0 })
   const [updateMessage, setUpdateMessage] = useState('')
   const firstSourceFocus = useTVFocusRef()
+  const qualityButtonFocus = useTVFocusRef()
   const updateButtonFocus = useTVFocusRef()
   const sourceRefs = useRef<FocusRefMap>({})
   const [qrImage, setQrImage] = useState('')
@@ -583,6 +605,23 @@ function TVSettings({ componentId }: { componentId: string }) {
     showTVDialog({ title: src.name, message: '选择要执行的操作', buttons })
   }
 
+  // 音乐音质选择（v1.9.23）：选高档位后逐首自动匹配，取链失败同源降档重试、全败才换源
+  const showQualityPicker = () => {
+    const maxQ = getMaxSupportedQuality()
+    showTVDialog({
+      title: '音乐音质',
+      message: maxQ
+        ? `当前音源申报最高支持${dot}${qualityLabel(maxQ)}\n选高档位后逐首自动匹配，歌曲/音源不支持或取链失败时自动降档`
+        : '选高档位后逐首自动匹配，歌曲/音源不支持或取链失败时自动降档',
+      buttons: QUALITY_OPTIONS.map(o => ({
+        label: (playQuality == o.q ? '● ' : '') + o.label,
+        tone: playQuality == o.q ? 'primary' : 'dark',
+        onPress: () => { updateSetting({ 'player.playQuality': o.q }) },
+      })),
+    })
+  }
+  const maxSupportedQuality = useMemo(() => getMaxSupportedQuality(), [apiSource, apiStatus.status, apiStatus.message])
+
   return (
     <TVAppleScaffold image={musicInfo.pic}>
       <TVTopTabs items={createTVTabs(componentId, 'settings')} activeId="settings" subtitle={tvText.settings} nextFocusDown={lanButtonFocus.getNodeHandle() ?? firstSourceFocus.getNodeHandle() ?? undefined} activeTabRef={activeTabFocus} onActiveTabReady={settingsFocusRefresh} />
@@ -613,7 +652,7 @@ function TVSettings({ componentId }: { componentId: string }) {
                         <TVText variant="cardTitle" numberOfLines={1}>{src.name}</TVText>
                         <TVText variant="caption" style={styles.line} numberOfLines={1}>{src.desc ?? (src.id || tvText.defaultSource)}</TVText>
                       </View>
-                      <TVText variant="caption" color={active ? tvColors.primaryHigh : tvColors.subtext}>{active ? tvText.currentUsing : src.status ?? ''}</TVText>
+                      <TVText variant="caption" color={active ? tvColors.primaryHigh : tvColors.subtext}>{active ? `${tvText.currentUsing}${maxSupportedQuality ? `${dot}${qualityShortLabel(maxSupportedQuality)}` : ''}` : src.status ?? ''}</TVText>
                     </View>
                   </Focusable>
                 </View>
@@ -623,6 +662,24 @@ function TVSettings({ componentId }: { componentId: string }) {
         </TVSettingsPane>
 
         <ScrollView ref={rightScrollRef} style={styles.rightColumn} showsVerticalScrollIndicator={false} contentContainerStyle={styles.rightContent}>
+          <TVSettingsPane title="播放" subtitle="音乐音质 · 能高则高，自动降档" style={styles.playPanel}>
+            <Focusable
+              ref={qualityButtonFocus.ref as any}
+              style={styles.qualityItem}
+              onPress={showQualityPicker}
+              nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined}
+              nextFocusDown={updateButtonFocus.getNodeHandle() ?? undefined}
+            >
+              <View style={styles.sourceRow}>
+                <View style={styles.sourceInfo}>
+                  <TVText variant="cardTitle" numberOfLines={1}>音乐音质</TVText>
+                  <TVText variant="caption" style={styles.line} numberOfLines={1}>逐首自动匹配 · 不支持自动降档 · 失败换源</TVText>
+                </View>
+                <TVText variant="caption" color={tvColors.primaryHigh}>{qualityLabel(playQuality)}</TVText>
+              </View>
+            </Focusable>
+          </TVSettingsPane>
+
           <TVSettingsPane title={tvText.appUpdate} subtitle={tvText.appUpdateDesc} style={styles.updatePanel}>
             <View style={styles.updateMeta}>
               <TVText variant="caption" color={tvColors.subtext} numberOfLines={1}>{tvText.currentVersion}{dot}v{TV_CURRENT_VERSION}</TVText>
@@ -630,7 +687,7 @@ function TVSettings({ componentId }: { componentId: string }) {
               {updateInfo ? <TVText variant="caption" color={tvColors.subtext} numberOfLines={1}>{tvText.updatePackage}{dot}{updateInfo.asset.abi}{dot}{formatUpdateSize(updateInfo.asset.size)}</TVText> : null}
               {updateProgressText ? <TVText variant="caption" color={tvColors.subtext} numberOfLines={1}>{tvText.downloadProgress}{dot}{updateProgressText}</TVText> : null}
             </View>
-            <TVButton ref={updateButtonFocus.ref as any} label={updateButtonLabel} tone={updateStatus === 'available' || updateStatus === 'downloaded' ? 'primary' : 'dark'} onPress={() => { void handleUpdatePress() }} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} nextFocusDown={lanButtonFocus.getNodeHandle() ?? undefined} />
+            <TVButton ref={updateButtonFocus.ref as any} label={updateButtonLabel} tone={updateStatus === 'available' || updateStatus === 'downloaded' ? 'primary' : 'dark'} onPress={() => { void handleUpdatePress() }} nextFocusUp={qualityButtonFocus.getNodeHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} nextFocusDown={lanButtonFocus.getNodeHandle() ?? undefined} />
             <TVText variant="caption" color={updateStatus === 'error' ? tvColors.warn : tvColors.primaryHigh} style={styles.message}>{updateMessage || tvText.installConfirmTip}</TVText>
           </TVSettingsPane>
 
@@ -675,6 +732,8 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   listHint: { marginBottom: tvSize(8) },
   rightColumn: { width: tvSize(430), flexShrink: 0 },
   rightContent: { gap: tvSize(18), paddingBottom: tvSize(20) },
+  playPanel: { minHeight: tvSize(160) },
+  qualityItem: { borderRadius: tvSize(24), backgroundColor: 'rgba(255,255,255,0.075)', borderWidth: 1, borderColor: tvColors.border, padding: tvSize(18) },
   updatePanel: { minHeight: tvSize(270) },
   updateMeta: { gap: tvSize(8), marginBottom: tvSize(18) },
   importPanel: { flex: 1 },
