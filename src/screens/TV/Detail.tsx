@@ -74,7 +74,7 @@ function TVDetail({ componentId, payload }: Props) {
   useTVRemoteActions({
     playPause: () => { if (list.length) void handlePlay(0) },
     down: () => { if (actionFocusedRef.current) focusFirstRow() },
-  })
+  }, componentId)
 
   const image = payload.type === 'songlist' ? payload.songlist.img : null
   const heroMeta = payload.type === 'songlist'

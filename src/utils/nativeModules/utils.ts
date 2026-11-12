@@ -15,6 +15,7 @@ export type TVRemoteEventType =
   | 'right'
   | 'select'
   | 'menu'
+  | 'back'
 
 export interface TVRemoteEvent {
   eventType: TVRemoteEventType

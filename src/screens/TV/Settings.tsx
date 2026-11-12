@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
-import { BackHandler, Image, ScrollView, View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
+import { Image, ScrollView, View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVText from '@/components/TV/TVText'
@@ -24,6 +24,7 @@ import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { setTVDialogActive } from '@/components/TV/tvFocusManager'
+import { registerTVBack } from '@/components/TV/tvBackManager'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
@@ -124,7 +125,7 @@ function TVSettings({ componentId }: { componentId: string }) {
   const getActiveTabHandle = () => (activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null)
 
   useTVNavigationBack(componentId)
-  useTVRemoteActions({ playPause: () => { if (musicInfo.id) pushTVPlayerScreen(componentId) } })
+  useTVRemoteActions({ playPause: () => { if (musicInfo.id) pushTVPlayerScreen(componentId) } }, componentId)
 
   useEffect(() => {
     if (alertsMigrated || !userApiList.length) return
@@ -515,16 +516,21 @@ function TVSettings({ componentId }: { componentId: string }) {
       if (eventKeyAction !== 1 || repeatCount > 0) return
       if (eventType === 'select' && Date.now() - openedAt > 400) handleCloseLanImport()
     })
-    const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
-      handleCloseLanImport()
-      return true
+    // 返回键关弹层走统一路由（z=200 弹层级，低于 TVDialog 的 300）
+    const unregisterBack = registerTVBack({
+      z: 200,
+      componentId,
+      handler: () => {
+        handleCloseLanImport()
+        return true
+      },
     })
     return () => {
       setTVDialogActive(false)
       unsub()
-      backSub.remove()
+      unregisterBack()
     }
-  }, [qrImage])
+  }, [qrImage, componentId])
 
   const handleRemove = async(id: string) => {
     setImportMessage('')

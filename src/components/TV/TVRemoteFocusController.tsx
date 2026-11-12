@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { getCachedIsTV } from '@/utils/tvMode'
 import { onTVRemoteEvent } from '@/utils/nativeModules/utils'
 import { activeTargetHasLongPress, clearActiveTVFocusScope, focusPreferredTVTarget, isActiveTVFocusScope, isTVDialogActive, longPressActiveTVTarget, moveTVFocus, pressActiveTVTarget, setActiveTVFocusScope } from './tvFocusManager'
+import { startTVBackRouter } from './tvBackManager'
 import { useNavigationComponentDidAppear, useNavigationComponentDidDisappear } from '@/navigation/hooks'
 
 const KEY_ACTION_DOWN = 0
@@ -27,6 +28,9 @@ const TVRemoteFocusController = ({ componentId }: { componentId: string }) => {
 
   useEffect(() => {
     if (!getCachedIsTV()) return
+
+    // 返回键统一路由：原生把 KEYCODE_BACK 交进管线后由 tvBackManager 分发（幂等启动）
+    startTVBackRouter()
 
     const timer = setTimeout(handleAppear, 320)
 

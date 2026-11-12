@@ -144,7 +144,7 @@ function TVMyList({ componentId }: { componentId: string }) {
   useTVNavigationBack(componentId)
   useTVRemoteActions({
     playPause: () => { if (musicInfo.id) pushTVPlayerScreen(componentId) },
-  })
+  }, componentId)
 
   // 性能关键：ref 回调必须保持稳定引用，并且只在「节点真的换了」时才触发刷新。
   // 若每次渲染都新建箭头函数，React 会在每次提交时先以 null、再以节点调用它，
