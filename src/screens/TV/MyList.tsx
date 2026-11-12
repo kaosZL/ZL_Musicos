@@ -10,6 +10,7 @@ import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
 import { tvColors, tvSize } from '@/theme/tv'
 import { useMyList } from '@/store/list/hook'
 import { removeUserList, getListMusics } from '@/core/list'
+import { debugLog } from '@/utils/nativeModules/utils'
 import { LIST_IDS } from '@/config/constant'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { pushTVDetailScreen, pushTVPlayerScreen, pushTVRenameScreen, pushTVSettingsScreen } from '@/navigation/navigation'
@@ -193,6 +194,13 @@ function TVMyList({ componentId }: { componentId: string }) {
     }
   }
 
+  // 长按链路埋点（v1.9.24 实机反馈「长按 OK 不能删除」）：手机页运行日志可查，
+  // 复现时按「长按 → 菜单 → 删除」走一遍，日志缺哪一环问题就在哪一环
+  const handleManageSonglistLogged = (list: LX.List.UserListInfo) => {
+    debugLog(`长按管理菜单: ${list.name}`)
+    handleManageSonglist(list)
+  }
+
   // 遥控器「长按 OK」= 歌单管理。改名现在可以直接在电视上做（屏上键盘），
   // 但电视遥控器输不了中文，所以仍保留「去手机改」的说明。
   const handleManageSonglist = (list: LX.List.UserListInfo) => {
@@ -290,7 +298,7 @@ function TVMyList({ componentId }: { componentId: string }) {
                   coverFallback="music"
                   image={cardCovers[item.id] || undefined}
                   onPress={() => { openMySonglist(item) }}
-                  onLongPress={() => { handleManageSonglist(item) }}
+                  onLongPress={() => { handleManageSonglistLogged(item) }}
                   onFocus={() => { revealCardRow(`mylist_${item.id}`) }}
                   onLayout={(e) => { recordCardBox(`mylist_${item.id}`, e.nativeEvent.layout.y, e.nativeEvent.layout.height) }}
                   nextFocusUp={getActiveTabHandle() ?? undefined}

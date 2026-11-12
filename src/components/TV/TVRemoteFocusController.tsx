@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { getCachedIsTV } from '@/utils/tvMode'
-import { onTVRemoteEvent } from '@/utils/nativeModules/utils'
+import { onTVRemoteEvent, debugLog } from '@/utils/nativeModules/utils'
 import { activeTargetHasLongPress, clearActiveTVFocusScope, focusPreferredTVTarget, isActiveTVFocusScope, isTVDialogActive, longPressActiveTVTarget, moveTVFocus, pressActiveTVTarget, setActiveTVFocusScope } from './tvFocusManager'
 import { startTVBackRouter } from './tvBackManager'
 import { useNavigationComponentDidAppear, useNavigationComponentDidDisappear } from '@/navigation/hooks'
 
 const KEY_ACTION_DOWN = 0
 const KEY_ACTION_UP = 1
+// 长按兜底时限：Android 标准长按阈值为 400ms（首个 repeat 一般在 ~500ms 出现）。
+// 部分电视固件对 OK 键不产生 repeat 连发（方向键有、OK 键没有的怪癖真实存在），
+// 按住超过此时限即视为长按——长按不再依赖 repeat 事件（v1.9.24 实机反馈：我的歌单长按删除无效）
+const LONG_PRESS_FALLBACK_MS = 550
 
 const TVRemoteFocusController = ({ componentId }: { componentId: string }) => {
   const activeRef = useRef(false)
   const selectHoldRef = useRef(false)
+  const selectDownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleAppear = useCallback(() => {
     if (!getCachedIsTV()) return
@@ -34,6 +39,13 @@ const TVRemoteFocusController = ({ componentId }: { componentId: string }) => {
 
     const timer = setTimeout(handleAppear, 320)
 
+    const clearSelectDownTimer = () => {
+      if (selectDownTimerRef.current) {
+        clearTimeout(selectDownTimerRef.current)
+        selectDownTimerRef.current = null
+      }
+    }
+
     const unsubscribe = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
       if (!activeRef.current || !isActiveTVFocusScope(componentId)) return
 
@@ -46,14 +58,32 @@ const TVRemoteFocusController = ({ componentId }: { componentId: string }) => {
       if (eventType === 'select') {
         if (eventKeyAction === KEY_ACTION_DOWN && repeatCount === 0) {
           selectHoldRef.current = false
+          clearSelectDownTimer()
           // 无长按能力的按钮直接在按下时触发（零延迟）
-          if (!activeTargetHasLongPress()) pressActiveTVTarget()
+          if (!activeTargetHasLongPress()) {
+            pressActiveTVTarget()
+            return
+          }
+          // 有长按能力的按钮：等 repeat 或 550ms 兜底，先不触发短按。
+          // 兜底计时器：固件不连发 repeat 时按住超过阈值也判定为长按
+          selectDownTimerRef.current = setTimeout(() => {
+            selectDownTimerRef.current = null
+            if (selectHoldRef.current) return
+            selectHoldRef.current = true
+            debugLog('select: 550ms兜底长按触发')
+            longPressActiveTVTarget()
+          }, LONG_PRESS_FALLBACK_MS)
         } else if (eventKeyAction === KEY_ACTION_DOWN && repeatCount > 0 && !selectHoldRef.current) {
           selectHoldRef.current = true
+          clearSelectDownTimer()
+          debugLog('select: repeat长按触发')
           longPressActiveTVTarget()
-        } else if (eventKeyAction === KEY_ACTION_UP && !selectHoldRef.current && activeTargetHasLongPress()) {
-          // 有长按能力的按钮：松开时才确定是短按（避免抢先触发）
-          pressActiveTVTarget()
+        } else if (eventKeyAction === KEY_ACTION_UP) {
+          clearSelectDownTimer()
+          if (!selectHoldRef.current && activeTargetHasLongPress()) {
+            // 有长按能力的按钮：松开时才确定是短按（避免抢先触发）
+            pressActiveTVTarget()
+          }
         }
         return
       }
@@ -75,6 +105,7 @@ const TVRemoteFocusController = ({ componentId }: { componentId: string }) => {
 
     return () => {
       clearTimeout(timer)
+      clearSelectDownTimer()
       unsubscribe()
     }
   }, [componentId, handleAppear])

@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { Pressable, Text, View, type TextStyle, type ViewStyle } from 'react-native'
-import { onTVRemoteEvent } from '@/utils/nativeModules/utils'
+import { onTVRemoteEvent, debugLog } from '@/utils/nativeModules/utils'
 import { setTVDialogActive } from './tvFocusManager'
 import { registerTVBack } from './tvBackManager'
 import TVText from './TVText'
@@ -105,6 +105,7 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
       } else if (eventType === 'select') {
         const btn = buttonsRef.current[focusedIdxRef.current]
         if (btn) {
+          debugLog(`弹窗按钮: ${btn.label}`)
           onDismissRef.current?.()
           btn.onPress?.()
         }
