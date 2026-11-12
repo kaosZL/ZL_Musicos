@@ -124,7 +124,7 @@ function TVHistory({ componentId }: { componentId: string }) {
       }
       openBoard()
     },
-  })
+  }, componentId)
 
   return (
     <TVAppleScaffold image={currentMusicInfo.pic}>

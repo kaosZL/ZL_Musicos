@@ -262,7 +262,7 @@ function TVQueue({ componentId }: { componentId: string }) {
       }
       if (selectedMusicInfo) void handlePlayNow(selectedIndex)
     },
-  })
+  }, componentId)
 
   return (
     <TVAppleScaffold image={currentMusicInfo.pic}>

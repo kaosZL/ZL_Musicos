@@ -248,6 +248,11 @@ function showRenameMsg(text, isErr) {
 // 读取电视端推送过来的「我的歌单」快照（原生层缓存，电视端歌单有变化时会重新推送）
 async function fetchSonglists() {
   const r = await fetch(apiUrl('/api/songlists'))
+  if (!r.ok) {
+    // 403 = token 已过期（电视端重新开过二维码）；如实抛错，别把失败伪装成「空列表」
+    const d = await r.json().catch(() => null)
+    throw new Error((d && d.message) ? d.message : ('HTTP ' + r.status))
+  }
   const d = await r.json()
   return (d && d.lists) || []
 }
@@ -296,11 +301,17 @@ function renderSonglists(lists) {
 async function loadSonglists() {
   showRenameMsg('正在读取…')
   try {
-    const lists = await fetchSonglists()
+    let lists = await fetchSonglists()
+    // 电视端快照推送可能在途（扫码瞬间即读取会赶上推送未完成），空结果等 800ms 重试一次
+    if (!lists.length) {
+      await new Promise(resolve => setTimeout(resolve, 800))
+      lists = await fetchSonglists()
+    }
     renderSonglists(lists)
     showRenameMsg(lists.length ? '已读取 ' + lists.length + ' 个歌单，改完点下方的「保存改名」' : '')
   } catch (e) {
-    showRenameMsg('读取失败，请确认电视端仍停在扫码导入页', true)
+    const detail = (e && e.message) ? e.message : '请确认电视端仍停在扫码导入页'
+    showRenameMsg('读取失败：' + detail, true)
   }
 }
 

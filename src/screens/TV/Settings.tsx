@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type MutableRefObject } from 'react'
-import { BackHandler, Image, ScrollView, View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
+import { Image, ScrollView, View, findNodeHandle, type TextStyle, type ViewStyle } from 'react-native'
 import TVAppleScaffold from '@/components/TV/TVAppleScaffold'
 import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVText from '@/components/TV/TVText'
@@ -18,12 +18,13 @@ import { setApiSource } from '@/core/apiSource'
 import { updateSetting } from '@/core/common'
 import { removeUserList, updateUserList, getListMusics } from '@/core/list'
 import { httpFetch } from '@/utils/request'
-import { generateQRCodeBase64, onLanSourceEvent, onTVRemoteEvent, pushLanSonglists, pushLanSonglistExport, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
+import { debugLog, generateQRCodeBase64, onLanSourceEvent, onTVRemoteEvent, pushLanSonglists, pushLanSonglistExport, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
 import { importUserApi, removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { setTVDialogActive } from '@/components/TV/tvFocusManager'
+import { registerTVBack } from '@/components/TV/tvBackManager'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
@@ -124,7 +125,7 @@ function TVSettings({ componentId }: { componentId: string }) {
   const getActiveTabHandle = () => (activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null)
 
   useTVNavigationBack(componentId)
-  useTVRemoteActions({ playPause: () => { if (musicInfo.id) pushTVPlayerScreen(componentId) } })
+  useTVRemoteActions({ playPause: () => { if (musicInfo.id) pushTVPlayerScreen(componentId) } }, componentId)
 
   useEffect(() => {
     if (alertsMigrated || !userApiList.length) return
@@ -287,15 +288,23 @@ function TVSettings({ componentId }: { componentId: string }) {
 
   const pushLanSonglistsSnapshot = useCallback(async() => {
     try {
-      // 带上每个歌单的歌曲数（09-20 需求）：手机页与 TV 卡片信息对齐
-      const lists = await Promise.all(userSonglists.map(async(item) => ({
+      // 带上每个歌单的歌曲数（09-20 需求）：手机页与 TV 卡片信息对齐。
+      // allSettled：单个歌单读取失败只丢那一项，不再拖垮整个快照——
+      // 之前 Promise.all 一损俱损，一个列表抛错 → 快照永远不推 →
+      // 手机页「读取电视歌单」永远空（v1.9.24 实机反馈）
+      const settled = await Promise.allSettled(userSonglists.map(async(item) => ({
         id: item.id,
         name: item.name,
         count: (await getListMusics(item.id)).length,
       })))
+      const lists = settled
+        .filter((result): result is PromiseFulfilledResult<{ id: string, name: string, count: number }> => result.status === 'fulfilled')
+        .map(result => result.value)
+      debugLog(`歌单快照推送: ${lists.length}/${userSonglists.length} 个`)
       void pushLanSonglists(JSON.stringify({ lists }))
     } catch (err: unknown) {
-      // 快照推送失败静默忽略
+      // 快照推送失败记入运行日志（手机页可查），不再完全静默
+      debugLog(`歌单快照推送失败: ${err instanceof Error ? err.message : String(err)}`)
     }
   }, [userSonglists])
 
@@ -515,16 +524,21 @@ function TVSettings({ componentId }: { componentId: string }) {
       if (eventKeyAction !== 1 || repeatCount > 0) return
       if (eventType === 'select' && Date.now() - openedAt > 400) handleCloseLanImport()
     })
-    const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
-      handleCloseLanImport()
-      return true
+    // 返回键关弹层走统一路由（z=200 弹层级，低于 TVDialog 的 300）
+    const unregisterBack = registerTVBack({
+      z: 200,
+      componentId,
+      handler: () => {
+        handleCloseLanImport()
+        return true
+      },
     })
     return () => {
       setTVDialogActive(false)
       unsub()
-      backSub.remove()
+      unregisterBack()
     }
-  }, [qrImage])
+  }, [qrImage, componentId])
 
   const handleRemove = async(id: string) => {
     setImportMessage('')

@@ -15,6 +15,7 @@ export type TVRemoteEventType =
   | 'right'
   | 'select'
   | 'menu'
+  | 'back'
 
 export interface TVRemoteEvent {
   eventType: TVRemoteEventType
@@ -45,6 +46,11 @@ export const screenUnkeepAwake = () => {
 export const getWIFIIPV4Address = UtilsModule.getWIFIIPV4Address as () => Promise<string>
 
 export const getDominantColor = (imageUrl: string) => UtilsModule.getDominantColor(imageUrl) as Promise<string | null>
+
+// 手机页「运行日志」的 JS 侧入口：排查真机按键/焦点问题用
+export const debugLog = (message: string) => {
+  try { UtilsModule.debugLog(message) } catch { /* 原生侧不可用时静默 */ }
+}
 
 export const isTVDevice = UtilsModule.isTVDevice as () => Promise<boolean>
 

@@ -128,7 +128,7 @@ function TVSearch({ componentId }: { componentId: string }) {
   useTVNavigationBack(componentId)
   useTVRemoteActions({
     playPause: () => { if (musicInfo.id) pushTVPlayerScreen(componentId) },
-  })
+  }, componentId)
 
   const getInputHandle = () => inputRef.current ? findNodeHandle(inputRef.current) : null
   const getKeyboardHandle = () => firstKeyboardKeyFocus.current ? findNodeHandle(firstKeyboardKeyFocus.current) : null

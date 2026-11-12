@@ -1,7 +1,8 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import { BackHandler, Pressable, Text, View, type TextStyle, type ViewStyle } from 'react-native'
-import { onTVRemoteEvent } from '@/utils/nativeModules/utils'
+import { Pressable, Text, View, type TextStyle, type ViewStyle } from 'react-native'
+import { onTVRemoteEvent, debugLog } from '@/utils/nativeModules/utils'
 import { setTVDialogActive } from './tvFocusManager'
+import { registerTVBack } from './tvBackManager'
 import TVText from './TVText'
 import { tvColors, tvSize } from '@/theme/tv'
 
@@ -104,21 +105,26 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
       } else if (eventType === 'select') {
         const btn = buttonsRef.current[focusedIdxRef.current]
         if (btn) {
+          debugLog(`弹窗按钮: ${btn.label}`)
           onDismissRef.current?.()
           btn.onPress?.()
         }
       }
     })
 
-    const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
-      onDismissRef.current?.()
-      return true
+    // 返回键关弹窗走统一路由（z=300 最高优先级，v1.9.24 返回键管线化改造）
+    const unregisterBack = registerTVBack({
+      z: 300,
+      handler: () => {
+        onDismissRef.current?.()
+        return true
+      },
     })
 
     return () => {
       setTVDialogActive(false)
       unsub()
-      backSub.remove()
+      unregisterBack()
     }
   }, [visible, resetKey])
 

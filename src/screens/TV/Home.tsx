@@ -82,7 +82,7 @@ function TVHome({ componentId }: { componentId: string }) {
       }
       pushTVSearchScreen(componentId)
     },
-  })
+  }, componentId)
 
   // 排行榜推荐源跟随排行榜页选择（09-22 老板需求）：
   // 持久化键 tv_board_source（History 页写入），未选过时回退 sources[0]（酷我）

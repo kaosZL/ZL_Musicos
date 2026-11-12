@@ -10,6 +10,7 @@ import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
 import { tvColors, tvSize } from '@/theme/tv'
 import { useMyList } from '@/store/list/hook'
 import { removeUserList, getListMusics } from '@/core/list'
+import { debugLog } from '@/utils/nativeModules/utils'
 import { LIST_IDS } from '@/config/constant'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { pushTVDetailScreen, pushTVPlayerScreen, pushTVRenameScreen, pushTVSettingsScreen } from '@/navigation/navigation'
@@ -144,7 +145,7 @@ function TVMyList({ componentId }: { componentId: string }) {
   useTVNavigationBack(componentId)
   useTVRemoteActions({
     playPause: () => { if (musicInfo.id) pushTVPlayerScreen(componentId) },
-  })
+  }, componentId)
 
   // 性能关键：ref 回调必须保持稳定引用，并且只在「节点真的换了」时才触发刷新。
   // 若每次渲染都新建箭头函数，React 会在每次提交时先以 null、再以节点调用它，
@@ -191,6 +192,13 @@ function TVMyList({ componentId }: { componentId: string }) {
     } catch (err: unknown) {
       await tipDialog({ title: tvText.deleteSonglistFailed, message: err instanceof Error ? err.message : '', btnText: tvText.knowIt })
     }
+  }
+
+  // 长按链路埋点（v1.9.24 实机反馈「长按 OK 不能删除」）：手机页运行日志可查，
+  // 复现时按「长按 → 菜单 → 删除」走一遍，日志缺哪一环问题就在哪一环
+  const handleManageSonglistLogged = (list: LX.List.UserListInfo) => {
+    debugLog(`长按管理菜单: ${list.name}`)
+    handleManageSonglist(list)
   }
 
   // 遥控器「长按 OK」= 歌单管理。改名现在可以直接在电视上做（屏上键盘），
@@ -290,7 +298,7 @@ function TVMyList({ componentId }: { componentId: string }) {
                   coverFallback="music"
                   image={cardCovers[item.id] || undefined}
                   onPress={() => { openMySonglist(item) }}
-                  onLongPress={() => { handleManageSonglist(item) }}
+                  onLongPress={() => { handleManageSonglistLogged(item) }}
                   onFocus={() => { revealCardRow(`mylist_${item.id}`) }}
                   onLayout={(e) => { recordCardBox(`mylist_${item.id}`, e.nativeEvent.layout.y, e.nativeEvent.layout.height) }}
                   nextFocusUp={getActiveTabHandle() ?? undefined}

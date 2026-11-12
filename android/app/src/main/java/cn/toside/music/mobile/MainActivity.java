@@ -69,6 +69,12 @@ public class MainActivity extends NavigationActivity {
       case KeyEvent.KEYCODE_MENU:
         eventType = "menu";
         break;
+      case KeyEvent.KEYCODE_BACK:
+        // 返回键纳入统一管线（v1.9.24）：此前唯一走系统 BackHandler 的键——
+        // 全局监听器栈（LIFO+按引用去重）依赖不可见的注册顺序，是播放页
+        // 「返回键收栏」系列时序 bug 的共同根源。现在与其他遥控键同路径交 JS 路由
+        eventType = "back";
+        break;
       default:
         return false;
     }
@@ -102,6 +108,7 @@ public class MainActivity extends NavigationActivity {
       case KeyEvent.KEYCODE_BUTTON_A:
       case KeyEvent.KEYCODE_BUTTON_SELECT:
       case KeyEvent.KEYCODE_MENU:
+      case KeyEvent.KEYCODE_BACK:
         return true;
       default:
         return false;
