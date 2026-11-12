@@ -66,9 +66,8 @@ function TVPlayer({ componentId }: { componentId: string }) {
   const lyricLines = useLrcSet()
   const apiSource = useSettingValue('common.apiSource')
   const playMode = useSettingValue('player.togglePlayMethod')
-  const [showControls, setShowControls] = useState(true)
+  const [showControls, setShowControls] = useState(false)
   const [hideKey, setHideKey] = useState(0)
-  const hideDeadlineRef = useRef<number>(0)
   const controlFocusCountRef = useRef(0)
   // Issue #9 方案 B：时间戳守卫——即使 count 因组件重挂载短暂归零，500ms 内也不让直控拦截
   const controlFocusTimeRef = useRef(0)
@@ -254,14 +253,11 @@ function TVPlayer({ componentId }: { componentId: string }) {
 
   useTVNavigationBack(componentId)
 
-  const scheduleHideControls = useCallback(() => {
-    hideDeadlineRef.current = Date.now() + 3000
-  }, [])
-
+  // 控制栏显隐规则（v1.9.24 老板拍板）：不自动隐藏——呼出后常驻，按返回键收起；
+  // 收起后再按返回才退出播放页。上下/菜单键呼出并聚焦播放键
   const revealControls = useCallback(() => {
     setShowControls(true)
-    scheduleHideControls()
-  }, [scheduleHideControls])
+  }, [])
 
   const handleControlFocus = useCallback(() => {
     controlFocusCountRef.current += 1
@@ -286,21 +282,7 @@ function TVPlayer({ componentId }: { componentId: string }) {
     if (!showControls) setHideKey(k => k + 1)
   }, [showControls])
 
-  useEffect(() => {
-    revealControls()
-    const interval = setInterval(() => {
-      if (Date.now() < hideDeadlineRef.current) return
-      // 静置 3 秒即收栏——不再因「焦点停在控制按钮上」而永不隐藏（v1.9.24）：
-      // 计数可靠化（onTVFocusChange）后，旧的 count>0 拦截会让状态栏赖着不走。
-      // 收栏时手动清零计数：按钮即将整体卸载，不会再有 blur 事件来递减。
-      // 焦点无需手动迁移：hideKey 递增触发歌词区重挂载，preferred 调度自然接管。
-      setShowControls(false)
-      controlFocusCountRef.current = 0
-    }, 500)
-    return () => { clearInterval(interval) }
-  }, [revealControls])
-
-  // 控制栏可见时按返回 = 先收栏（消费掉这次返回），再按才退出播放页（v1.9.24）。
+  // 控制栏可见时按返回 = 收栏（消费掉这次返回），再按才退出播放页。
   // 注册晚于 useTVNavigationBack，BackHandler 后注册先问；全屏歌词层注册更晚、优先级更高
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -311,15 +293,6 @@ function TVPlayer({ componentId }: { componentId: string }) {
     })
     return () => { sub.remove() }
   }, [showControls])
-
-  // Issue #11：控制栏可见期间用户可能一直在按键（直控切歌/OK 暂停）但焦点没落在
-  // 控制按钮上——原逻辑只按「无按键 3 秒」收栏，操作中途收栏导致下一次按键落在
-  // 歌词区直控上误切歌。现在控制栏可见时任何遥控事件都重置收栏倒计时：
-  // 只在真正静置 3 秒后才隐藏。
-  useEffect(() => {
-    if (!showControls) return
-    return onTVRemoteEvent(() => { scheduleHideControls() })
-  }, [showControls, scheduleHideControls])
 
   // Issue #13：控制栏隐藏后封面/歌词仍按「有底栏」的版式偏居上半屏，下半空旷——
   // 隐藏时内容整体下移约半个控制栏高度，视觉再平衡（原生驱动 transform，不碰 JS 线程）
