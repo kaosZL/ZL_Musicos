@@ -1,39 +1,38 @@
 {
-  "version": "1.8.8",
-  "versionCode": 80,
-  "tagName": "v1.8.8-tv",
-  "releaseUrl": "https://github.com/kaosZL/ZL_Musicos/releases/tag/v1.8.8-tv",
-  "body": "ZL-Music TV v1.8.8：新增设置页手动远程更新，优化 TV 端检查更新与 APK 架构匹配。",
+  "version": "1.9.22",
+  "tagName": "v1.9.22",
+  "releaseUrl": "https://github.com/kaosZL/ZL_Musicos/releases/tag/v1.9.22",
+  "body": "ZL-Music TV v1.9.22：播放中不再被系统屏保打断；控制栏操作中不再自动隐藏；列表导航更跟手；播放页版式再平衡。",
   "assets": [
     {
       "abi": "arm64-v8a",
-      "name": "zl-music-v1.8.8-arm64-v8a.apk",
-      "size": 14100016,
-      "url": "https://github.com/kaosZL/ZL_Musicos/releases/download/v1.8.8-tv/zl-music-v1.8.8-arm64-v8a.apk"
+      "name": "ZL-Musicos-v1.9.22-arm64-v8a.apk",
+      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.22/ZL-Musicos-v1.9.22-arm64-v8a.apk",
+      "size": 14301490
     },
     {
       "abi": "armeabi-v7a",
-      "name": "zl-music-v1.8.8-armeabi-v7a.apk",
-      "size": 13093103,
-      "url": "https://github.com/kaosZL/ZL_Musicos/releases/download/v1.8.8-tv/zl-music-v1.8.8-armeabi-v7a.apk"
+      "name": "ZL-Musicos-v1.9.22-armeabi-v7a.apk",
+      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.22/ZL-Musicos-v1.9.22-armeabi-v7a.apk",
+      "size": 13294571
     },
     {
       "abi": "universal",
-      "name": "zl-music-v1.8.8-universal.apk",
-      "size": 29098573,
-      "url": "https://github.com/kaosZL/ZL_Musicos/releases/download/v1.8.8-tv/zl-music-v1.8.8-universal.apk"
+      "name": "ZL-Musicos-v1.9.22-universal.apk",
+      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.22/ZL-Musicos-v1.9.22-universal.apk",
+      "size": 29279794
     },
     {
       "abi": "x86",
-      "name": "zl-music-v1.8.8-x86.apk",
-      "size": 14543976,
-      "url": "https://github.com/kaosZL/ZL_Musicos/releases/download/v1.8.8-tv/zl-music-v1.8.8-x86.apk"
+      "name": "ZL-Musicos-v1.9.22-x86.apk",
+      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.22/ZL-Musicos-v1.9.22-x86.apk",
+      "size": 14625654
     },
     {
       "abi": "x86_64",
-      "name": "zl-music-v1.8.8-x86_64.apk",
-      "size": 14424188,
-      "url": "https://github.com/kaosZL/ZL_Musicos/releases/download/v1.8.8-tv/zl-music-v1.8.8-x86_64.apk"
+      "name": "ZL-Musicos-v1.9.22-x86_64.apk",
+      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.22/ZL-Musicos-v1.9.22-x86_64.apk",
+      "size": 14625654
     }
   ]
 }
