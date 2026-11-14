@@ -5,7 +5,7 @@ import TVTopTabs from '@/components/TV/TVTopTabs'
 import TVText from '@/components/TV/TVText'
 import TVButton from '@/components/TV/TVButton'
 import TVSettingsPane from '@/components/TV/TVSettingsPane'
-import { showTVDialog, type TVDialogButtonConfig } from '@/components/TV/TVDialog'
+import { showTVDialog, isTVDialogVisible, type TVDialogButtonConfig } from '@/components/TV/TVDialog'
 import Focusable from '@/components/TV/Focusable'
 import { tvColors, tvSize } from '@/theme/tv'
 import { useSettingValue } from '@/store/setting/hook'
@@ -540,7 +540,9 @@ function TVSettings({ componentId }: { componentId: string }) {
   }
 
   // 二维码弹层期间接管按键：弹层里没有可聚焦项，焦点控制器让路（setTVDialogActive），
-  // OK 短按 / 返回键直接关闭。400ms 防抖忽略打开弹层那次按键的余波（与 TVDialog 同理）
+  // OK 短按 / 返回键直接关闭。400ms 防抖忽略打开弹层那次按键的余波（与 TVDialog 同理）。
+  // 有结果弹窗在显示时 OK 让给弹窗——否则确认弹窗的同一下 OK 会把二维码一起关掉、
+  // 手机页连接直接断（v1.9.25 实测反馈）
   useEffect(() => {
     if (!qrImage) return
     setTVDialogActive(true)
@@ -550,6 +552,7 @@ function TVSettings({ componentId }: { componentId: string }) {
       // 不补这一句的话焦点控制器会穿透到被弹层遮住的页面上误触按钮
       setTVDialogActive(true)
       if (eventKeyAction !== 1 || repeatCount > 0) return
+      if (isTVDialogVisible()) return
       if (eventType === 'select' && Date.now() - openedAt > 400) handleCloseLanImport()
     })
     // 返回键关弹层走统一路由（z=200 弹层级，低于 TVDialog 的 300）

@@ -46,6 +46,13 @@ export const showTVDialog = (request: TVDialogRequest) => {
   activeListener?.(request)
 }
 
+// 弹窗「真实可见」计数（v1.9.25）：与 setTVDialogActive 区分——那个标志是故意粘滞的
+// （二维码弹层每个按键都重新断言，防焦点控制器穿透到被遮页面），不能用来判断
+// 「现在有没有弹窗正在显示」。二维码弹层靠这个信号区分「这次 OK 是给结果弹窗的
+// 还是给自己的」——否则确认结果弹窗的同一下 OK 会把二维码一起关掉、手机页连接直接断
+let visibleDialogCount = 0
+export const isTVDialogVisible = () => visibleDialogCount > 0
+
 interface TVDialogProps {
   visible: boolean
   title: string
@@ -81,6 +88,7 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
 
   useEffect(() => {
     if (!visible) return
+    visibleDialogCount += 1
     setTVDialogActive(true)
     setFocusedIdx(0)
     focusedIdxRef.current = 0
@@ -122,6 +130,7 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
     })
 
     return () => {
+      visibleDialogCount -= 1
       setTVDialogActive(false)
       unsub()
       unregisterBack()
