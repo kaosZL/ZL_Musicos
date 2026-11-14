@@ -37,6 +37,8 @@ export const loadTVPresetUserApiCandidate = async(candidate: TVPresetUserApiCand
     name: parsedName || candidate.name,
     version: parsedVersion || '1',
     author: parsedAuthor || candidate.author,
+    description: '',
+    homepage: '',
     allowShowUpdateAlert: false,
     script,
   })

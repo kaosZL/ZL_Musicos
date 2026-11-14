@@ -123,6 +123,8 @@
 
 ## 🛠 构建与开发
 
+📖 **完整开发文档：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**——按键链路、自研焦点引擎、音源/音质、更新分发、发版流程、历史坑与修改守则，参与开发前必读。
+
 <details>
 <summary><b>点击展开</b></summary>
 

@@ -4,6 +4,7 @@ import { compareVer } from '@/utils'
 import { downloadFile, stopDownload, temporaryDirectoryPath } from '@/utils/fs'
 import { getSupportedAbis, installApk } from '@/utils/nativeModules/utils'
 import { httpFetch } from '@/utils/request'
+import { buildDownloadCandidates } from './updateUrlChain'
 
 const TV_UPDATE_MANIFEST_URLS = [
   // 国内可达优先：公共 gh 镜像前缀 → 直连 → jsDelivr 兜底（v1.9.23）
@@ -15,8 +16,6 @@ const TV_UPDATE_MANIFEST_URLS = [
 const GITHUB_RELEASE_LATEST_URL = 'https://api.github.com/repos/kaosZL/ZL_Musicos/releases/latest'
 const GITHUB_RELEASE_URL_PREFIX = 'https://github.com/kaosZL/ZL_Musicos/releases/tag/'
 const APK_ABIS = ['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86', 'universal'] as const
-// APK 下载镜像链（v1.9.23）：GitHub 直链在国内大概率超时，失败后依次换镜像前缀重试
-const GITHUB_DOWNLOAD_MIRRORS = ['https://ghfast.top/', 'https://gh-proxy.com/']
 export const TV_CURRENT_VERSION = currentVersion
 
 type TVUpdateAbi = typeof APK_ABIS[number]
@@ -111,7 +110,9 @@ const requestJson = async(url: string, accept = 'application/json') => {
   }).promise
 
   if (!resp.ok || resp.statusCode !== 200) throw new Error(`REQUEST_FAILED_${resp.statusCode}`)
-  return resp.body
+  // httpFetch（request.js）对 JSON 响应已自动 JSON.parse——运行时 body 是对象，
+  // 其 TS 标注（string | Blob）是上游的宽泛错标；这里按实际形态返回 unknown，调用侧按需断言
+  return resp.body as unknown
 }
 
 const normalizeAssets = (assets: TVUpdateManifestAsset[] = []) => {
@@ -163,14 +164,14 @@ const getRemoteVersionInfo = async() => {
   let lastError: unknown
   for (const url of TV_UPDATE_MANIFEST_URLS) {
     try {
-      return normalizeManifest(await requestJson(url))
+      return normalizeManifest(await requestJson(url) as TVUpdateManifest)
     } catch (err: unknown) {
       lastError = err
     }
   }
 
   try {
-    return normalizeGitHubRelease(await requestJson(GITHUB_RELEASE_LATEST_URL, 'application/vnd.github+json'))
+    return normalizeGitHubRelease(await requestJson(GITHUB_RELEASE_LATEST_URL, 'application/vnd.github+json') as GitHubRelease)
   } catch (err: unknown) {
     throw err ?? lastError
   }
@@ -226,22 +227,8 @@ export const downloadTVUpdate = async(info: TVUpdateInfo, onProgress: (total: nu
   const safeVersion = info.version.replace(/[^0-9a-z.-]/gi, '_')
   const savePath = `${temporaryDirectoryPath}/zl-music-tv-v${safeVersion}-${info.asset.abi}.apk`
 
-  // 下载候选链（v1.9.23）：清单给的 URL（可能已带镜像前缀）→ GitHub 原链 → 各镜像前缀
-  const buildCandidates = (url: string) => {
-    const candidates = [url]
-    const ghIdx = url.indexOf('https://github.com/')
-    if (ghIdx > 0) {
-      const origin = url.slice(ghIdx)
-      candidates.push(origin)
-      for (const mirror of GITHUB_DOWNLOAD_MIRRORS) candidates.push(mirror + origin)
-    } else if (ghIdx === 0) {
-      for (const mirror of GITHUB_DOWNLOAD_MIRRORS) candidates.push(mirror + url)
-    }
-    return [...new Set(candidates)]
-  }
-
   let lastError: unknown = null
-  for (const url of buildCandidates(info.asset.url)) {
+  for (const url of buildDownloadCandidates(info.asset.url)) {
     try {
       const { jobId, promise } = downloadFile(url, savePath, {
         progressInterval: 500,

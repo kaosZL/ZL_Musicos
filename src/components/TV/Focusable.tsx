@@ -69,7 +69,8 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
 
   const handleLongPress = useCallback(() => {
     longPressFiredRef.current = true
-    onLongPress?.()
+    // TV 侧长按回调均不消费手势事件参数（类型来自 PressableProps，签名要求一个 event）
+    ;(onLongPress as unknown as () => void)()
   }, [onLongPress])
 
   const handlePressIn = useCallback(() => {
@@ -123,17 +124,17 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
     })
   }, [focusScopeId, hasTVPreferredFocus, nextFocusDown, nextFocusLeft, nextFocusRight, nextFocusUp, onPress, triggerTVPress])
 
+  // RN 0.73 的 PressableProps 类型未收录 TV 焦点属性（hasTVPreferredFocus / nextFocus*，
+  // 运行时有效——原生 View 层支持），这里整体断言绕过类型缺口
+  const tvFocusProps = { hasTVPreferredFocus, nextFocusDown, nextFocusLeft, nextFocusRight, nextFocusUp } as unknown as PressableProps
+
   return (
     <Pressable
       ref={nativeRef}
       focusable
       accessible
       accessibilityRole="button"
-      hasTVPreferredFocus={hasTVPreferredFocus}
-      nextFocusUp={nextFocusUp}
-      nextFocusDown={nextFocusDown}
-      nextFocusLeft={nextFocusLeft}
-      nextFocusRight={nextFocusRight}
+      {...tvFocusProps}
       onPress={onPress ? triggerTVPress : undefined}
       onLongPress={onLongPress ? handleLongPress : undefined}
       onPressIn={handlePressIn}

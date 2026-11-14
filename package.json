@@ -1,7 +1,7 @@
 {
   "name": "zl-music",
-  "version": "1.9.24",
-  "versionCode": 225,
+  "version": "1.9.25",
+  "versionCode": 226,
   "private": true,
   "scripts": {
     "bundle-android": "react-native bundle --platform android --dev true --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res",
@@ -28,7 +28,8 @@
     "pack": "npm run pack:android",
     "publish": "node publish",
     "sc": "react-native start --reset-cache",
-    "build:theme": "node src/theme/themes/createThemes.js"
+    "build:theme": "node src/theme/themes/createThemes.js",
+    "test": "bash scripts/run-tests.sh"
   },
   "engines": {
     "node": ">= 18",

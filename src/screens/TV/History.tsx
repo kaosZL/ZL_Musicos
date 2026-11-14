@@ -49,7 +49,7 @@ function TVHistory({ componentId }: { componentId: string }) {
   // 首选源持久化（09-22 老板需求）：排行榜页选过的源记住，首页推荐架跟随同一源
   useEffect(() => {
     void getData<string>('tv_board_source').then(saved => {
-      if (saved && sourceOptions.includes(saved) && saved !== sourceSel) setSourceSel(saved)
+      if (saved && (sourceOptions as readonly string[]).includes(saved) && saved !== sourceSel) setSourceSel(saved)
     }).catch(() => { })
   }, [])
   const getSourceHandle = (id?: string | null) => id && sourceRefs.current[id] ? findNodeHandle(sourceRefs.current[id]) : null

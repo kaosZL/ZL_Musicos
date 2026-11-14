@@ -89,8 +89,9 @@ export default {
       }
       return true
     })
-    if (topList.length) arrUnshift(state.tempPlayList, topList.map(({ musicInfo, listId }) => ({ musicInfo, listId, isTempPlay: true })))
-    if (bottomList.length) arrPush(state.tempPlayList, bottomList.map(({ musicInfo, listId }) => ({ musicInfo, listId, isTempPlay: true })))
+    // 上游类型债：listId 实际可为 null、musicInfo 联合类型更宽——运行时原样透传，仅做类型断言
+    if (topList.length) arrUnshift(state.tempPlayList, topList.map(({ musicInfo, listId }) => ({ musicInfo, listId, isTempPlay: true } as unknown as LX.Player.PlayMusicInfo)))
+    if (bottomList.length) arrPush(state.tempPlayList, bottomList.map(({ musicInfo, listId }) => ({ musicInfo, listId, isTempPlay: true } as unknown as LX.Player.PlayMusicInfo)))
 
     global.state_event.playTempPlayListChanged({ ...state.tempPlayList })
   },

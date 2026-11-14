@@ -304,7 +304,7 @@ function TVQueue({ componentId }: { componentId: string }) {
                   subtitle={getMusicSubtitle(item)}
                   meta={item.interval ?? getSourceName(item.source)}
                   badge={isCurrentPlaying ? '▶ 正在播放' : undefined}
-                  lazyMusicInfo={item}
+                  lazyMusicInfo={item as unknown as LX.Music.MusicInfoOnline}
                   active={isCurrentPlaying || selectedIndex === index}
                   onFocus={() => { handleQueueFocus(index) }}
                   onPress={() => { void handlePlayNow(index) }}
