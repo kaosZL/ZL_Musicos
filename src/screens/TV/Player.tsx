@@ -13,17 +13,16 @@ import { playNext, playPrev, togglePlay } from '@/core/player/player'
 import { useSettingValue } from '@/store/setting/hook'
 import { updateSetting } from '@/core/common'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
-import { focusTVTargetByRef } from '@/components/TV/tvFocusManager'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
-import { registerTVBack } from '@/components/TV/tvBackManager'
-import { getDominantColor, debugLog } from '@/utils/nativeModules/utils'
-import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
-import { onTVRemoteEvent } from '@/utils/nativeModules/utils'
+import { getDominantColor } from '@/utils/nativeModules/utils'
 import { useLrcPlay, useLrcSet } from '@/plugins/lyric'
 import { MUSIC_TOGGLE_MODE, MUSIC_TOGGLE_MODE_LIST } from '@/config/constant'
 import { tvText } from './labels'
 import { getPlayModeName, getSourceName } from './utils'
 import { isDisplayLyric } from './lyricFilter'
+import { buildLyricWindow } from './playerLyrics'
+import { buildPlayerLayout } from './playerLayout'
+import { usePlayerControlDeck } from './usePlayerControlDeck'
 
 const getPlayModeIconName = (mode?: LX.AppSetting['player.togglePlayMethod']) => {
   switch (mode) {
@@ -50,17 +49,34 @@ function TVPlayer({ componentId }: { componentId: string }) {
   const lyricLines = useLrcSet()
   const apiSource = useSettingValue('common.apiSource')
   const playMode = useSettingValue('player.togglePlayMethod')
-  const [showControls, setShowControls] = useState(false)
-  const [hideKey, setHideKey] = useState(0)
-  const controlFocusCountRef = useRef(0)
-  // Issue #9 方案 B：时间戳守卫——即使 count 因组件重挂载短暂归零，500ms 内也不让直控拦截
-  const controlFocusTimeRef = useRef(0)
   const prevFocus = useTVFocusRef()
   const playFocus = useTVFocusRef()
   const nextFocus = useTVFocusRef()
   const modeFocus = useTVFocusRef()
   const lyricFocus = useTVFocusRef()
   const progressPercent = Math.max(0, Math.min(progress.progress * 100, 100))
+  // 控制舱（v1.9.25 收口重构）：控制栏显隐/焦点计数/按键路由/直控门控/返回键拦截/
+  // 切歌锁存/全屏歌词/内容再平衡全部收拢在 usePlayerControlDeck，本组件只做视图组合。
+  // 按键语义总表见 usePlayerControlDeck.ts 头部注释
+  const {
+    controlsVisible: showControls,
+    hideKey,
+    revealControls,
+    handleControlFocusChange,
+    fullscreenLyrics,
+    setFullscreenLyrics,
+    contentShiftAnim,
+    showAsPlaying,
+  } = usePlayerControlDeck({
+    componentId,
+    canPlay: !!musicInfo.id,
+    isPlay,
+    musicId: musicInfo.id,
+    playFocus,
+    onTogglePlay: () => { if (musicInfo.id) togglePlay() },
+    onPrev: () => { void playPrev() },
+    onNext: () => { void playNext() },
+  })
   // 专辑主色动态背景（借鉴 zl-music-tv）：换歌时从封面取主色，动画过渡浸染背景
   const [dominant, setDominant] = useState<string | null>(null)
   const dominantAnim = useRef(new Animated.Value(0)).current
@@ -97,333 +113,22 @@ function TVPlayer({ componentId }: { componentId: string }) {
   useEffect(() => { setSelfHandleTick(t => t + 1) }, [showControls])
   void selfHandleTick // showControls 翻转/首挂载后各强制重渲染一次，让 nextFocus 拿到真实句柄（首帧 ref 未挂载为 null）
   const lyricSelfHandle = lyricFocus.getNodeHandle() ?? undefined
-  // 全屏歌词（借鉴 zl-music-tv）：歌词区长按 OK 进入，OK/返回退出
-  const [fullscreenLyrics, setFullscreenLyrics] = useState(false)
-  // 切歌过渡锁存：播放内核切歌要先停旧歌、取新歌链接（约 1-2s），期间 isPlay 闪断，
-  // 播放键图标会闪「已暂停」再恢复（v1.9.21 实测反馈）。切歌前 5s 内在播 → 图标维持播放态直到真正续播
-  const lastPlayingAtRef = useRef(0)
-  const pendingPlayRef = useRef(false)
-  const [pendingPlay, setPendingPlay] = useState(false)
-  const prevMusicIdRef = useRef(musicInfo.id)
-  useEffect(() => {
-    if (!isPlay) return
-    lastPlayingAtRef.current = Date.now()
-    if (pendingPlayRef.current) {
-      pendingPlayRef.current = false
-      setPendingPlay(false)
-    }
-  }, [isPlay])
-  useEffect(() => {
-    if (musicInfo.id === prevMusicIdRef.current) return
-    prevMusicIdRef.current = musicInfo.id
-    if (!musicInfo.id) return
-    if (Date.now() - lastPlayingAtRef.current > 5000) return
-    pendingPlayRef.current = true
-    setPendingPlay(true)
-    const timer = setTimeout(() => {
-      pendingPlayRef.current = false
-      setPendingPlay(false)
-    }, 8000)
-    return () => clearTimeout(timer)
-  }, [musicInfo.id])
-  const showAsPlaying = isPlay || pendingPlay
-  useEffect(() => {
-    if (!fullscreenLyrics) return
-    const unsubKeys = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
-      if (eventType === 'select' && eventKeyAction === 1 && repeatCount === 0) setFullscreenLyrics(false)
-    })
-    // 返回键退出全屏歌词的逻辑并入下方统一 back 路由（z=100 屏级拦截），不再单挂 BackHandler
-    return () => { unsubKeys() }
-  }, [fullscreenLyrics])
   const sourceName = getSourceName(apiSource)
   const { width: screenWidth, height: screenHeight } = useWindowDimensions()
 
-  const appleLayout = useMemo(() => {
-    const metrics = getTVLayoutMetrics(screenWidth, screenHeight)
-    const rawScale = Math.min(screenWidth / 1144, screenHeight / 644)
-    const scale = Math.max(0.92, Math.min(rawScale, metrics.scale * (1.22 / 1.2)))
-    const offsetX = (screenWidth - 1144 * scale) / 2
-    const offsetY = (screenHeight - 644 * scale) / 2
-    const s = (value: number) => Math.round(value * scale)
-    const coverSize = s(312)
-
-    return {
-      albumColumn: {
-        left: offsetX + s(88),
-        top: offsetY + s(102),
-        width: coverSize,
-      },
-      coverStage: {
-        width: coverSize,
-        height: coverSize,
-      },
-      coverGlow: {
-        width: coverSize + s(18),
-        height: coverSize + s(18),
-        borderRadius: s(13),
-        left: -s(9),
-        top: -s(9),
-      },
-      coverWrap: {
-        width: coverSize,
-        height: coverSize,
-        borderRadius: s(8),
-      },
-      cover: {
-        borderRadius: s(8),
-      },
-      songIdentity: {
-        marginTop: s(14),
-        width: coverSize,
-      },
-      songTitle: {
-        fontSize: Math.max(15, s(19)),
-        lineHeight: Math.max(20, s(24)),
-      },
-      metaRow: {
-        marginTop: s(4),
-        maxWidth: coverSize,
-      },
-      songMeta: {
-        fontSize: Math.max(13, s(16)),
-        lineHeight: Math.max(18, s(21)),
-      },
-      sourceMeta: {
-        fontSize: Math.max(13, s(16)),
-        lineHeight: Math.max(18, s(21)),
-      },
-      lyricColumn: {
-        left: offsetX + s(501),
-        right: Math.max(s(48), screenWidth - (offsetX + s(1100))),
-        // 垂直方向与封面对齐（v1.9.24 实机反馈）：顶边=封面顶边、底边=封面底边，
-        // 高亮行在区域内垂直居中（样式层本就 justifyContent:center），上方保留 1-2 句已唱歌词
-        top: offsetY + s(102),
-        height: coverSize,
-      },
-      lyricContent: {
-        paddingRight: s(18),
-      },
-      lyricTextActive: {
-        fontSize: Math.max(34, s(44)),
-        lineHeight: Math.max(42, s(54)),
-      },
-      lyricTextNear: {
-        fontSize: Math.max(22, s(30)),
-        lineHeight: Math.max(29, s(38)),
-      },
-      lyricTextFar: {
-        fontSize: Math.max(19, s(26)),
-        lineHeight: Math.max(26, s(34)),
-      },
-      translation: {
-        fontSize: Math.max(14, s(18)),
-      },
-      dockOverlay: {
-        left: offsetX + s(48),
-        right: offsetX + s(48),
-        top: offsetY + s(538),
-        bottom: 0,
-      },
-      dockControls: {
-        right: s(80),
-        top: -s(26),
-      },
-      controlSmall: Math.max(34, s(42)),
-      controlPrimary: Math.max(42, s(52)),
-      backdropBlur: 34,
-      backdropInsetX: s(160),
-      backdropInsetY: s(130),
-      edgeInset: Math.max(0, offsetX),
-    }
-  }, [screenHeight, screenWidth])
+  const appleLayout = useMemo(
+    () => buildPlayerLayout(screenWidth, screenHeight, getTVLayoutMetrics(screenWidth, screenHeight)),
+    [screenHeight, screenWidth],
+  )
 
   useTVNavigationBack(componentId)
 
-  // 控制栏显隐规则（v1.9.24 老板拍板）：不自动隐藏——呼出后常驻，按返回键收起；
-  // 收起后再按返回才退出播放页。上下/菜单键呼出并聚焦播放键
-  const revealControls = useCallback(() => {
-    debugLog('呼出控制栏')
-    setShowControls(true)
-  }, [])
-
-  const handleControlFocus = useCallback(() => {
-    controlFocusCountRef.current += 1
-    controlFocusTimeRef.current = Date.now()
-    revealControls()
-  }, [revealControls])
-
-  const handleControlBlur = useCallback(() => {
-    controlFocusCountRef.current = Math.max(0, controlFocusCountRef.current - 1)
-    revealControls()
-  }, [revealControls])
-
-  // 计数改挂 onTVFocusChange（引擎路径+原生路径双触发、内部去重）：
-  // 只挂原生 onFocus 时，「呼出栏后引擎送焦点但原生事件没回调」的电视上计数保持 0，
-  // 按 OK 会双重触发（按下=按钮 togglePlay，松开=直控层 togglePlay）——播放键来回跳变
-  const handleControlFocusChange = useCallback((focused: boolean) => {
-    if (focused) handleControlFocus()
-    else handleControlBlur()
-  }, [handleControlFocus, handleControlBlur])
-
-  useEffect(() => {
-    if (!showControls) setHideKey(k => k + 1)
-  }, [showControls])
-
-  // 返回键统一路由（v1.9.24 根治）：返回键已纳入原生截获管线（与其他遥控键同路径），
-  // 这里注册屏级拦截（z=100），单处理器单优先级——全屏歌词 > 收起控制栏 > 交给导航返回（z=10）。
-  // 旧方案走系统 BackHandler 全局监听器栈（LIFO、依赖注册顺序、被压栈屏的监听器全部存活），
-  // 是「切歌后返回收栏失效」三连修的根源。链路保留运行日志，手机页可查
-  const showControlsRef = useRef(showControls)
-  useEffect(() => { showControlsRef.current = showControls }, [showControls])
-  const fullscreenLyricsRef = useRef(fullscreenLyrics)
-  useEffect(() => { fullscreenLyricsRef.current = fullscreenLyrics }, [fullscreenLyrics])
-  useEffect(() => {
-    return registerTVBack({
-      z: 100,
-      componentId,
-      handler: () => {
-        if (fullscreenLyricsRef.current) {
-          debugLog('back键: 退出全屏歌词')
-          setFullscreenLyrics(false)
-          return true
-        }
-        debugLog(`back键: showControls=${showControlsRef.current} 焦点计数=${controlFocusCountRef.current}`)
-        if (!showControlsRef.current) {
-          debugLog('back键: 控制栏已隐藏 → 交给导航返回')
-          return false
-        }
-        setShowControls(false)
-        controlFocusCountRef.current = 0
-        debugLog('back键: 收起控制栏')
-        return true
-      },
-    })
-  }, [componentId])
-
-  // Issue #13：控制栏隐藏后封面/歌词仍按「有底栏」的版式偏居上半屏，下半空旷——
-  // 隐藏时内容整体下移约半个控制栏高度，视觉再平衡（原生驱动 transform，不碰 JS 线程）
-  const contentShiftAnim = useRef(new Animated.Value(0)).current
-  useEffect(() => {
-    Animated.timing(contentShiftAnim, { toValue: showControls ? 0 : tvSize(56), duration: 280, useNativeDriver: true }).start()
-  }, [showControls, contentShiftAnim])
-
-  // 控制栏隐藏时按上/下/菜单呼出：setShowControls 是异步的，立刻 focusTVTargetByRef
-  // 时控制栏还没渲染（playFocus.ref.current 为 null）会落空；之后 preferred 调度又会被
-  // 引擎「不抢活焦点」守卫拦住（焦点在隐形歌词区）——补偿必须推迟到渲染完成后。
-  // 焦点已在控制栏按钮上时不抢（count>0 说明用户正操作按钮，交给按钮自身导航）
-  const focusPlayAfterReveal = useCallback(() => {
-    if (controlFocusCountRef.current > 0) return
-    // 4K 电视渲染慢时 dock 可能 >2 帧才挂载，RAF×2 会落空；500ms 内轮询重试
-    let tries = 0
-    const tick = () => {
-      if (controlFocusCountRef.current > 0) return
-      if (playFocus.ref.current) {
-        void focusTVTargetByRef(playFocus.ref.current)
-        return
-      }
-      if (++tries > 10) return
-      setTimeout(tick, 50)
-    }
-    requestAnimationFrame(tick)
-  }, [playFocus.ref])
-
-  useTVRemoteActions({
-    playPause: () => { if (musicInfo.id) togglePlay() },
-    previous: () => { if (musicInfo.id) void playPrev() },
-    rewind: () => { if (musicInfo.id) void playPrev() },
-    next: () => { if (musicInfo.id) void playNext() },
-    fastForward: () => { if (musicInfo.id) void playNext() },
-    stop: () => { if (musicInfo.id && isPlay) togglePlay() },
-    down: () => { revealControls(); focusPlayAfterReveal() },
-    up: () => { revealControls(); focusPlayAfterReveal() },
-    menu: () => { revealControls(); focusPlayAfterReveal() },
-  }, componentId)
-
-  // 播放页遥控直控（对齐 Apple Music TV 交互）：
-  // 控制栏未呼出/焦点不在控制按钮上时——OK=播放/暂停，左右短按=上一首/下一首。
-  // 长按左右不做任何事（快进快退功能已按需求移除；长按产生的 repeat 只记账，
-  // 让随后松开按键不触发切歌，避免「想长按结果松手切歌」的误触）
-  // 焦点在控制栏按钮上时（controlFocusCountRef > 0）不拦截，交给按钮本身处理。
-  // 左右切歌直控仅限控制栏隐藏态（听歌模式）；控制栏呼出（操作模式）时左右键
-  // 只做焦点导航，切歌必须焦点移到按钮上按 OK 确认（v1.9.21 老板拍板的规则）
-  const holdFiredRef = useRef({ left: false, right: false })
-  useEffect(() => {
-    return onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
-      const isSeekKey = eventType === 'left' || eventType === 'right'
-      const isSelectKey = eventType === 'select'
-      if (!isSeekKey && !isSelectKey) return
-      if (!musicInfo.id) return
-      if (controlFocusCountRef.current > 0) return
-      if (isSeekKey && showControls) return
-      if (Date.now() - controlFocusTimeRef.current < 500) return // Issue #9：重挂载空窗期不让直控触发
-      // eventKeyAction 即原生 KeyEvent.getAction()：0=DOWN, 1=UP。
-      // 长按 repeat 事件 action 仍是 0、靠 repeatCount>0 识别（ACTION_MULTIPLE 不出现在方向键上）
-      if (isSelectKey) {
-        if (eventKeyAction === 1) togglePlay()
-        return
-      }
-      const dir = eventType === 'left' ? 'left' : 'right'
-      if (eventKeyAction === 0 && (repeatCount ?? 0) > 0) {
-        // 长按重复：只标记，松开时不切歌（快进快退功能已移除）
-        holdFiredRef.current[dir] = true
-      } else if (eventKeyAction === 0) {
-        // 按下：重置本次长按标记
-        holdFiredRef.current[dir] = false
-      } else if (eventKeyAction === 1) {
-        // 松开：长按后的松开不切歌；短按直接切歌
-        if (holdFiredRef.current[dir]) {
-          holdFiredRef.current[dir] = false
-          return
-        }
-        if (eventType === 'left') void playPrev()
-        else void playNext()
-      }
-    })
-  }, [musicInfo.id, revealControls, showControls])
-
   const activeLyricIndex = lyricPlay.line >= 0 && lyricPlay.line < lyricLines.length ? lyricPlay.line : -1
   const fallbackLyric = isDisplayLyric(lyricPlay.text) ? lyricPlay.text.trim() : (musicInfo.id ? tvText.loading : tvText.chooseSongFirst)
-  const displayLyrics = useMemo(() => {
-    if (activeLyricIndex < 0 || !lyricLines.length) return [{ key: 'fallback', text: fallbackLyric, translation: '', active: true, distance: 0 }]
-
-    const currentItem = lyricLines[activeLyricIndex]
-    const seekLine = (direction: -1 | 1, step: number) => {
-      let count = 0
-      let index = activeLyricIndex
-      while (index >= 0 && index < lyricLines.length) {
-        index += direction
-        const item = lyricLines[index]
-        if (!item || !isDisplayLyric(item.text)) continue
-        count += 1
-        if (count === step) return { item, index }
-      }
-      return null
-    }
-
-    const activeDisplayLine = isDisplayLyric(currentItem?.text)
-      ? { item: currentItem, index: activeLyricIndex }
-      : seekLine(1, 1)
-
-    // 窗口 = 已唱 2 行 + 当前行 + 未唱 2 行（v1.9.24 实机反馈）：
-    // 当前行被已唱行垫到区域中部垂直居中，上方能看到 1-2 句唱过的歌词
-    const lines = [
-      seekLine(-1, 2),
-      seekLine(-1, 1),
-      activeDisplayLine,
-      seekLine(1, 1),
-      seekLine(1, 2),
-    ].filter(Boolean) as Array<{ item: (typeof lyricLines)[number], index: number }>
-
-    const nextLyrics = lines.map(({ item, index }) => ({
-      key: `${index}_${item.text}`,
-      text: item.text.trim(),
-      translation: item.extendedLyrics.find(isDisplayLyric)?.trim() ?? '',
-      active: index === activeDisplayLine?.index,
-      distance: Math.min(Math.abs(index - activeLyricIndex), 3),
-    })).filter((item, index, list) => item.text && list.findIndex(target => target.key === item.key) === index)
-
-    return nextLyrics.length ? nextLyrics : [{ key: 'fallback', text: fallbackLyric, translation: '', active: true, distance: 0 }]
-  }, [activeLyricIndex, fallbackLyric, lyricLines])
+  const displayLyrics = useMemo(
+    () => buildLyricWindow(lyricLines, activeLyricIndex, fallbackLyric),
+    [activeLyricIndex, fallbackLyric, lyricLines],
+  )
 
   const handleTogglePlay = useCallback(() => {
     if (!musicInfo.id) return

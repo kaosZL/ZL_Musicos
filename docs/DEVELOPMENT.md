@@ -93,7 +93,17 @@ __tests__/                  零依赖单测（esbuild 打包 + node 跑，npm te
 
 Pressable 的 TV 焦点属性（hasTVPreferredFocus/nextFocus*）在 RN 0.73 类型里缺失但运行时有效，组件内整体断言（`tvFocusProps as unknown as PressableProps`）。
 
-## 6. 播放页（Player.tsx）
+## 6. 播放页（Player.tsx + 模块群）
+
+v1.9.25 收口重构后，Player.tsx 只做视图组合，交互逻辑分驻四个模块（都有单测）：
+
+```text
+usePlayerControlDeck.ts   控制舱 hook：控制栏显隐/焦点计数/按键路由/返回键拦截(z=100)/
+                           切歌锁存/全屏歌词/内容再平衡——文件头有「按键语义总表」（唯一权威）
+playerDirectControlGate.ts 直控门控纯函数（三个历史 bug 的守卫规则，回归测试覆盖）
+playerLayout.ts           版式纯数学（跨屏幕恒定版式，metrics 注入）
+playerLyrics.ts           歌词窗口纯逻辑（已唱2+当前+未唱2，杂行过滤）
+```
 
 ### 6.1 控制栏显隐（v1.9.24 规则，老板拍板）
 - **不自动隐藏**：呼出后常驻
