@@ -137,7 +137,9 @@ if (Date.now() - controlFocusTimeRef.current < 500) return  // Issue #9 空窗�
 
 ## 8. 局域网手机互联（LanImportServer）
 
-NanoHTTPD，随机端口 + token 鉴权，`/api/` 前缀即 API。手机扫码（设置页出居中二维码）打开 `lan_input.html`：导入音源脚本/链接、歌单链接/清单/洛雪文件、歌单改名删除导出、**运行日志**（`/api/logs` 3s 轮询，环 200 条，logLock 同步）。JS 侧入口 `UtilsModule.debugLog(message)`。
+NanoHTTPD，随机端口 + token 鉴权，`/api/` 前缀即 API。手机扫码（设置页出居中二维码 + 网址文本）打开 `lan_input.html`：导入音源脚本/链接、歌单链接/清单/洛雪文件、歌单新建（`/api/songlist-create`）/改名/删除/导出、**运行日志**（`/api/logs` 3s 轮询，环 200 条，logLock 同步）。JS 侧入口 `UtilsModule.debugLog(message)`。
+
+**歌单增删归属（v1.9.25 老板拍板）**：新建/删除歌单**只**在手机页做；电视端长按歌单卡片只跳「改名」（屏上键盘）。`lx_list.lxmc` 整包歌单备份（type=playList_v2，data 含试听列表/我的收藏条目）由 `songlistImport.ts` 对号入座：内置条目 `overwriteListMusics` 覆写对应列表、自建条目走 `createList` + **歌曲写入回读校验**（0 首补写一次，仍失败如实上报）——此前内置条目被当自建歌单导入造成数据污染（Issue #15）。
 
 ## 9. 应用内更新（零后端）
 

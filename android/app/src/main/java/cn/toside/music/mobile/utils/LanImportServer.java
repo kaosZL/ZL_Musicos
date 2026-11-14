@@ -300,6 +300,11 @@ public class LanImportServer extends NanoHTTPD {
         notify("songlist-rename", payload);
         return json("{\"ok\":true,\"message\":\"已提交\"}");
       }
+      if ("/api/songlist-create".equals(uri)) {
+        // 新建空歌单（v1.9.25 老板拍板：歌单增删全部集中在手机页）
+        notify("songlist-create", payload);
+        return json("{\"ok\":true,\"message\":\"已提交\"}");
+      }
       if ("/api/songlist-remove".equals(uri)) {
         // 歌单删除：纯 JSON（{ids:[...]}），不需要解压展开
         notify("songlist-remove", payload);

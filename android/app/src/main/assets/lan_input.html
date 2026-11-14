@@ -56,16 +56,21 @@
   <input id="slName" placeholder="例如：车载歌单" autocapitalize="off" autocorrect="off" maxlength="40">
   <button onclick="doImportSonglist()">导入歌单到电视</button>
   <p id="songlistMsg" class="msg"></p>
-  <p class="hint">支持：各平台歌单链接（网易云 / QQ音乐 / 酷狗 / 酷我 / 咪咕）、洛雪导出的歌单文件（.json / .lxmc）、压缩包或 .crx 里的歌单文件，以及「歌名 - 歌手」纯文本清单。</p>
+  <p class="hint">支持：各平台歌单链接（网易云 / QQ音乐 / 酷狗 / 酷我 / 咪咕）、洛雪导出的歌单文件（.json / .lxmc）、<b>洛雪整包歌单备份（lx_list.lxmc，会连同「试听列表 / 我的收藏」一起恢复）</b>、压缩包或 .crx 里的歌单文件，以及「歌名 - 歌手」纯文本清单。</p>
 </section>
 
 <section>
-  <h2>歌单改名 / 删除</h2>
+  <h2>歌单管理（新建 / 改名 / 删除）</h2>
+  <label>新建歌单</label>
+  <div class="row" style="gap:8px;flex-wrap:wrap">
+    <input id="newListName" placeholder="新歌单名称" autocapitalize="off" autocorrect="off" maxlength="40" style="flex:1;min-width:140px">
+    <button onclick="createSonglist()">新建歌单</button>
+  </div>
   <button class="ghost" onclick="loadSonglists()">读取电视上的歌单</button>
   <div id="slList"><p class="empty">点上面的按钮读取</p></div>
   <button onclick="saveSonglists()">保存改名</button>
   <p id="renameMsg" class="msg"></p>
-  <p class="hint">改完点「保存改名」，电视端「我的歌单」会立即更新。电视遥控器输入不了中文，所以改名放在手机页做；导入错了的歌单也可以在这里点「删除这个歌单」直接删掉（删了不可恢复）。</p>
+  <p class="hint">歌单的新建 / 改名 / 删除都集中在这个页面（电视遥控器输入不了中文）。改完点「保存改名」，电视端「我的歌单」会立即更新；导入错了的歌单可以点「删除这个歌单」直接删掉（删了不可恢复）。</p>
 </section>
 
 <section>
@@ -312,6 +317,33 @@ async function loadSonglists() {
   } catch (e) {
     const detail = (e && e.message) ? e.message : '请确认电视端仍停在扫码导入页'
     showRenameMsg('读取失败：' + detail, true)
+  }
+}
+
+// 新建空歌单：歌单的新建/改名/删除全部集中在手机页（v1.9.25 老板拍板）
+async function createSonglist() {
+  const input = document.getElementById('newListName')
+  const name = input.value.trim()
+  if (!name) {
+    showRenameMsg('请填写新歌单的名称', true)
+    return
+  }
+  showRenameMsg('正在创建…')
+  try {
+    const r = await fetch(apiUrl('/api/songlist-create'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ name: name })
+    })
+    if (!r.ok) {
+      const d = await r.json().catch(() => null)
+      throw new Error((d && d.message) ? d.message : ('HTTP ' + r.status))
+    }
+    input.value = ''
+    showRenameMsg('已新建歌单「' + name + '」，电视端「我的歌单」立即可见')
+    await loadSonglists()
+  } catch (e) {
+    showRenameMsg('创建失败：' + ((e && e.message) ? e.message : '请重试'), true)
   }
 }
 

@@ -6,15 +6,13 @@ import TVText from '@/components/TV/TVText'
 import TVPosterCard from '@/components/TV/TVPosterCard'
 import TVGlassPanel from '@/components/TV/TVGlassPanel'
 import Focusable from '@/components/TV/Focusable'
-import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
 import { tvColors, tvSize } from '@/theme/tv'
 import { useMyList } from '@/store/list/hook'
-import { removeUserList, getListMusics } from '@/core/list'
+import { getListMusics } from '@/core/list'
 import { debugLog } from '@/utils/nativeModules/utils'
 import { LIST_IDS } from '@/config/constant'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { pushTVDetailScreen, pushTVPlayerScreen, pushTVRenameScreen, pushTVSettingsScreen } from '@/navigation/navigation'
-import { confirmDialog, tipDialog } from '@/utils/tools'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
@@ -79,7 +77,6 @@ function TVMyList({ componentId }: { componentId: string }) {
   }, [userSonglists])
   // 手机端操作歌单的结果（由设置页广播），直接显示在本页
   const [importResult, setImportResult] = useState<SonglistResult | null>(() => lastSonglistResultCache)
-  const [localDialog, setLocalDialog] = useState<TVDialogRequest | null>(null)
   const firstCardFocus = useTVFocusRef()
   const cardRefs = useRef<FocusRefMap>({})
   const listRefresh = useTVFocusRefresh()
@@ -176,43 +173,12 @@ function TVMyList({ componentId }: { componentId: string }) {
     pushTVDetailScreen(componentId, { type: 'userlist', id: list.id, title: list.name, subtitle: list.source ? getSourceName(list.source) : undefined, source: list.source, userlist: list })
   }
 
-  const handleRemoveSonglist = async(list: LX.List.UserListInfo) => {
-    const confirmed = await confirmDialog({
-      title: `${tvText.deleteSonglist}：${list.name}`,
-      message: tvText.deleteSonglistConfirm,
-      confirmButtonText: tvText.deleteSonglist,
-      cancelButtonText: tvText.cancelAction,
-    })
-    if (!confirmed) return
-    try {
-      await removeUserList([list.id])
-      // 歌单没了，聚焦的那张卡也被卸载了，重排一次焦点免得遥控器「悬空」
-      listRefresh()
-      await tipDialog({ title: tvText.deleteSonglistDone, message: list.name, btnText: tvText.knowIt })
-    } catch (err: unknown) {
-      await tipDialog({ title: tvText.deleteSonglistFailed, message: err instanceof Error ? err.message : '', btnText: tvText.knowIt })
-    }
-  }
-
-  // 长按链路埋点（v1.9.24 实机反馈「长按 OK 不能删除」）：手机页运行日志可查，
-  // 复现时按「长按 → 菜单 → 删除」走一遍，日志缺哪一环问题就在哪一环
+  // 长按链路埋点：手机页运行日志可查，长按失灵时日志缺哪一环问题就在哪一环
+  // （v1.9.25 老板拍板：歌单增删全部集中在手机页——电视端长按只保留「改名」，
+  //  屏上键盘可输入，输不了中文时引导去手机页）
   const handleManageSonglistLogged = (list: LX.List.UserListInfo) => {
-    debugLog(`长按管理菜单: ${list.name}`)
-    handleManageSonglist(list)
-  }
-
-  // 遥控器「长按 OK」= 歌单管理。改名现在可以直接在电视上做（屏上键盘），
-  // 但电视遥控器输不了中文，所以仍保留「去手机改」的说明。
-  const handleManageSonglist = (list: LX.List.UserListInfo) => {
-    setLocalDialog({
-      title: `${tvText.managingSonglist}：${list.name}`,
-      message: tvText.renameSonglistNeedPhone,
-      buttons: [
-        { label: tvText.cancelAction, tone: 'dark' },
-        { label: tvText.renameAction, tone: 'primary', onPress: () => { pushTVRenameScreen(componentId, { id: list.id, name: list.name }) } },
-        { label: tvText.deleteSonglist, tone: 'danger', onPress: () => { void handleRemoveSonglist(list) } },
-      ],
-    })
+    debugLog(`长按改名: ${list.name}`)
+    pushTVRenameScreen(componentId, { id: list.id, name: list.name })
   }
 
   const hasLists = userSonglists.length > 0
@@ -311,23 +277,6 @@ function TVMyList({ componentId }: { componentId: string }) {
           </TVGlassPanel>
         </View>
       </ScrollView>
-      <TVDialog
-        visible={!!localDialog}
-        resetKey={localDialog}
-        title={localDialog?.title ?? ''}
-        message={localDialog?.message}
-        buttons={localDialog?.buttons?.map(btn => ({
-          ...btn,
-          onPress: () => {
-            setLocalDialog(null)
-            btn.onPress?.()
-          },
-        })) ?? []}
-        onDismiss={() => {
-          localDialog?.onDismiss?.()
-          setLocalDialog(null)
-        }}
-      />
     </TVAppleScaffold>
   )
 }

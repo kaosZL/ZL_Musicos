@@ -16,7 +16,7 @@ import apiSourceInfo from '@/utils/musicSdk/api-source-info'
 import { LIST_IDS } from '@/config/constant'
 import { setApiSource } from '@/core/apiSource'
 import { updateSetting } from '@/core/common'
-import { removeUserList, updateUserList, getListMusics } from '@/core/list'
+import { createList, removeUserList, updateUserList, getListMusics } from '@/core/list'
 import { httpFetch } from '@/utils/request'
 import { debugLog, generateQRCodeBase64, onLanSourceEvent, onTVRemoteEvent, pushLanSonglists, pushLanSonglistExport, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
 import { importUserApi, removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
@@ -110,6 +110,10 @@ function TVSettings({ componentId }: { componentId: string }) {
   const updateButtonFocus = useTVFocusRef()
   const sourceRefs = useRef<FocusRefMap>({})
   const [qrImage, setQrImage] = useState('')
+  // 二维码对应的完整网址（含一次性 token）：显示在二维码下方——
+  // 电脑模拟器测试时网络是 NAT 隔离的（手机扫了也连不进模拟器），可在电脑上
+  // `adb forward tcp:9527 tcp:9527` 后用浏览器直接打开；也是扫码失败的兜底入口
+  const [qrUrl, setQrUrl] = useState('')
   const [lanRunning, setLanRunning] = useState(false)
   const [lanMessage, setLanMessage] = useState('')
   const [lanMessageOk, setLanMessageOk] = useState(false)
@@ -365,6 +369,27 @@ function TVSettings({ componentId }: { componentId: string }) {
         // 同时广播给首页「我的歌单」，让用户不用回到设置页也能看到导入结果
         global.app_event.songlistImportResult({ ok: outcome.ok, message: outcome.message })
         showLanResult(outcome.ok ? tvText.importSuccess : tvText.importFailed, outcome.message)
+      } else if (action === 'songlist-create') {
+        // 手机页新建空歌单（v1.9.25 老板拍板：歌单增删全部集中在手机页，电视端不再提供创建入口）
+        const data = JSON.parse(payload || '{}') as { name?: string }
+        const name = data.name?.trim()
+        if (!name) {
+          setLanMessageOk(false)
+          setLanMessage('请填写歌单名称')
+          return
+        }
+        if (userSonglists.some(list => list.name === name)) {
+          setLanMessageOk(false)
+          setLanMessage(`已有名为「${name}」的歌单`)
+          showLanResult('新建失败', `已有名为「${name}」的歌单`)
+          return
+        }
+        await createList({ name, list: [] })
+        const createdMessage = `已新建歌单「${name}」`
+        setLanMessageOk(true)
+        setLanMessage(createdMessage)
+        global.app_event.songlistImportResult({ ok: true, message: createdMessage })
+        showLanResult('新建歌单', createdMessage)
       } else if (action === 'songlist-rename') {
         // 手机页改名：拿本地列表补全其余字段（locationUpdateTime 等），只覆盖 name
         const data = JSON.parse(payload || '{}') as { renames?: Array<{ id?: string, name?: string }> }
@@ -480,7 +505,9 @@ function TVSettings({ componentId }: { componentId: string }) {
       pushLanSourcesSnapshot()
       void pushLanSonglistsSnapshot()
       // URL 带一次性 token：服务绑 0.0.0.0，没鉴权的话同局域网任意设备都能删歌单/注脚本
-      const qr = await generateQRCodeBase64(`http://${ip}:${port}/?t=${encodeURIComponent(token)}`, 560)
+      const lanUrl = `http://${ip}:${port}/?t=${encodeURIComponent(token)}`
+      const qr = await generateQRCodeBase64(lanUrl, 560)
+      setQrUrl(lanUrl)
       setQrImage(qr)
       setLanRunning(true)
     } catch (err: unknown) {
@@ -509,6 +536,7 @@ function TVSettings({ componentId }: { componentId: string }) {
     }
     setLanRunning(false)
     setQrImage('')
+    setQrUrl('')
   }
 
   // 二维码弹层期间接管按键：弹层里没有可聚焦项，焦点控制器让路（setTVDialogActive），
@@ -726,7 +754,8 @@ function TVSettings({ componentId }: { componentId: string }) {
           <View style={styles.qrCard}>
             <Image source={{ uri: qrImage }} style={styles.qrBigImage} />
           </View>
-          <TVText variant="body" style={styles.qrOverlayHint}>手机扫码打开页面，可导入音源/歌单，也能给已导入的歌单改名、删除</TVText>
+          <TVText variant="body" style={styles.qrOverlayHint}>手机扫码打开页面，可导入音源/歌单，也能新建歌单、给歌单改名/删除</TVText>
+          <TVText variant="caption" style={styles.qrUrlText}>{qrUrl}</TVText>
           <TVText variant="caption" color={tvColors.warn} style={styles.qrOverlayHint}>⚠ 请确保手机与电视连接同一局域网（WiFi） · 按遥控器 OK 键关闭</TVText>
         </View>
       ) : null}
@@ -762,6 +791,7 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   qrCard: { backgroundColor: '#FFFFFF', borderRadius: tvSize(24), padding: tvSize(28), elevation: 50 },
   qrBigImage: { width: tvSize(420), height: tvSize(420) },
   qrOverlayHint: { textAlign: 'center' },
+  qrUrlText: { textAlign: 'center', color: 'rgba(247,248,251,0.72)', marginTop: tvSize(6) },
 }
 
 export default memo(TVSettings)
