@@ -31,7 +31,9 @@ const TVMusicRow = forwardRef<any, Props>(({
   ...props
 }, ref) => {
   const showArt = image !== undefined || lazyMusicInfo !== undefined
-  const [resolvedImage, setResolvedImage] = useState<string | null>(image ?? null)
+  // 封面初始值直接用歌曲元数据里的专辑图：在线搜索/洛雪导入/同步落库的歌都带
+  // meta.picUrl，无需等聚焦才懒解析；没有的再走聚焦时的 getPicUrl 兜底，最后才是首字占位
+  const [resolvedImage, setResolvedImage] = useState<string | null>(() => image ?? lazyMusicInfo?.meta?.picUrl ?? null)
   const loadedRef = useRef(false)
 
   useEffect(() => { setResolvedImage(image ?? null) }, [image])
