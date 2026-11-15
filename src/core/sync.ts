@@ -2,6 +2,7 @@ import { dismissOverlay, onModalDismissed, showSyncModeModal } from '@/navigatio
 import syncState from '@/store/sync/state'
 import syncActions from '@/store/sync/action'
 import { getCachedIsTV } from '@/utils/tvMode'
+import { debugLog } from '@/utils/nativeModules/utils'
 
 type RemoveListener = (() => void) | null
 let removeEvent: RemoveListener
@@ -31,6 +32,7 @@ const closeSyncModeModal = () => {
 const TV_SYNC_MODE_TIMEOUT_MS = 60_000
 
 const tvSelectSyncMode = <T extends keyof LX.Sync.ModeTypes>(serverName: string, type: T, resolve: (mode: LX.Sync.ModeTypes[T]) => void, reject: (err: Error) => void) => {
+  debugLog(`[同步]首次同步请求选择方式（服务器：${serverName}，等手机页选择，60s 超时）`)
   syncActions.setPendingMode({ serverName, type })
 
   let settled = false
