@@ -17,7 +17,7 @@ import apiSourceInfo from '@/utils/musicSdk/api-source-info'
 import { LIST_IDS } from '@/config/constant'
 import { setApiSource } from '@/core/apiSource'
 import { updateSetting } from '@/core/common'
-import { debugLog, generateQRCodeBase64, getLastLanActivity, onTVRemoteEvent } from '@/utils/nativeModules/utils'
+import { generateQRCodeBase64, onTVRemoteEvent } from '@/utils/nativeModules/utils'
 import { removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
 import { confirmDialog } from '@/utils/tools'
 import { startTvLanSession, stopTvLanSession, subscribeTvLanSession } from '@/core/tvLan'
@@ -274,25 +274,6 @@ function TVSettings({ componentId }: { componentId: string }) {
   // 手机互联会话状态（v1.9.25 全局单例化：二维码只是展示窗口，会话独立于本组件存活）
   const [tvLanSession, setTvLanSessionState] = useState({ running: false, url: '' })
   useEffect(() => subscribeTvLanSession(setTvLanSessionState), [])
-  // 手机页真实在线状态（基线重引 #2）：手机页开着会持续轮询 /api/logs 等，
-  // 最近 8 秒内有鉴权请求 = 在线。3 秒一拍刷新——手机关掉网页几秒内状态就会变「等待」
-  const [phoneOnline, setPhoneOnline] = useState(false)
-  useEffect(() => {
-    if (!tvLanSession.running) {
-      setPhoneOnline(false)
-      return
-    }
-    let alive = true
-    const tick = async() => {
-      try {
-        const at = await getLastLanActivity()
-        if (alive) setPhoneOnline(Date.now() - at < 8000)
-      } catch { /* 原生不可用时保持现状 */ }
-    }
-    void tick()
-    const timer = setInterval(tick, 3000)
-    return () => { alive = false; clearInterval(timer) }
-  }, [tvLanSession.running])
 
   const handleOpenLanImport = async() => {
     try {
@@ -330,9 +311,8 @@ function TVSettings({ componentId }: { componentId: string }) {
       cancelButtonText: tvText.cancelAction,
     }).then(confirmed => {
       if (!confirmed) return
-      debugLog('手机互联：确认关闭，停止会话')
       handleCloseLanImport()
-      void stopTvLanSession().then(() => { debugLog('手机互联：会话已停止') })
+      void stopTvLanSession()
     })
   }
 
@@ -537,15 +517,13 @@ function TVSettings({ componentId }: { componentId: string }) {
             {importMessage ? <TVText variant="caption" color={importMessage === tvText.importSuccess ? tvColors.primaryHigh : tvColors.warn} style={styles.message}>{importMessage}</TVText> : null}
             {/* 手机互联会话状态行：二维码收起后手机页仍在连接（会话是全局单例，v1.9.25） */}
             <View style={[styles.lanResult, tvLanSession.running ? styles.lanResultOk : null]}>
-              <TVText variant="body" color={tvLanSession.running ? (phoneOnline ? tvColors.primaryHigh : tvColors.warn) : tvColors.subtext}>
-                {tvLanSession.running
-                  ? (phoneOnline ? '手机互联运行中 · 手机页已连接 · 收起二维码不断开' : '手机互联运行中 · 等待手机页连接（手机扫码进入）')
-                  : '未连接 · 按 OK 打开二维码，手机扫码操作'}
+              <TVText variant="body" color={tvLanSession.running ? tvColors.primaryHigh : tvColors.subtext}>
+                {tvLanSession.running ? '手机互联运行中 · 收起二维码不断开' : '未连接 · 按 OK 打开二维码，手机扫码操作'}
               </TVText>
             </View>
             <TVButton
               ref={lanButtonFocus.ref as any}
-              label={lanRunning ? '收起二维码' : tvLanSession.running ? (phoneOnline ? '查看二维码 · 手机已连接' : '查看二维码 · 等待手机连接') : '手机扫码导入'}
+              label={lanRunning ? '收起二维码' : tvLanSession.running ? '查看二维码 · 互联运行中' : '手机扫码导入'}
               tone={tvLanSession.running ? 'primary' : 'dark'}
               onPress={() => { void (lanRunning ? handleCloseLanImport() : handleOpenLanImport()) }}
               onLongPress={tvLanSession.running ? handleStopLanSession : undefined}

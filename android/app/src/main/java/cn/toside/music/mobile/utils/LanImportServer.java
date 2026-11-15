@@ -129,13 +129,6 @@ public class LanImportServer extends NanoHTTPD {
     return authToken;
   }
 
-  /** 最近一次通过鉴权的 /api/ 请求时间戳（手机页在线判断：页面开着会持续轮询日志/状态） */
-  private static volatile long lastApiRequestAt = 0L;
-
-  public static long getLastApiRequestAt() {
-    return lastApiRequestAt;
-  }
-
   private static String generateToken() {
     byte[] buf = new byte[16];
     new java.security.SecureRandom().nextBytes(buf);
@@ -256,7 +249,6 @@ public class LanImportServer extends NanoHTTPD {
     if (Method.GET.equals(method) && ("/".equals(uri) || "/index.html".equals(uri))) {
       return newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", new String(getPage(), StandardCharsets.UTF_8));
     }
-    if (uri.startsWith("/api/")) lastApiRequestAt = System.currentTimeMillis();
     if (Method.GET.equals(method) && "/api/sources".equals(uri)) {
       return json(sourcesJson);
     }

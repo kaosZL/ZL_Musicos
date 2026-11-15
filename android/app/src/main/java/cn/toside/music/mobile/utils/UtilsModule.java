@@ -245,11 +245,6 @@ public class UtilsModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
-  public void getLastLanActivity(Promise promise) {
-    promise.resolve(LanImportServer.getLastApiRequestAt());
-  }
-
-  @ReactMethod
   public void debugLog(String message) {
     // 手机页「运行日志」的 JS 侧入口：排查真机遥控/返回键等问题（v1.9.24）
     LanImportServer.addLog("[JS] " + message);
