@@ -74,6 +74,32 @@
 </section>
 
 <section>
+  <h2>数据同步（与洛雪电脑版/移动版互通歌单）</h2>
+  <p id="syncStatusLine" class="msg">读取状态中…</p>
+  <div id="syncModeBox" style="display:none;background:#13203a;border:1px solid #3a5a9a;border-radius:8px;padding:12px;margin:10px 0">
+    <b>首次同步：请选择歌单同步方式</b>
+    <p class="hint" style="margin:6px 0">合并 = 两边歌单都保留（区别只是排列顺序以谁为基础）；覆盖 = 被覆盖一方的歌单会被替换。60 秒未选择将自动取消连接。</p>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <button onclick="chooseSyncMode('merge_local_remote')">合并 · 顺序以电视为主</button>
+      <button onclick="chooseSyncMode('merge_remote_local')">合并 · 顺序以电脑为主</button>
+      <button onclick="chooseSyncMode('overwrite_local_remote')">覆盖 · 电视 → 电脑</button>
+      <button onclick="chooseSyncMode('overwrite_remote_local')">覆盖 · 电脑 → 电视</button>
+      <button class="ghost" onclick="chooseSyncMode('cancel')">取消连接</button>
+    </div>
+  </div>
+  <label>同步服务地址（电脑版洛雪：设置 → 数据同步 → 服务端模式启动后填它的地址）</label>
+  <input id="syncHost" placeholder="http://192.168.1.100:23332" autocapitalize="off" autocorrect="off">
+  <label>连接码（电脑端设置了才填，没设就留空）</label>
+  <input id="syncCode" placeholder="留空 = 无连接码" autocapitalize="off" autocorrect="off" maxlength="20">
+  <div class="row" style="gap:8px;flex-wrap:wrap">
+    <button onclick="submitSync()">保存并连接</button>
+    <button class="ghost" onclick="disconnectSync()">断开同步</button>
+  </div>
+  <p id="syncMsg" class="msg"></p>
+  <p class="hint">⚠ 同步开启后，<b>删除歌单/歌曲会同步到另一端</b>（包括断开期间的操作，重连时按上次快照合并）——在电视上删歌单前想清楚电脑端也会没。多端听歌保持一致就靠它，怕误删就先在电脑端备份歌单。</p>
+</section>
+
+<section>
   <h2>运行日志（实时）</h2>
   <div class="row" style="gap:8px;flex-wrap:wrap">
     <button class="btn btn-s" id="logCopyBtn" type="button">一键复制日志</button>
@@ -345,6 +371,103 @@ async function createSonglist() {
   } catch (e) {
     showRenameMsg('创建失败：' + ((e && e.message) ? e.message : '请重试'), true)
   }
+}
+
+// ===== 数据同步（v1.9.25：全部操作集中在本页）=====
+async function fetchSyncStatus() {
+  const r = await fetch(apiUrl('/api/sync-status'))
+  if (!r.ok) throw new Error('HTTP ' + r.status)
+  return r.json()
+}
+
+function renderSyncStatus(d) {
+  const line = document.getElementById('syncStatusLine')
+  const box = document.getElementById('syncModeBox')
+  const hostInput = document.getElementById('syncHost')
+  if (!d) return
+  const hostText = d.host ? (' · ' + d.host) : ''
+  line.textContent = '状态：' + (d.label || '未知') + hostText
+  line.className = 'msg' + (d.connected ? '' : (d.enabled ? ' err' : ''))
+  if (d.host && !hostInput.value) hostInput.value = d.host
+  if (d.pendingMode) {
+    box.style.display = 'block'
+    box.querySelector('b').textContent = '首次同步：请选择' + (d.pendingMode.type === 'dislike' ? '同步方式' : '歌单同步方式') + '（服务器：' + (d.pendingMode.serverName || '未知') + '）'
+  } else {
+    box.style.display = 'none'
+  }
+}
+
+async function pollSyncStatus() {
+  try { renderSyncStatus(await fetchSyncStatus()) } catch (e) { /* 静默，下轮再试 */ }
+}
+setInterval(pollSyncStatus, 2000)
+pollSyncStatus()
+
+// 提交/选择后快速连拉几轮，让状态立刻可见（正常轮询 2s 一拍）
+async function burstSyncStatus(rounds) {
+  for (let i = 0; i < (rounds || 15); i++) {
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    await pollSyncStatus()
+  }
+}
+
+function showSyncMsg(text, isErr) {
+  const el = document.getElementById('syncMsg')
+  el.textContent = text
+  el.className = isErr ? 'msg err' : 'msg'
+}
+
+async function submitSync() {
+  const host = document.getElementById('syncHost').value.trim()
+  const code = document.getElementById('syncCode').value.trim()
+  if (!/^https?:\/\/\S+/i.test(host)) {
+    showSyncMsg('地址无效，应形如 http://192.168.1.100:23332', true)
+    return
+  }
+  showSyncMsg('正在连接…')
+  try {
+    const r = await fetch(apiUrl('/api/sync-config'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ host: host, code: code })
+    })
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    showSyncMsg('已提交，状态见上方刷新（首次同步可能需要在上面选择同步方式）')
+    burstSyncStatus(20)
+  } catch (e) {
+    showSyncMsg('提交失败：' + ((e && e.message) ? e.message : '请重试'), true)
+  }
+}
+
+async function disconnectSync() {
+  showSyncMsg('正在断开…')
+  try {
+    const r = await fetch(apiUrl('/api/sync-config'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ disconnect: true })
+    })
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    showSyncMsg('已断开数据同步')
+    burstSyncStatus(6)
+  } catch (e) {
+    showSyncMsg('断开失败：' + ((e && e.message) ? e.message : '请重试'), true)
+  }
+}
+
+async function chooseSyncMode(mode) {
+  try {
+    const r = await fetch(apiUrl('/api/sync-mode'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ mode: mode })
+    })
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    showSyncMsg(mode === 'cancel' ? '已取消本次连接' : '已选择同步方式，正在同步…')
+  } catch (e) {
+    showSyncMsg('提交失败：' + ((e && e.message) ? e.message : '请重试'), true)
+  }
+  burstSyncStatus(20)
 }
 
 // 提交之后回读快照确认是否真的生效。

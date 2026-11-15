@@ -555,6 +555,12 @@ public class UtilsModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
+  public void pushLanSyncStatus(String syncStatusJson, Promise promise) {
+    LanImportServer.setSyncStatus(syncStatusJson);
+    promise.resolve(null);
+  }
+
+  @ReactMethod
   public void pushLanSonglistExport(String json, Promise promise) {
     LanImportServer.setSonglistExport(json);
     promise.resolve(null);

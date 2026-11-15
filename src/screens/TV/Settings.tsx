@@ -12,13 +12,17 @@ import { useSettingValue } from '@/store/setting/hook'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { useMyList } from '@/store/list/hook'
 import { useStatus, useUserApiList } from '@/store/userApi/hook'
+import syncState from '@/store/sync/state'
 import apiSourceInfo from '@/utils/musicSdk/api-source-info'
 import { LIST_IDS } from '@/config/constant'
 import { setApiSource } from '@/core/apiSource'
 import { updateSetting } from '@/core/common'
 import { createList, removeUserList, updateUserList, getListMusics } from '@/core/list'
+import { connectServer, disconnectServer } from '@/plugins/sync'
+import { getSyncHost, setSyncHost } from '@/plugins/sync/data'
+import { SYNC_CODE } from '@/plugins/sync/constants'
 import { httpFetch } from '@/utils/request'
-import { debugLog, generateQRCodeBase64, onLanSourceEvent, onTVRemoteEvent, pushLanSonglists, pushLanSonglistExport, pushLanSources, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
+import { debugLog, generateQRCodeBase64, onLanSourceEvent, onTVRemoteEvent, pushLanSonglists, pushLanSonglistExport, pushLanSources, pushLanSyncStatus, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
 import { importUserApi, removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
@@ -90,6 +94,25 @@ const getMaxSupportedQuality = (): LX.Quality | null => {
     if (all.has(QUALITY_OPTIONS[i].q)) return QUALITY_OPTIONS[i].q
   }
   return null
+}
+
+/** 同步状态 → 手机页显示的中文标签（原始 message 是英文码，映射见 SYNC_CODE） */
+const syncStatusLabel = (enabled: boolean, status: LX.Sync.Status) => {
+  if (!enabled) return '未启用'
+  const message = status.message
+  if (!message) return status.status ? '已连接' : '未连接'
+  switch (message) {
+    case SYNC_CODE.connecting: return '连接中…'
+    case SYNC_CODE.authFailed: return '连接码错误'
+    case SYNC_CODE.missingAuthCode: return '需要连接码（在下方填写后重新连接）'
+    case SYNC_CODE.msgBlockedIp: return 'IP 被服务器屏蔽'
+    case SYNC_CODE.unknownServiceAddress: return '地址无效'
+    case SYNC_CODE.lowServiceVersion: return '服务器版本过低，请升级电脑版洛雪'
+    case SYNC_CODE.highServiceVersion: return '服务器版本过高，请更新本 App'
+    case SYNC_CODE.getServiceIdFailed: return '获取服务 ID 失败'
+    case SYNC_CODE.connectServiceFailed: return '连接失败（检查地址 / 电脑端服务是否开启）'
+    default: return message
+  }
 }
 
 function TVSettings({ componentId }: { componentId: string }) {
@@ -390,6 +413,36 @@ function TVSettings({ componentId }: { componentId: string }) {
         setLanMessage(createdMessage)
         global.app_event.songlistImportResult({ ok: true, message: createdMessage })
         showLanResult('新建歌单', createdMessage)
+      } else if (action === 'sync-config') {
+        // 手机页数据同步配置（v1.9.25 老板拍板：数据同步的全部操作都在手机网页做）
+        const data = JSON.parse(payload || '{}') as { host?: string, code?: string, disconnect?: boolean }
+        if (data.disconnect) {
+          disconnectServer()
+          updateSetting({ 'sync.enable': false })
+          setLanMessageOk(true)
+          setLanMessage('已断开数据同步')
+          return
+        }
+        const host = data.host?.trim() ?? ''
+        if (!/^https?:\/\/\S+/i.test(host)) {
+          setLanMessageOk(false)
+          setLanMessage('同步地址无效，应形如 http://192.168.1.100:23332')
+          showLanResult('数据同步', '同步地址无效，应形如 http://192.168.1.100:23332')
+          return
+        }
+        await setSyncHost(host)
+        setSyncHostState(host)
+        updateSetting({ 'sync.enable': true })
+        void connectServer(host, data.code?.trim() || undefined)
+        setLanMessageOk(true)
+        setLanMessage('已保存，正在连接——状态见下方「数据同步」区刷新')
+        showLanResult('数据同步', `已保存 ${host}，正在连接…\n状态请在手机页查看；首次同步如需选择方式，按钮会出现在本页`)
+      } else if (action === 'sync-mode') {
+        // 手机页回传的「首次同步方式」选择 → 走既有 app_event 机制 resolve selectSyncMode
+        const data = JSON.parse(payload || '{}') as { mode?: string }
+        if (!data.mode) return
+        global.app_event.selectSyncMode({ type: syncState.type, mode: data.mode } as LX.Sync.ModeType)
+        debugLog(`同步方式已选: ${data.mode}`)
       } else if (action === 'songlist-rename') {
         // 手机页改名：拿本地列表补全其余字段（locationUpdateTime 等），只覆盖 name
         const data = JSON.parse(payload || '{}') as { renames?: Array<{ id?: string, name?: string }> }
@@ -493,6 +546,31 @@ function TVSettings({ componentId }: { componentId: string }) {
     if (!lanRunning) return
     void pushLanSonglistsSnapshot()
   }, [lanRunning, pushLanSonglistsSnapshot])
+
+  // ===== 数据同步（v1.9.25，全部操作集中在手机页）=====
+  const syncEnabled = useSettingValue('sync.enable')
+  const [syncHost, setSyncHostState] = useState('')
+  useEffect(() => { void getSyncHost().then(host => { setSyncHostState(host ?? '') }) }, [])
+  // 状态 + 待选同步方式一起订阅：useStatus 只回传 status 对象（同引用不触发渲染），
+  // pendingMode 变化虽然也广播 syncStatusUpdated，但得在这里整体取新快照才能感知
+  const [syncSnapshot, setSyncSnapshot] = useState(() => ({ status: { ...syncState.status }, pendingMode: syncState.pendingMode }))
+  useEffect(() => {
+    const update = () => { setSyncSnapshot({ status: { ...syncState.status }, pendingMode: syncState.pendingMode }) }
+    global.state_event.on('syncStatusUpdated', update)
+    return () => { global.state_event.off('syncStatusUpdated', update) }
+  }, [])
+  // 同步状态快照推给手机页（含待选方式请求——手机页据此渲染「首次同步方式」按钮）
+  useEffect(() => {
+    if (!lanRunning) return
+    void pushLanSyncStatus(JSON.stringify({
+      enabled: syncEnabled,
+      connected: syncSnapshot.status.status,
+      message: syncSnapshot.status.message,
+      label: syncStatusLabel(syncEnabled, syncSnapshot.status),
+      host: syncHost,
+      pendingMode: syncSnapshot.pendingMode,
+    }))
+  }, [lanRunning, syncEnabled, syncSnapshot, syncHost])
 
   const handleOpenLanImport = async() => {
     setLanMessage('')
