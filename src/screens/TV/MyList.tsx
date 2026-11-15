@@ -12,7 +12,7 @@ import { getListMusics } from '@/core/list'
 import { debugLog } from '@/utils/nativeModules/utils'
 import { LIST_IDS } from '@/config/constant'
 import { usePlayerMusicInfo } from '@/store/player/hook'
-import { pushTVDetailScreen, pushTVPlayerScreen, pushTVRenameScreen, pushTVSettingsScreen } from '@/navigation/navigation'
+import { pushTVDetailScreen, pushTVPlayerScreen, pushTVRenameScreen } from '@/navigation/navigation'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
@@ -27,10 +27,6 @@ interface SonglistResult { ok: boolean, message: string }
 // 手机端导入/改名/删除的结果缓存在模块级：本页被切走再回来时组件会重新挂载、
 // state 会被重置，这里留一份，保证用户回到本页仍能看到「上次的结果」。
 let lastSonglistResultCache: SonglistResult | null = null
-
-// 常驻的「导入歌单」入口卡片。这张卡任何时候都在（空态时它兼任空态提示），
-// 所以 key 用固定的 IMPORT_CARD_KEY，不随歌单数量变化。
-const IMPORT_CARD_KEY = '__mylist_import__'
 
 // 面板内边距。抽成常量是为了让「聚焦滚动」的坐标换算与 styles.panel 用同一个值，不会各写一份。
 const PANEL_PADDING = tvSize(28)
@@ -199,6 +195,7 @@ function TVMyList({ componentId }: { componentId: string }) {
           <TVText variant="pageTitle">{tvText.mySonglists}</TVText>
           <TVText variant="body" style={styles.subtitle}>{hasLists ? `${userSonglists.length} ${tvText.songlist}` : tvText.emptyMySonglists}</TVText>
           <TVText variant="caption" color={tvColors.dimText} style={styles.hint}>{tvText.myListHint}</TVText>
+          <TVText variant="caption" color={tvColors.dimText} style={styles.hint}>歌单的新建 / 导入 / 删除 / 改名请在手机页操作：设置 → 手机扫码导入</TVText>
         </View>
         {/* TVGlassPanel 只透传 style/accent、不接受 onLayout，量不到面板在【滚动内容坐标系】里的 y；
             这里外套一层透明 View 专门取这个 y，作为 revealCardRow 的坐标基准 */}
@@ -217,28 +214,11 @@ function TVMyList({ componentId }: { componentId: string }) {
                 与歌单卡的视觉区分改用【虚线边框 + ＋ 号】实现 —— 对早年导入、名字仍是
                 「导入歌单 MM-DD HH:mm」的旧数据同样有效（改名只影响之后新导入的）。 */}
             <View style={styles.grid}>
-              <Focusable
-                ref={getCardRefCallback(IMPORT_CARD_KEY, true) as any}
-                style={styles.importCard}
-                focusStyle={styles.importCardFocus}
-                onPress={() => { pushTVSettingsScreen(componentId) }}
-                onFocus={() => { revealCardRow(IMPORT_CARD_KEY) }}
-                onLayout={(e) => { recordCardBox(IMPORT_CARD_KEY, e.nativeEvent.layout.y, e.nativeEvent.layout.height) }}
-                nextFocusUp={getActiveTabHandle() ?? undefined}
-              >
-                <View style={styles.importHead}>
-                  <TVText variant="cardTitle" style={styles.importPlus}>＋</TVText>
-                  <TVText variant="cardTitle" numberOfLines={1}>{hasLists ? tvText.importSonglist : tvText.emptyMySonglists}</TVText>
-                </View>
-                <TVText variant="caption" color={tvColors.dimText} style={styles.emptyHint}>
-                  {hasLists ? tvText.importSonglistTip : tvText.emptyMySonglistsHint}
-                </TVText>
-              </Focusable>
-              {/* 「我的收藏」常驻卡：上游一直存在这个列表，但 TV 端此前无任何入口（09-20 需求）；
-                  红色调与自建歌单区分，封面取收藏里第一首歌的专辑图 */}
+              {/* 「我的收藏」常驻卡（v1.9.25 起是本页第一张卡，接管首卡焦点同步）：
+                  歌单的新建/导入/删除/改名全部集中在手机页（老板拍板），本页不再放导入入口卡 */}
               <TVPosterCard
                 key="mylist_love"
-                ref={getCardRefCallback('mylist_love') as any}
+                ref={getCardRefCallback('mylist_love', true) as any}
                 title="我的收藏"
                 subtitle={`收藏 · ${songCounts[LIST_IDS.LOVE] ?? '…'} 首`}
                 size="medium"

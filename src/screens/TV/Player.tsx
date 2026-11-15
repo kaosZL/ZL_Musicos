@@ -479,7 +479,9 @@ const styles: Record<string, ViewStyle | TextStyle | ImageStyle | any> = {
   lyricTextNear: { color: 'rgba(247,248,251,0.31)' },
   lyricTextFar: { color: 'rgba(247,248,251,0.16)' },
   translation: { marginTop: 6, color: tvColors.primaryHigh },
-  dock: { paddingHorizontal: 0, paddingBottom: 0, marginTop: 0 },
+  // 进度条内缩（v1.9.25 实测反馈「进度条溢出」）：dock 横向留白，
+  // 进度条/时间行不再贴边更不出屏
+  dock: { paddingHorizontal: tvSize(30), paddingBottom: 0, marginTop: 0 },
   primaryControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24, marginTop: 18 },
 }
 

@@ -79,7 +79,10 @@ const TVMusicRow = forwardRef<any, Props>(({
 
 const styles: Record<string, ViewStyle | any> = {
   root: {
-    minHeight: tvSize(72),
+    // 行高确定化（v1.9.25 实测反馈「焦点框跨行错位」）：minHeight 会被内容撑高，
+    // 实际行高与队列页 ITEM_SIZE 不一致 → scrollToOffset 落点偏移、焦点框跨行。
+    // 固定高度（内容垂直居中），与 ITEM_SIZE = tvSize(78) 严格一致
+    height: tvSize(78),
     borderRadius: tvSize(18),
     paddingHorizontal: tvSize(18),
     paddingVertical: tvSize(11),
@@ -91,14 +94,11 @@ const styles: Record<string, ViewStyle | any> = {
     borderWidth: 2,
     borderColor: 'transparent',
   },
+  // 焦点态单层化：去 elevation/阴影（电视上渲染成硬边灰块），描边+微放大即可
   focus: {
     backgroundColor: tvColors.glassHigh,
     borderColor: tvColors.primaryHigh,
-    shadowColor: tvColors.primaryHigh,
-    shadowOpacity: 0.4,
-    shadowRadius: tvSize(12),
-    shadowOffset: { width: 0, height: tvSize(3) },
-    elevation: 8,
+    transform: [{ scale: 1.01 }],
   },
   active: {
     backgroundColor: tvColors.surfaceRed,

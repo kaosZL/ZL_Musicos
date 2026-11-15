@@ -285,6 +285,7 @@ function TVQueue({ componentId }: { componentId: string }) {
             data={fetchedMusicList}
             showsVerticalScrollIndicator={false}
             keyExtractor={getQueueItemKey}
+            getItemLayout={(_, index) => ({ length: ITEM_SIZE, offset: ITEM_SIZE * index, index })}
             removeClippedSubviews={false}
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={<TVText variant="meta">{tvText.emptyQueueHint}</TVText>}

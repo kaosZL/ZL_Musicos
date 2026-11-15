@@ -226,11 +226,6 @@ const styles: Record<string, ViewStyle | TextStyle> = {
   btnFocused: {
     backgroundColor: 'rgba(255,255,255,0.28)',
     borderColor: '#FFFFFF',
-    shadowColor: '#FFFFFF',
-    shadowOpacity: 0.9,
-    shadowRadius: tvSize(20),
-    shadowOffset: { width: 0, height: tvSize(3) },
-    elevation: 12,
     transform: [{ scale: 1.06 }],
   },
   btnText: {

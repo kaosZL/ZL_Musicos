@@ -159,14 +159,13 @@ const styles: Record<string, ViewStyle> = {
     borderWidth: 2,
     borderColor: 'transparent',
   },
+  // 焦点态单层化（v1.9.25 实测反馈「分层显示块」）：Android 的 elevation 在电视上渲染成
+  // 硬边灰色矩形，叠加在组件自身背景上就是「框套块、块套条」的多层贴片感。
+  // 改为单层：描边 + 轻微放大 + 柔和提亮，去掉一切系统阴影/高度
   focused: {
     borderColor: tvColors.primaryHigh,
-    shadowColor: tvColors.primaryHigh,
-    shadowOpacity: 0.5,
-    shadowRadius: tvSize(14),
-    shadowOffset: { width: 0, height: tvSize(3) },
-    elevation: 10,
-    zIndex: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    transform: [{ scale: 1.02 }],
   },
 }
 
