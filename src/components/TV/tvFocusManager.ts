@@ -380,7 +380,14 @@ export const longPressActiveTVTarget = () => {
   active?.onLongPress?.()
 }
 
-/** 弹窗激活标记：弹窗打开时控制器让路，弹窗自己处理按键 */
-let tvDialogActive = false
-export const setTVDialogActive = (active: boolean) => { tvDialogActive = active }
-export const isTVDialogActive = () => tvDialogActive
+/** 弹窗激活标记：弹窗打开时控制器让路，弹窗自己处理按键。
+ * 计数式获取/释放（v1.9.25 实测反馈「结果弹窗按 OK 后焦点卡住」）：
+ * 旧实现是单布尔 + 二维码弹层「每个按键重新断言」——弹窗关闭把标志置 false 后、
+ * 重断言生效前的窗口期，焦点控制器会抢先处理不该处理的按键（注册顺序在前），
+ * 触发幻影按压/长按计时器。计数式下弹窗关闭只释放自己那一份，
+ * 二维码弹层仍持有的让路不消失，从结构上消灭空窗。 */
+let tvDialogActiveCount = 0
+export const setTVDialogActive = (active: boolean) => {
+  tvDialogActiveCount = Math.max(0, tvDialogActiveCount + (active ? 1 : -1))
+}
+export const isTVDialogActive = () => tvDialogActiveCount > 0

@@ -139,6 +139,8 @@ if (Date.now() - controlFocusTimeRef.current < 500) return  // Issue #9 空窗�
 
 NanoHTTPD，随机端口 + token 鉴权，`/api/` 前缀即 API。手机扫码（设置页出居中二维码 + 网址文本）打开 `lan_input.html`：导入音源脚本/链接、歌单链接/清单/洛雪文件、歌单新建（`/api/songlist-create`）/改名/删除/导出、**运行日志**（`/api/logs` 3s 轮询，环 200 条，logLock 同步）。JS 侧入口 `UtilsModule.debugLog(message)`。
 
+**按键让路计数（v1.9.25）**：`setTVDialogActive` 为计数式获取/释放——TVDialog 与二维码弹层各持一份，任一关闭只释放自己的，焦点控制器在「还有遮挡层」期间持续让路。旧实现是布尔+二维码弹层逐按键重断言，弹窗关闭与重断言之间存在穿透窗口（实测「结果弹窗按 OK 后焦点卡住」）。
+
 **手机互联会话全局单例（v1.9.25）**：`src/core/tvLan.ts`——服务启停、手机事件处理、三类快照（音源/歌单/同步）推送全部与组件生命周期解耦。二维码弹层只是「展示窗口」：收起弹层 / 退出设置页都**不断开**手机页；唯一断开方式 = 设置页长按「手机互联」按钮 → 确认 → `stopTvLanSession()`。设置页只负责生成/展示二维码与会话状态行。手机事件的结果反馈走全局 TVDialog + `app_event.songlistImportResult` 广播（不再依赖设置页局部 state）。
 
 **数据同步（v1.9.25，老板拍板：全部操作集中在手机页）**：复用上游同步客户端（`src/plugins/sync/*`，启动自连见 `src/core/init/sync.ts`）。手机页「数据同步」区 = 唯一控制台：`/api/sync-config`（保存 host/连接码 + 连接或断开）、`/api/sync-status`（轮询状态快照，JS 侧 `pushLanSyncStatus` 推送）。**首次同步方式选择 TV 化**：`src/core/sync.ts` 的 `selectSyncMode` 在 TV 上不弹触屏版 SyncModeModal（遥控器不可操作），改为把 `pendingMode` 写进 sync store（`syncStatusUpdated` 广播）→ 手机页轮询看到后渲染选项 → `/api/sync-mode` 回传 → 走既有 `app_event.selectSyncMode` resolve；**60 秒未选自动 cancel**（防手机页已关、握手悬挂）。同步语义警示（lx 桌面版 issue #1543）：删除操作双向同步（含断开期间，按上次快照合并重连）；合并两选项仅排列顺序不同；覆盖会替换被覆盖方。

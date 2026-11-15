@@ -322,12 +322,12 @@ function TVSettings({ componentId }: { componentId: string }) {
   // 手机页连接直接断（v1.9.25 实测反馈）
   useEffect(() => {
     if (!qrImage) return
+    // 计数式让路：弹层打开即获取一份，关闭时在 cleanup 里释放。
+    // （旧写法靠「每个按键重新断言」对抗 TVDialog 关闭时把标志置 false——
+    //   但断言发生在焦点控制器之后，存在穿透窗口，v1.9.25 实测「焦点卡住」的根源）
     setTVDialogActive(true)
     const openedAt = Date.now()
     const unsub = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
-      // 每个事件都重新断言弹窗激活：导入结果的 TVDialog 关闭时会把标志置回 false，
-      // 不补这一句的话焦点控制器会穿透到被弹层遮住的页面上误触按钮
-      setTVDialogActive(true)
       if (eventKeyAction !== 1 || repeatCount > 0) return
       if (isTVDialogVisible()) return
       if (eventType === 'select' && Date.now() - openedAt > 400) handleCloseLanImport()
@@ -542,7 +542,7 @@ function TVSettings({ componentId }: { componentId: string }) {
             <Image source={{ uri: qrImage }} style={styles.qrBigImage} />
           </View>
           <TVText variant="body" style={styles.qrOverlayHint}>手机扫码打开页面，可导入音源/歌单、新建歌单、配置数据同步</TVText>
-          <TVText variant="caption" style={styles.qrUrlText}>{qrUrl}</TVText>
+          <TVText variant="caption" style={styles.qrUrlText} numberOfLines={2}>{qrUrl}</TVText>
           <TVText variant="caption" color={tvColors.warn} style={styles.qrOverlayHint}>⚠ 手机与电视需同一局域网 · 按 OK 或返回键收起二维码（手机页保持连接，断开请到设置页长按按钮）</TVText>
         </View>
       ) : null}
