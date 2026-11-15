@@ -48,6 +48,12 @@ export const getWIFIIPV4Address = UtilsModule.getWIFIIPV4Address as () => Promis
 export const getDominantColor = (imageUrl: string) => UtilsModule.getDominantColor(imageUrl) as Promise<string | null>
 
 // 手机页「运行日志」的 JS 侧入口：排查真机按键/焦点问题用
+export const getLastLanActivity = (): Promise<number> => {
+  // 存在性守卫：分片安装/旧原生层上方法可能缺失，返回 0（=很久无活动）而不是抛 TypeError
+  if (typeof UtilsModule.getLastLanActivity !== 'function') return Promise.resolve(0)
+  return UtilsModule.getLastLanActivity() as Promise<number>
+}
+
 export const debugLog = (message: string) => {
   try { UtilsModule.debugLog(message) } catch { /* 原生侧不可用时静默 */ }
 }
