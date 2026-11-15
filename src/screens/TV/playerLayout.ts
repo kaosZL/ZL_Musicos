@@ -90,7 +90,9 @@ export const buildPlayerLayout = (screenWidth: number, screenHeight: number, met
     },
     lyricColumn: {
       left: offsetX + s(501),
-      right: Math.max(s(48), screenWidth - (offsetX + s(1100))),
+      // 右边界收紧到距屏 ≤7%：旧公式在大屏上把歌词列大幅收窄（实测右侧空白 38%，
+      // 老板要求对齐模拟器的铺满观感），现在歌词列尽量贴向屏幕右缘
+      right: Math.max(s(24), Math.min(screenWidth - (offsetX + s(1100)), Math.round(screenWidth * 0.07))),
       // 垂直方向与封面对齐（v1.9.24 实机反馈）：顶边=封面顶边、底边=封面底边，
       // 高亮行在区域内垂直居中（样式层本就 justifyContent:center）
       top: offsetY + s(102),

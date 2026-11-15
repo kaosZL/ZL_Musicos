@@ -8,11 +8,12 @@ type TVMusicLike = Partial<LX.Music.MusicInfo> & Partial<LX.Player.MusicInfo>
 const emptyMusicInfo: TVMusicLike = {}
 
 const sourceNames: Record<string, string> = {
-  kw: tvText.kuwo,
-  kg: tvText.kugou,
-  tx: tvText.qqMusic,
-  wy: tvText.netease,
-  mg: tvText.migu,
+  // 洛雪惯例的两字母缩写（KW/KG/TX/WY/MG）——平台全名直显有商标风险（v1.9.25 老板要求）
+  kw: 'KW',
+  kg: 'KG',
+  tx: 'TX',
+  wy: 'WY',
+  mg: 'MG',
   local: tvText.local,
   tv_preset_juhe: tvText.aggregateSource,
   tv_preset_huibq: `Huibq${dot}${tvText.source}`,

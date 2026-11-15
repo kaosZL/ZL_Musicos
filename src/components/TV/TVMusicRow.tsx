@@ -103,9 +103,9 @@ const styles: Record<string, ViewStyle | any> = {
   },
   // 焦点态单层化：去 elevation/阴影（电视上渲染成硬边灰块），描边+微放大即可
   focus: {
+    // 不用 scale（实测反馈：焦点把内容撑开不好看）
     backgroundColor: tvColors.glassHigh,
     borderColor: tvColors.primaryHigh,
-    transform: [{ scale: 1.01 }],
   },
   active: {
     backgroundColor: tvColors.surfaceRed,

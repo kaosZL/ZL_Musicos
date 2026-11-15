@@ -163,9 +163,9 @@ const styles: Record<string, ViewStyle> = {
   // 硬边灰色矩形，叠加在组件自身背景上就是「框套块、块套条」的多层贴片感。
   // 改为单层：描边 + 轻微放大 + 柔和提亮，去掉一切系统阴影/高度
   focused: {
+    // 不用 scale（实测反馈：焦点把内容撑开不好看）——描边 + 柔和提亮足够
     borderColor: tvColors.primaryHigh,
     backgroundColor: 'rgba(255,255,255,0.06)',
-    transform: [{ scale: 1.02 }],
   },
 }
 
