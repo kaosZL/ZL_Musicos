@@ -17,13 +17,10 @@ import apiSourceInfo from '@/utils/musicSdk/api-source-info'
 import { LIST_IDS } from '@/config/constant'
 import { setApiSource } from '@/core/apiSource'
 import { updateSetting } from '@/core/common'
-import { createList, removeUserList, updateUserList, getListMusics } from '@/core/list'
-import { connectServer, disconnectServer } from '@/plugins/sync'
-import { getSyncHost, setSyncHost } from '@/plugins/sync/data'
-import { SYNC_CODE } from '@/plugins/sync/constants'
-import { httpFetch } from '@/utils/request'
-import { debugLog, generateQRCodeBase64, onLanSourceEvent, onTVRemoteEvent, pushLanSonglists, pushLanSonglistExport, pushLanSources, pushLanSyncStatus, startLanImportServer, stopLanImportServer } from '@/utils/nativeModules/utils'
-import { importUserApi, removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
+import { generateQRCodeBase64, onTVRemoteEvent } from '@/utils/nativeModules/utils'
+import { removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
+import { confirmDialog } from '@/utils/tools'
+import { startTvLanSession, stopTvLanSession, subscribeTvLanSession } from '@/core/tvLan'
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
@@ -33,7 +30,6 @@ import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { dot, tvText } from './labels'
-import { importSonglist } from './songlistImport'
 import { createTVTabs, getSourceName } from './utils'
 import { TV_CURRENT_VERSION, checkTVUpdate, downloadTVUpdate, getDownloadedTVUpdatePath, installTVUpdate, type TVUpdateInfo } from './update'
 
@@ -51,7 +47,6 @@ type TVUpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'downloadin
 // 一旦起来就会一直跑到 stopServer() 为止。因此同一时刻只能有一个 Settings 实例「拥有」这个会话，
 // 否则从设置页再 push 一个设置页时，同一次手机提交会被两个实例各处理一遍（歌单被导入两遍）。
 // 这个 token 记录「当前会话的归属实例」。
-let lanSessionOwner: symbol | null = null
 
 const DEFAULT_SOURCE_FOCUS_KEY = '__default__'
 const getFocusKey = (id: string) => id || DEFAULT_SOURCE_FOCUS_KEY
@@ -96,25 +91,6 @@ const getMaxSupportedQuality = (): LX.Quality | null => {
   return null
 }
 
-/** 同步状态 → 手机页显示的中文标签（原始 message 是英文码，映射见 SYNC_CODE） */
-const syncStatusLabel = (enabled: boolean, status: LX.Sync.Status) => {
-  if (!enabled) return '未启用'
-  const message = status.message
-  if (!message) return status.status ? '已连接' : '未连接'
-  switch (message) {
-    case SYNC_CODE.connecting: return '连接中…'
-    case SYNC_CODE.authFailed: return '连接码错误'
-    case SYNC_CODE.missingAuthCode: return '需要连接码（在下方填写后重新连接）'
-    case SYNC_CODE.msgBlockedIp: return 'IP 被服务器屏蔽'
-    case SYNC_CODE.unknownServiceAddress: return '地址无效'
-    case SYNC_CODE.lowServiceVersion: return '服务器版本过低，请升级电脑版洛雪'
-    case SYNC_CODE.highServiceVersion: return '服务器版本过高，请更新本 App'
-    case SYNC_CODE.getServiceIdFailed: return '获取服务 ID 失败'
-    case SYNC_CODE.connectServiceFailed: return '连接失败（检查地址 / 电脑端服务是否开启）'
-    default: return message
-  }
-}
-
 function TVSettings({ componentId }: { componentId: string }) {
   const apiSource = useSettingValue('common.apiSource')
   const playQuality = useSettingValue('player.playQuality')
@@ -138,11 +114,7 @@ function TVSettings({ componentId }: { componentId: string }) {
   // `adb forward tcp:9527 tcp:9527` 后用浏览器直接打开；也是扫码失败的兜底入口
   const [qrUrl, setQrUrl] = useState('')
   const [lanRunning, setLanRunning] = useState(false)
-  const [lanMessage, setLanMessage] = useState('')
-  const [lanMessageOk, setLanMessageOk] = useState(false)
-  const lanInstanceToken = useRef<symbol>(Symbol('tv-settings'))
   const lanButtonFocus = useTVFocusRef()
-  const lanHandlerRef = useRef<((action: string, payload: string) => void) | null>(null)
   const sourceScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
   const rightScrollRef = useRef<ComponentRef<typeof ScrollView>>(null)
   const sourceLayoutRef = useRef<Record<string, number>>({})
@@ -183,12 +155,6 @@ function TVSettings({ componentId }: { componentId: string }) {
   ]), [defaultSources, presetSources])
 
   const userApiById = useMemo(() => new Map(userApiList.map(item => [item.id, item])), [userApiList])
-  // 「我的歌单」快照：推给原生层缓存，手机页读取后在手机上改名（TV 屏上无法输入中文）
-  const allLists = useMyList()
-  const userSonglists = useMemo(
-    () => allLists.filter((item): item is LX.List.UserListInfo => item.id !== LIST_IDS.DEFAULT && item.id !== LIST_IDS.LOVE),
-    [allLists],
-  )
   const allSources = useMemo<SourceItem[]>(() => [
     ...userApiList.map(item => ({
       id: item.id,
@@ -303,298 +269,24 @@ function TVSettings({ componentId }: { componentId: string }) {
     }
   }
 
-  const pushLanSourcesSnapshot = useCallback(() => {
-    try {
-      void pushLanSources(JSON.stringify({
-        sources: allSources.map(src => ({ id: src.id, name: src.name, active: apiSource === src.id, isUser: userApiById.has(src.id) })),
-      }))
-    } catch (err: unknown) {
-      // 快照推送失败静默忽略
-    }
-  }, [allSources, apiSource, userApiById])
 
-  const pushLanSonglistsSnapshot = useCallback(async() => {
-    try {
-      // 带上每个歌单的歌曲数（09-20 需求）：手机页与 TV 卡片信息对齐。
-      // allSettled：单个歌单读取失败只丢那一项，不再拖垮整个快照——
-      // 之前 Promise.all 一损俱损，一个列表抛错 → 快照永远不推 →
-      // 手机页「读取电视歌单」永远空（v1.9.24 实机反馈）
-      const settled = await Promise.allSettled(userSonglists.map(async(item) => ({
-        id: item.id,
-        name: item.name,
-        count: (await getListMusics(item.id)).length,
-      })))
-      const lists = settled
-        .filter((result): result is PromiseFulfilledResult<{ id: string, name: string, count: number }> => result.status === 'fulfilled')
-        .map(result => result.value)
-      debugLog(`歌单快照推送: ${lists.length}/${userSonglists.length} 个`)
-      void pushLanSonglists(JSON.stringify({ lists }))
-    } catch (err: unknown) {
-      // 快照推送失败记入运行日志（手机页可查），不再完全静默
-      debugLog(`歌单快照推送失败: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }, [userSonglists])
 
-  // 手机侧操作的最终结果除了写页面常显文案，再弹一次全局 TVDialog —— 用户就是靠这个知道「到底成没成」。
-  // 之前只写 setLanMessage，而它在右栏最下方、导入结束时也不会自动滚动过去，用户根本看不到。
-  // （全局弹窗的「压栈返回后失效」已在 TVDialogHost 注册表根治；走全局还能避免与
-  // 其他全局弹窗（如音源长按菜单）同时弹出、双弹窗同时吃按键）
-  const showLanResult = (title: string, message: string) => {
-    showTVDialog({ title, message, buttons: [{ label: tvText.knowIt, tone: 'primary' }] })
-  }
-
-  const handleLanSourceEvent = async(action: string, payload: string) => {
-    try {
-      if (action === 'import') {
-        const data = JSON.parse(payload || '{}') as { url?: string, script?: string }
-        let script = data.script ?? ''
-        if (!script && data.url) script = await httpFetch(data.url).promise.then(resp => resp.body) as string
-        if (!script.trim()) {
-          setLanMessage('手机提交的内容为空')
-          return
-        }
-        await importUserApi(script)
-        setLanMessageOk(true)
-        setLanMessage('手机导入成功')
-      } else if (action === 'remove') {
-        const data = JSON.parse(payload || '{}') as { id?: string }
-        if (data.id) await handleRemove(data.id)
-      } else if (action === 'activate') {
-        const data = JSON.parse(payload || '{}') as { id?: string }
-        if (data.id) setApiSource(data.id)
-      } else if (action === 'songlist') {
-        const data = JSON.parse(payload || '{}') as {
-          text?: string
-          fileText?: string
-          listName?: string
-          fileName?: string
-          truncated?: boolean
-        }
-        // 原生层已经把压缩包 / base64 展开过，这里 text + fileText 拼一起再解析
-        const rawText = [data.text ?? '', data.fileText ?? ''].filter(item => item.trim()).join('\n')
-        if (!rawText.trim()) {
-          setLanMessageOk(false)
-          setLanMessage('手机提交的歌单内容为空')
-          global.app_event.songlistImportResult({ ok: false, message: '手机提交的歌单内容为空' })
-          showLanResult(tvText.importFailed, '手机提交的歌单内容为空')
-          return
-        }
-        setLanMessageOk(false)
-        const outcome = await importSonglist(rawText, {
-          listName: data.listName,
-          fileName: data.fileName,
-          onProgress: setLanMessage,
-        })
-        // 原生展开超限（总 6MB/单条目 2MB/40 条目）会静默截断，必须如实告知，否则用户以为全量导入了
-        if (data.truncated) outcome.message += '（注意：提交的内容过大被截断，只导入了前面一部分）'
-        setLanMessageOk(outcome.ok)
-        setLanMessage(outcome.message)
-        // 同时广播给首页「我的歌单」，让用户不用回到设置页也能看到导入结果
-        global.app_event.songlistImportResult({ ok: outcome.ok, message: outcome.message })
-        showLanResult(outcome.ok ? tvText.importSuccess : tvText.importFailed, outcome.message)
-      } else if (action === 'songlist-create') {
-        // 手机页新建空歌单（v1.9.25 老板拍板：歌单增删全部集中在手机页，电视端不再提供创建入口）
-        const data = JSON.parse(payload || '{}') as { name?: string }
-        const name = data.name?.trim()
-        if (!name) {
-          setLanMessageOk(false)
-          setLanMessage('请填写歌单名称')
-          return
-        }
-        if (userSonglists.some(list => list.name === name)) {
-          setLanMessageOk(false)
-          setLanMessage(`已有名为「${name}」的歌单`)
-          showLanResult('新建失败', `已有名为「${name}」的歌单`)
-          return
-        }
-        await createList({ name, list: [] })
-        const createdMessage = `已新建歌单「${name}」`
-        setLanMessageOk(true)
-        setLanMessage(createdMessage)
-        global.app_event.songlistImportResult({ ok: true, message: createdMessage })
-        showLanResult('新建歌单', createdMessage)
-      } else if (action === 'sync-config') {
-        // 手机页数据同步配置（v1.9.25 老板拍板：数据同步的全部操作都在手机网页做）
-        const data = JSON.parse(payload || '{}') as { host?: string, code?: string, disconnect?: boolean }
-        if (data.disconnect) {
-          disconnectServer()
-          updateSetting({ 'sync.enable': false })
-          setLanMessageOk(true)
-          setLanMessage('已断开数据同步')
-          return
-        }
-        const host = data.host?.trim() ?? ''
-        if (!/^https?:\/\/\S+/i.test(host)) {
-          setLanMessageOk(false)
-          setLanMessage('同步地址无效，应形如 http://192.168.1.100:23332')
-          showLanResult('数据同步', '同步地址无效，应形如 http://192.168.1.100:23332')
-          return
-        }
-        await setSyncHost(host)
-        setSyncHostState(host)
-        updateSetting({ 'sync.enable': true })
-        void connectServer(host, data.code?.trim() || undefined)
-        setLanMessageOk(true)
-        setLanMessage('已保存，正在连接——状态见下方「数据同步」区刷新')
-        showLanResult('数据同步', `已保存 ${host}，正在连接…\n状态请在手机页查看；首次同步如需选择方式，按钮会出现在本页`)
-      } else if (action === 'sync-mode') {
-        // 手机页回传的「首次同步方式」选择 → 走既有 app_event 机制 resolve selectSyncMode
-        const data = JSON.parse(payload || '{}') as { mode?: string }
-        if (!data.mode) return
-        global.app_event.selectSyncMode({ type: syncState.type, mode: data.mode } as LX.Sync.ModeType)
-        debugLog(`同步方式已选: ${data.mode}`)
-      } else if (action === 'songlist-rename') {
-        // 手机页改名：拿本地列表补全其余字段（locationUpdateTime 等），只覆盖 name
-        const data = JSON.parse(payload || '{}') as { renames?: Array<{ id?: string, name?: string }> }
-        const infos: LX.List.UserListInfo[] = []
-        for (const item of data.renames ?? []) {
-          if (!item.id) continue
-          const name = item.name?.trim()
-          if (!name) continue
-          const target = userSonglists.find(list => list.id === item.id)
-          if (!target || target.name === name) continue
-          infos.push({ ...target, name })
-        }
-        if (!infos.length) {
-          setLanMessageOk(false)
-          setLanMessage('没有需要修改的歌单名')
-          return
-        }
-        await updateUserList(infos)
-        const renamedMessage = `已重命名 ${infos.length} 个歌单`
-        setLanMessageOk(true)
-        setLanMessage(renamedMessage)
-        global.app_event.songlistImportResult({ ok: true, message: renamedMessage })
-        showLanResult(tvText.renameDone, renamedMessage)
-      } else if (action === 'songlist-remove') {
-        // 手机页删除歌单：这里是唯一的删除入口，删完同步广播给首页
-        const data = JSON.parse(payload || '{}') as { id?: string, ids?: Array<string | undefined> }
-        const ids: string[] = []
-        for (const id of data.ids ?? []) { if (id) ids.push(id) }
-        if (!ids.length && data.id) ids.push(data.id)
-        // 手机页拿到的是上一次推送的快照，可能已经过期（比如刚在电视上删过）
-        const existingIds = ids.filter(id => userSonglists.some(list => list.id === id))
-        if (!existingIds.length) {
-          setLanMessageOk(false)
-          setLanMessage(ids.length ? '电视上已经没有这些歌单了，请重新读取' : '没有指定要删除的歌单')
-          return
-        }
-        await removeUserList(existingIds)
-        const removedMessage = existingIds.length > 1 ? `已删除 ${existingIds.length} 个歌单` : '已删除歌单'
-        setLanMessageOk(true)
-        setLanMessage(removedMessage)
-        global.app_event.songlistImportResult({ ok: true, message: removedMessage })
-        showLanResult(tvText.deleteSonglistDone, removedMessage)
-      } else if (action === 'songlist-export') {
-        // 手机页导出歌单（09-20 需求）：打包成洛雪 playList_v2 JSON，手机端下载保存
-        const data = JSON.parse(payload || '{}') as { id?: string }
-        const id = data.id ?? ''
-        const info = userSonglists.find(list => list.id === id)
-        if (!info) {
-          void pushLanSonglistExport(JSON.stringify({ ok: false, message: '歌单不存在，请重新读取' }))
-          return
-        }
-        const songs = await getListMusics(id)
-        const lxData = {
-          type: 'playList_v2',
-          data: [{ name: info.name, id, source: info.source, sourceListId: info.sourceListId, list: songs }],
-        }
-        void pushLanSonglistExport(JSON.stringify({ ok: true, id, name: info.name, payload: JSON.stringify(lxData) }))
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '手机操作失败'
-      setLanMessageOk(false)
-      setLanMessage(message)
-      global.app_event.songlistImportResult({ ok: false, message })
-      showLanResult(tvText.importFailed, message)
-    }
-  }
-  lanHandlerRef.current = (action: string, payload: string) => { void handleLanSourceEvent(action, payload) }
-
-  // 订阅跟「本页是否挂载」走，而不是跟「二维码是否打开」走。
-  // 旧写法（`if (!lanRunning) return` + 依赖 lanRunning）有两个丢事件窗口：
-  //   ① 原生服务是单例、本页卸载时并不会停服 —— 订阅被 cleanup 移除后，手机页面还开着、
-  //      还能继续「提交成功」，而电视侧 JS 已经没人接（原生只 emit、不回放）
-  //   ② 就算留在本页，重新按「手机扫码导入」时 setLanRunning(true) 排在两个 await 之后
-  //      （startLanImportServer + generateQRCodeBase64），这期间到达的事件一样会被丢掉
-  // 现在改成挂载即订阅，并在卸载时把「订阅没了 → 服务也停掉」这条对齐。
-  useEffect(() => {
-    const token = lanInstanceToken.current
-    const off = onLanSourceEvent((event) => {
-      // 只让当前会话的归属实例处理，避免「设置页里再 push 一个设置页」时同一件事被处理两遍
-      if (lanSessionOwner !== token) return
-      void lanHandlerRef.current?.(event.action, event.payload)
-    })
-    return () => {
-      off()
-      // 生命周期对齐：本页一离开，订阅就没了；此时必须把原生服务一起停掉，
-      // 否则手机页面还能继续「提交成功」，而电视上永远不会有人响应。
-      if (lanSessionOwner === token) {
-        lanSessionOwner = null
-        void stopLanImportServer()
-      }
-    }
-  }, [])
-
-  // 快照推送：扫码页一打开就立刻推一次，之后内容一变就补推（手机页读它做「歌单改名 / 删除」）
-  useEffect(() => {
-    if (!lanRunning) return
-    pushLanSourcesSnapshot()
-  }, [lanRunning, pushLanSourcesSnapshot])
-
-  useEffect(() => {
-    if (!lanRunning) return
-    void pushLanSonglistsSnapshot()
-  }, [lanRunning, pushLanSonglistsSnapshot])
-
-  // ===== 数据同步（v1.9.25，全部操作集中在手机页）=====
-  const syncEnabled = useSettingValue('sync.enable')
-  const [syncHost, setSyncHostState] = useState('')
-  useEffect(() => { void getSyncHost().then(host => { setSyncHostState(host ?? '') }) }, [])
-  // 状态 + 待选同步方式一起订阅：useStatus 只回传 status 对象（同引用不触发渲染），
-  // pendingMode 变化虽然也广播 syncStatusUpdated，但得在这里整体取新快照才能感知
-  const [syncSnapshot, setSyncSnapshot] = useState(() => ({ status: { ...syncState.status }, pendingMode: syncState.pendingMode }))
-  useEffect(() => {
-    const update = () => { setSyncSnapshot({ status: { ...syncState.status }, pendingMode: syncState.pendingMode }) }
-    global.state_event.on('syncStatusUpdated', update)
-    return () => { global.state_event.off('syncStatusUpdated', update) }
-  }, [])
-  // 同步状态快照推给手机页（含待选方式请求——手机页据此渲染「首次同步方式」按钮）
-  useEffect(() => {
-    if (!lanRunning) return
-    void pushLanSyncStatus(JSON.stringify({
-      enabled: syncEnabled,
-      connected: syncSnapshot.status.status,
-      message: syncSnapshot.status.message,
-      label: syncStatusLabel(syncEnabled, syncSnapshot.status),
-      host: syncHost,
-      pendingMode: syncSnapshot.pendingMode,
-    }))
-  }, [lanRunning, syncEnabled, syncSnapshot, syncHost])
+  // 手机互联会话状态（v1.9.25 全局单例化：二维码只是展示窗口，会话独立于本组件存活）
+  const [tvLanSession, setTvLanSessionState] = useState({ running: false, url: '' })
+  useEffect(() => subscribeTvLanSession(setTvLanSessionState), [])
 
   const handleOpenLanImport = async() => {
-    setLanMessage('')
-    setLanMessageOk(false)
     try {
-      const { ip, port, token } = await startLanImportServer(9527)
-      // 立刻接管会话：订阅在挂载时就已经挂上（见上面的 effect），所以从这一刻起
-      // 手机推来的事件就有人处理，不必等二维码渲染完成 —— 消除「按了按钮、二维码还没出来时提交」的窗口
-      lanSessionOwner = lanInstanceToken.current
-      pushLanSourcesSnapshot()
-      void pushLanSonglistsSnapshot()
-      // URL 带一次性 token：服务绑 0.0.0.0，没鉴权的话同局域网任意设备都能删歌单/注脚本
-      const lanUrl = `http://${ip}:${port}/?t=${encodeURIComponent(token)}`
-      const qr = await generateQRCodeBase64(lanUrl, 560)
-      setQrUrl(lanUrl)
+      // 会话的开启/事件处理/快照推送都在全局单例里（src/core/tvLan.ts）；
+      // 这里只负责生成并展示二维码。URL 带一次性 token：服务绑 0.0.0.0，没鉴权的话同局域网任意设备都能操作
+      const session = await startTvLanSession()
+      const qr = await generateQRCodeBase64(session.url, 560)
+      setQrUrl(session.url)
       setQrImage(qr)
       setLanRunning(true)
     } catch (err: unknown) {
       const detail = err instanceof Error ? err.message : ''
       const message = detail ? `${tvText.lanStartFailed}：${detail}` : tvText.lanStartFailed
-      setLanMessageOk(false)
-      setLanMessage(message)
-      // 启动失败必须让用户【看到】：旧代码只写 setLanMessage，而它在右栏最下方、不会自动滚过去，
-      // 于是「端口被占 / 服务起不来」在用户眼里就是「按了按钮没反应」
       showTVDialog({
         title: tvText.lanStartFailed,
         message,
@@ -603,18 +295,25 @@ function TVSettings({ componentId }: { componentId: string }) {
     }
   }
 
+  // 收起二维码弹层——只是隐藏展示，手机页连接保持（v1.9.25 老板实测反馈：
+  // 「返回/OK 关二维码导致手机页断连」——断开只能走长按按钮 → 确认 → stopTvLanSession）
   const handleCloseLanImport = () => {
-    // 停服也必须走 owner 判定（与卸载 cleanup 的守卫语义一致）：
-    // 非 owner 实例本来就没在跑服务 —— 它是被压在栈下的另一个设置页，正由 owner 在跑。
-    // 若在这里无条件 stopServer()，会把 owner 还在用的服务停掉：owner 页面上二维码仍挂着
-    // （lanRunning 仍为 true），服务却已经死了，变成「假存活」。
-    if (lanSessionOwner === lanInstanceToken.current) {
-      lanSessionOwner = null
-      void stopLanImportServer()
-    }
     setLanRunning(false)
     setQrImage('')
     setQrUrl('')
+  }
+
+  const handleStopLanSession = () => {
+    confirmDialog({
+      title: '关闭手机互联',
+      message: '断开后手机页面将无法操作电视（音乐播放不受影响）。确定关闭吗？',
+      confirmButtonText: '关闭互联',
+      cancelButtonText: tvText.cancelAction,
+    }).then(confirmed => {
+      if (!confirmed) return
+      handleCloseLanImport()
+      void stopTvLanSession()
+    })
   }
 
   // 二维码弹层期间接管按键：弹层里没有可聚焦项，焦点控制器让路（setTVDialogActive），
@@ -816,15 +515,22 @@ function TVSettings({ componentId }: { componentId: string }) {
 
           <TVSettingsPane title={tvText.importApi} subtitle={tvText.inputRemoteApi} style={styles.importPanel}>
             {importMessage ? <TVText variant="caption" color={importMessage === tvText.importSuccess ? tvColors.primaryHigh : tvColors.warn} style={styles.message}>{importMessage}</TVText> : null}
-            {/* 手机扫码的结果放在按钮【上方】并且做成显眼的框：
-                旧位置在面板最下方，右栏内容一长就被顶出可视区、且导入结束时不会自动滚过去，
-                用户看不到「已导入 N 个歌单」，只能靠歌单卡有没有出现来猜 —— 这就是「没反应」的观感来源 */}
-            {lanMessage ? (
-              <View style={[styles.lanResult, lanMessageOk ? styles.lanResultOk : styles.lanResultWarn]}>
-                <TVText variant="body" color={lanMessageOk ? tvColors.primaryHigh : tvColors.warn}>{lanMessage}</TVText>
-              </View>
-            ) : null}
-            <TVButton ref={lanButtonFocus.ref as any} label={lanRunning ? '关闭二维码' : '手机扫码导入'} tone={lanRunning ? 'danger' : 'dark'} onPress={() => { void (lanRunning ? handleCloseLanImport() : handleOpenLanImport()) }} nextFocusUp={updateButtonFocus.getNodeHandle() ?? undefined} nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined} />
+            {/* 手机互联会话状态行：二维码收起后手机页仍在连接（会话是全局单例，v1.9.25） */}
+            <View style={[styles.lanResult, tvLanSession.running ? styles.lanResultOk : null]}>
+              <TVText variant="body" color={tvLanSession.running ? tvColors.primaryHigh : tvColors.subtext}>
+                {tvLanSession.running ? '手机互联运行中 · 收起二维码不断开' : '未连接 · 按 OK 打开二维码，手机扫码操作'}
+              </TVText>
+            </View>
+            <TVButton
+              ref={lanButtonFocus.ref as any}
+              label={lanRunning ? '收起二维码' : tvLanSession.running ? '查看二维码 · 互联运行中' : '手机扫码导入'}
+              tone={tvLanSession.running ? 'primary' : 'dark'}
+              onPress={() => { void (lanRunning ? handleCloseLanImport() : handleOpenLanImport()) }}
+              onLongPress={tvLanSession.running ? handleStopLanSession : undefined}
+              nextFocusUp={updateButtonFocus.getNodeHandle() ?? undefined}
+              nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined}
+            />
+            {tvLanSession.running ? <TVText variant="caption" color={tvColors.dimText} style={styles.message}>长按此按钮可关闭手机互联</TVText> : null}
           </TVSettingsPane>
         </ScrollView>
       </View>
@@ -835,9 +541,9 @@ function TVSettings({ componentId }: { componentId: string }) {
           <View style={styles.qrCard}>
             <Image source={{ uri: qrImage }} style={styles.qrBigImage} />
           </View>
-          <TVText variant="body" style={styles.qrOverlayHint}>手机扫码打开页面，可导入音源/歌单，也能新建歌单、给歌单改名/删除</TVText>
+          <TVText variant="body" style={styles.qrOverlayHint}>手机扫码打开页面，可导入音源/歌单、新建歌单、配置数据同步</TVText>
           <TVText variant="caption" style={styles.qrUrlText}>{qrUrl}</TVText>
-          <TVText variant="caption" color={tvColors.warn} style={styles.qrOverlayHint}>⚠ 请确保手机与电视连接同一局域网（WiFi） · 按遥控器 OK 键关闭</TVText>
+          <TVText variant="caption" color={tvColors.warn} style={styles.qrOverlayHint}>⚠ 手机与电视需同一局域网 · 按 OK 或返回键收起二维码（手机页保持连接，断开请到设置页长按按钮）</TVText>
         </View>
       ) : null}
     </TVAppleScaffold>
