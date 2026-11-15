@@ -34,9 +34,11 @@ import { httpFetch } from '@/utils/request'
 export interface TvLanSessionState {
   running: boolean
   url: string
+  /** 手机页在本会话内打开过（页面级信号：扫码进来那一刻置位，不跟踪后续离线） */
+  phoneConnected: boolean
 }
 
-let sessionState: TvLanSessionState = { running: false, url: '' }
+let sessionState: TvLanSessionState = { running: false, url: '', phoneConnected: false }
 const listeners = new Set<(state: TvLanSessionState) => void>()
 const notify = () => {
   for (const listener of listeners) listener({ ...sessionState })
@@ -153,6 +155,15 @@ const handleRemoveSource = async(id: string) => {
 
 const handleLanEvent = async(action: string, payload: string) => {
   try {
+    if (action === 'phone-connected') {
+      // 手机页已打开（取过首页）。幂等置位 + 通知 UI
+      if (!sessionState.phoneConnected) {
+        sessionState = { ...sessionState, phoneConnected: true }
+        notify()
+        debugLog('手机页已连上')
+      }
+      return
+    }
     if (action === 'import') {
       const data = JSON.parse(payload || '{}') as { url?: string, script?: string }
       let script = data.script ?? ''
@@ -330,7 +341,7 @@ export const startTvLanSession = async(): Promise<TvLanSessionState> => {
   await refreshSyncHost()
   offLanEvents = onLanSourceEvent(({ action, payload }) => { void handleLanEvent(action, payload) })
   watchStores()
-  sessionState = { running: true, url }
+  sessionState = { running: true, url, phoneConnected: false }
   notify()
   debugLog(`手机互联会话开启: ${ip}:${port}`)
   pushSourcesSnapshot()
@@ -345,7 +356,7 @@ export const stopTvLanSession = async() => {
   offWatchers = null
   offLanEvents?.()
   offLanEvents = null
-  sessionState = { running: false, url: '' }
+  sessionState = { running: false, url: '', phoneConnected: false }
   notify()
   debugLog('手机互联会话关闭')
   await stopLanImportServer()

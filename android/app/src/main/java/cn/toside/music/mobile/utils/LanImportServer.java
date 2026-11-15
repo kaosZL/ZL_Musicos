@@ -247,6 +247,9 @@ public class LanImportServer extends NanoHTTPD {
       return newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json; charset=utf-8", "{\"ok\":false,\"message\":\"链接已过期，请用电视屏幕上最新的二维码重新进入\"}");
     }
     if (Method.GET.equals(method) && ("/".equals(uri) || "/index.html".equals(uri))) {
+      // 手机页打开即上报"到场"（幂等）：电视端据此把状态从「等待扫码」切为「已连上」。
+      // 注意这是页面级信号，不做实时在线跟踪（老板拍板的简化语义，v1.9.25）
+      notify("phone-connected", "");
       return newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", new String(getPage(), StandardCharsets.UTF_8));
     }
     if (Method.GET.equals(method) && "/api/sources".equals(uri)) {

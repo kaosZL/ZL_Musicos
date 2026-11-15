@@ -272,14 +272,18 @@ function TVSettings({ componentId }: { componentId: string }) {
 
 
   // 手机互联会话状态（v1.9.25 全局单例化：二维码只是展示窗口，会话独立于本组件存活）
-  const [tvLanSession, setTvLanSessionState] = useState({ running: false, url: '' })
+  const [tvLanSession, setTvLanSessionState] = useState({ running: false, url: '', phoneConnected: false })
   useEffect(() => subscribeTvLanSession(setTvLanSessionState), [])
+  // 简化语义（v1.9.25 老板拍板）：不跟踪实时在线——扫码连上显示「已连上」后不再变；
+  // 只有长按确认退出后显示「已关闭手机互联」，重新打开时复位
+  const [everStopped, setEverStopped] = useState(false)
 
   const handleOpenLanImport = async() => {
     try {
       // 会话的开启/事件处理/快照推送都在全局单例里（src/core/tvLan.ts）；
       // 这里只负责生成并展示二维码。URL 带一次性 token：服务绑 0.0.0.0，没鉴权的话同局域网任意设备都能操作
       const session = await startTvLanSession()
+      setEverStopped(false)
       const qr = await generateQRCodeBase64(session.url, 560)
       setQrUrl(session.url)
       setQrImage(qr)
@@ -311,6 +315,7 @@ function TVSettings({ componentId }: { componentId: string }) {
       cancelButtonText: tvText.cancelAction,
     }).then(confirmed => {
       if (!confirmed) return
+      setEverStopped(true)
       handleCloseLanImport()
       void stopTvLanSession()
     })
@@ -517,13 +522,15 @@ function TVSettings({ componentId }: { componentId: string }) {
             {importMessage ? <TVText variant="caption" color={importMessage === tvText.importSuccess ? tvColors.primaryHigh : tvColors.warn} style={styles.message}>{importMessage}</TVText> : null}
             {/* 手机互联会话状态行：二维码收起后手机页仍在连接（会话是全局单例，v1.9.25） */}
             <View style={[styles.lanResult, tvLanSession.running ? styles.lanResultOk : null]}>
-              <TVText variant="body" color={tvLanSession.running ? tvColors.primaryHigh : tvColors.subtext}>
-                {tvLanSession.running ? '手机互联运行中 · 收起二维码不断开' : '未连接 · 按 OK 打开二维码，手机扫码操作'}
+              <TVText variant="body" color={tvLanSession.running ? (tvLanSession.phoneConnected ? tvColors.primaryHigh : tvColors.subtext) : tvColors.subtext}>
+                {tvLanSession.running
+                  ? (tvLanSession.phoneConnected ? '手机已连上 · 收起二维码不断开' : '二维码已打开 · 等待手机扫码')
+                  : (everStopped ? '已关闭手机互联 · 按 OK 可重新打开' : '未连接 · 按 OK 打开二维码，手机扫码操作')}
               </TVText>
             </View>
             <TVButton
               ref={lanButtonFocus.ref as any}
-              label={lanRunning ? '收起二维码' : tvLanSession.running ? '查看二维码 · 互联运行中' : '手机扫码导入'}
+              label={lanRunning ? '收起二维码' : tvLanSession.running ? (tvLanSession.phoneConnected ? '查看二维码 · 手机已连上' : '查看二维码 · 等待扫码') : '手机扫码导入'}
               tone={tvLanSession.running ? 'primary' : 'dark'}
               onPress={() => { void (lanRunning ? handleCloseLanImport() : handleOpenLanImport()) }}
               onLongPress={tvLanSession.running ? handleStopLanSession : undefined}
