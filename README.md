@@ -2,7 +2,7 @@
 
 <h1 align="center">ZL-Music TV</h1>
 
-<p align="center"><em>为大屏而生的音乐客厅 · 手机扫码即达的控制台 · 与洛雪生态无缝互通</em></p>
+<p align="center"><em>把客厅变成音乐厅 —— 大屏沉浸播放 · 手机扫码掌控 · 洛雪生态互通</em></p>
 
 <div align="center">
 
@@ -13,91 +13,116 @@
 ![Stars](https://img.shields.io/github/stars/kaosZL/ZL_Musicos?style=flat-square)
 
 [![⬇️ Releases 下载](https://img.shields.io/badge/⬇️_Releases_下载-1F6FEB?style=for-the-badge)](https://github.com/kaosZL/ZL_Musicos/releases)
-[![⚙️ CI 构建版](https://img.shields.io/badge/⚙️_CI_构建版-6E7681?style=for-the-badge)](https://github.com/kaosZL/ZL_Musicos/actions)
-
-`arm64-v8a` 大多数电视/盒子 · `universal` 不确定就选它 · `x86_64` 模拟器 · [📋 FAQ](FAQ.md) · [📋 更新日志](https://github.com/kaosZL/ZL_Musicos/releases)
+[![📖 开发文档](https://img.shields.io/badge/📖_开发文档-6E7681?style=for-the-badge)](docs/DEVELOPMENT.md)
 
 </div>
 
+<img width="100%" src="docs/screenshots/播放页.png" alt="ZL-Music TV 播放页"/>
+
 ---
 
-## ✨ 核心亮点
+## 这是什么
 
-**📱 手机互联控制台** — 电视出码、手机一扫，浏览器即刻变身电视的全功能控制台：音源导入、歌单增删改导出、数据同步配置、实时运行日志，全程无需在电视上输入一个字符。会话全局常驻，关掉二维码也不断连
+一台电视、一个遥控器、一部手机——**电视负责好看好听，手机负责一切输入**。
 
-**🔄 数据同步** — 对接洛雪桌面版 / 移动版同步服务，多端歌单与收藏自动保持一致；首次同步的合并方式在手机页上选择，电视端确认——大屏小屏各司其职
-
-**🎚 四档音质** — 流畅 128K / 高清 320K / 无损 FLAC / Hi-Res 24bit 一键切换；逐首自动匹配可用音质，取链失败同源降档重试、全败才换源，设一次即可永远不用管
-
-**⬆️ 应用内在线更新** — 打开 App 自动检查新版本，国内网络直连镜像下载、一键安装升级，无需侧载
-
-**🎨 沉浸式播放页** — Apple Music TV 版式：背景随专辑主色呼吸浸染、左侧封面右侧歌词、长按歌词进入全屏歌词模式
-
-**🎮 遥控器优先引擎** — 自研空间焦点导航：方向键精准移动、长按呼出上下文菜单、播放页全键位语义化（隐藏态直控切歌 / 呼出态按钮导航），全程不碰鼠标
-
-**🖥 4K 等比适配** — 1080p 观感基准，任意密度 4K 下比例完全一致，只更清晰
-
-**🔍 拼音搜索联想** — 输入 `zjl`、`qt` 直接联想热门歌手和歌曲，全拼匹配自动纠偏
+ZL-Music TV 是面向 Android TV / 盒子的洛雪生态音乐播放器：播放页随专辑主色呼吸浸染，
+歌单与收藏通过洛雪同步服务在所有设备间流转，音源脚本、歌单导入、数据同步、故障排查
+全部在手机浏览器上一扫即达。装好之后，你几乎不需要再碰电视上的输入框。
 
 > ⚠️ 本项目仅用于学习、研究与个人设备体验，不内置任何版权音乐资源，不提供付费分发服务；如有权利问题请联系处理或删除相关内容。
 
 ---
 
-## 🖼 界面预览
+## ✨ 功能全景
+
+| | |
+| --- | --- |
+| 🎨 **沉浸播放** | Apple Music TV 版式，背景随专辑主色浸染流转；长按歌词进入全屏歌词 |
+| 🔄 **数据同步** | 对接洛雪桌面版/移动版同步服务，歌单收藏多端一致，首次合并手机选方式、电视做确认 |
+| 📱 **互联控制台** | 手机扫码即达的网页控制台：音源、歌单、同步、日志——会话常驻，关码不断连 |
+| 🎚 **四档音质** | 128K / 320K / FLAC / Hi-Res 24bit；逐首自动匹配，取链失败自动降档，设一次不用管 |
+| ⬆️ **在线更新** | 启动自动检查新版本，国内镜像直连下载、一键安装，告别侧载 |
+| 🎮 **遥控引擎** | 自研空间焦点导航：方向精准移动、长按呼出菜单、播放页全键位语义化 |
+| 🖥 **4K 恒定版式** | 1080p 观感基准，任意密度 4K 比例完全一致，只更清晰 |
+| 🔍 **拼音联想** | `zjl`、`qt` 即出「猜你想搜」，204 位歌手 + 221 首歌曲内置词典 |
+
+---
+
+## 🖥 大屏界面
 
 <table>
   <tr>
-    <td width="25%" align="center"><sub><b>首页推荐</b></sub><br/><img src="docs/screenshots/首页.png" alt="首页推荐"/></td>
-    <td width="25%" align="center"><sub><b>排行榜 · 歌单详情</b></sub><br/><img src="docs/screenshots/排行榜.png" alt="排行榜"/></td>
-    <td width="25%" align="center"><sub><b>播放页 · 沉浸歌词</b></sub><br/><img src="docs/screenshots/播放页.png" alt="播放页"/></td>
-    <td width="25%" align="center"><sub><b>播放页 · 控制栏</b></sub><br/><img src="docs/screenshots/播放页2.png" alt="播放页控制栏"/></td>
+    <td width="33%" align="center"><sub><b>首页 · 今日推荐</b></sub><br/><img src="docs/screenshots/首页.png" alt="首页"/></td>
+    <td width="33%" align="center"><sub><b>排行榜 · 歌单详情</b></sub><br/><img src="docs/screenshots/排行榜.png" alt="排行榜"/></td>
+    <td width="33%" align="center"><sub><b>播放页 · 控制栏</b></sub><br/><img src="docs/screenshots/播放页2.png" alt="播放页控制栏"/></td>
   </tr>
   <tr>
-    <td width="25%" align="center"><sub><b>播放列表</b></sub><br/><img src="docs/screenshots/播放列表.png" alt="播放列表"/></td>
-    <td width="25%" align="center"><sub><b>我的歌单</b></sub><br/><img src="docs/screenshots/我的歌单.png" alt="我的歌单"/></td>
-    <td width="25%" align="center"><sub><b>设置 · 音质与更新</b></sub><br/><img src="docs/screenshots/设置.png" alt="设置"/></td>
-    <td width="25%" align="center"><sub><b>手机互联控制台</b></sub><br/><img src="docs/screenshots/手机互联.png" alt="手机互联"/></td>
+    <td width="33%" align="center"><sub><b>播放列表 · 长按管理</b></sub><br/><img src="docs/screenshots/播放列表.png" alt="播放列表"/></td>
+    <td width="33%" align="center"><sub><b>我的歌单</b></sub><br/><img src="docs/screenshots/我的歌单.png" alt="我的歌单"/></td>
+    <td width="33%" align="center"><sub><b>设置 · 音质与更新</b></sub><br/><img src="docs/screenshots/设置.png" alt="设置"/></td>
   </tr>
 </table>
 
-> 手机互联页（手机浏览器打开）：音源导入 / 歌单全管理 / 数据同步 / 运行日志——电视上所有需要打字的操作都在这里完成。
+---
+
+## 📱 手机互联控制台
+
+电视上所有需要打字的操作，都在手机浏览器完成。设置页按 OK 出示二维码，手机一扫即达——
+会话全局常驻：收起二维码、退出设置页都不断连，**长按确认才真正关闭**。
+
+<table>
+  <tr>
+    <td width="33%" align="center"><sub><b>音源导入</b></sub><br/><img src="docs/screenshots/手机-音源导入.png" alt="音源导入"/></td>
+    <td width="33%" align="center"><sub><b>歌单导入</b></sub><br/><img src="docs/screenshots/手机-歌单导入.png" alt="歌单导入"/></td>
+    <td width="33%" align="center"><sub><b>歌单管理</b></sub><br/><img src="docs/screenshots/手机-歌单管理.png" alt="歌单管理"/></td>
+  </tr>
+  <tr>
+    <td width="33%" align="center"><sub><b>数据同步</b></sub><br/><img src="docs/screenshots/手机-数据同步.png" alt="数据同步"/></td>
+    <td width="33%" align="center"><sub><b>运行日志</b></sub><br/><img src="docs/screenshots/手机-运行日志.png" alt="运行日志"/></td>
+    <td width="33%"></td>
+  </tr>
+</table>
+
+- **音源导入**：粘贴脚本链接或 JS 内容一键导入，已装音源可切换、可删除
+- **歌单导入**：网易云 / QQ / 酷狗 / 酷我 / 咪咕歌单链接、「歌名 - 歌手」清单、洛雪文件（.json / .lxmc / 压缩包）
+- **歌单管理**：新建、中文改名、删除、导出洛雪格式备份
+- **数据同步**：填入洛雪同步服务地址与连接码即连，覆盖类操作二次确认
+- **运行日志**：3 秒实时滚动、可暂停、一键复制——排障不用连电脑
 
 ---
 
-## 🎮 遥控器操作
+## 🚀 快速上手
+
+1. **安装**：[Releases](https://github.com/kaosZL/ZL_Musicos/releases) 下载 APK（`arm64-v8a` 大多数电视；拿不准选 `universal`），U 盘或局域网传输安装
+2. **导音源**：设置 → 手机扫码导入 → 手机页粘贴洛雪音源脚本链接 → 导入
+3. **开始听**：首页听推荐、排行榜挑歌单、搜索栏输 `zjl` 试试——之后 App 会自动提醒新版本，直接在线升级
+
+---
+
+## 🎮 遥控器语义
 
 | 按键 | 行为 |
 | --- | --- |
-| 方向键 | 移动焦点 |
-| OK / Enter | 打开当前项、播放歌曲或触发按钮 |
-| **长按 OK**（音源列表） | 呼出音源操作菜单（删除 / 更新提醒） |
-| **长按 OK**（播放列表） | 呼出歌曲菜单：加入我的歌单 / ❤ 收藏 / 从列表删除 |
-| **长按 OK**（我的歌单内） | 弹窗确认从歌单删除该歌曲 |
-| **长按 OK**（歌单卡片） | 歌单改名（电视屏上键盘；新建/删除在手机页） |
-| **长按 OK**（搜索历史标签） | 删除该条搜索历史 |
-| OK（播放页·歌词区） | 暂停 / 继续播放（同时呼出控制栏） |
-| **长按 OK**（播放页·歌词区） | 进入全屏歌词（OK / Back 退出） |
-| Back | 返回上一页（播放页控制栏呼出时先收起控制栏，再按才返回） |
-| Play/Pause | 播放页暂停或继续 |
-| Previous / Rewind | 播放上一首 |
-| Next / Fast Forward | 播放下一首 |
-| Menu / 上 / 下（播放页） | 呼出控制栏并聚焦播放键（控制栏常驻，按 Back 收起） |
-| 左 / 右（播放页·控制栏未呼出） | 直控上一首 / 下一首 |
-| 左 / 右（播放页·控制栏呼出） | 焦点导航：歌词区按时跳焦上一首/下一首按钮，切歌需聚焦按钮后按 OK |
+| 方向键 | 移动焦点（空间导航引擎） |
+| OK | 打开 / 播放 / 触发；播放页歌词区 = 暂停·继续 |
+| **长按 OK** | 上下文菜单：列表项加歌单/收藏/删除、歌单卡片改名、搜索历史删单条、歌词区进全屏歌词 |
+| Menu / 上 / 下（播放页） | 呼出控制栏并聚焦播放键（常驻，Back 收起） |
+| 左 / 右（播放页·栏隐藏） | 直控上一首 / 下一首 |
+| 左 / 右（播放页·栏呼出） | 焦点导航，切歌聚焦按钮后按 OK |
+| Back | 关弹窗 / 收控制栏 / 返回上页 |
+| 媒体键 | 播放暂停 / 上下曲，全局响应 |
 
 ---
 
-## 📋 歌单功能速览
+## 📋 歌单能力速览
 
 | 场景 | 操作 |
 | --- | --- |
-| 导入歌单 | 设置 → 手机扫码导入 → 手机页粘贴歌单链接 / 「歌名 - 歌手」清单 / 上传洛雪文件（.json/.lxmc/压缩包） |
-| 收藏歌曲 | 播放列表长按 OK → ❤ 我的收藏 |
-| 加入歌单 | 播放列表长按 OK 或「全部加入歌单」→ 选目标歌单（按钮带歌曲数，默认加到最前，可切换） |
-| 删除歌曲 | 我的歌单 → 打开歌单 → 长按 OK 确认删除 |
-| 新建 / 改名 / 删除歌单 | 手机页（扫码进入）：新建歌单、读取后改名（支持中文）/删除；电视长按卡片可屏上改名 |
-| 导出备份 | 手机页「读取歌单」→ 导出 → 下载洛雪格式 .json |
-| 搜索历史 | 自动记录最近 8 条；长按删单条，一键清空 |
+| 导入歌单 | 手机页：链接 / 清单 / 洛雪文件，中文全程无损 |
+| 收藏与加歌 | 播放列表长按 OK → ❤ 收藏 / 选歌单（带数量、防重复提示） |
+| 新建 / 改名 / 删除 | 手机页集中管理；电视长按卡片可屏上改名 |
+| 导出备份 | 手机页一键导出洛雪格式 .json |
+| 数据同步 | 手机页配置同步服务 → 多端自动一致 |
 
 ---
 
@@ -128,7 +153,7 @@
 - 应用内在线更新：启动自动检查新版本（每日一次、静默失败不打扰），发现新版弹窗引导；检查与下载全链路国内镜像可达，一键安装。
 - 自研遥控焦点引擎：空间方向打分 + 同排优先 + 显式导航链 + 按键合并排队，长按判定 550ms 兜底（兼容无 OK 连发固件）；34 项单元测试护航。
 - 弹窗体系：统一毛玻璃卡片、左右切按钮、默认聚焦主操作、返回键关闭。
-- 4K 等比适配：1080p 观感基准，任意密度下比例恒定；拼音搜索联想（204 位歌手 + 221 首歌曲词典）；搜索/排行榜 KW/KG/TX/WY/MG 子源筛选；APK 混淆精简至约 55MB。
+- 4K 等比适配：1080p 观感基准，任意密度下比例恒定；拼音搜索联想；搜索/排行榜 KW/KG/TX/WY/MG 子源筛选；APK 混淆精简至约 55MB。
 
 **歌单与列表**
 - 歌单导入：网易云/QQ/酷狗/酷我/咪咕歌单链接、「歌名 - 歌手」清单（逐首匹配、未匹配点名告知）、洛雪文件（.json/.lxmc/压缩包）；中文全程无损。
@@ -165,10 +190,11 @@ android/app/build/outputs/apk/release/zl-music-<版本>-lulu-universal.apk
 
 应用包名：`cn.toside.music.mobile`
 
-**代码检查**：
+**代码检查与单测**：
 
 ```bash
 npm run tv:lint
+npm test          # 34 项单元测试（焦点引擎/歌词过滤/镜像链/直控门控）
 ```
 
 **ADB 模拟遥控器**：
@@ -176,43 +202,23 @@ npm run tv:lint
 ```bash
 npm run tv:remote -- up
 npm run tv:remote -- right right ok
-npm run tv:remote -- back
 adb shell input keyevent 82   # 模拟 Menu 键
-adb connect 127.0.0.1:62001
-adb -s 127.0.0.1:62001 install -r android/app/build/outputs/apk/release/zl-music-<版本>-lulu-x86_64.apk
 ```
 
-**CI 云构建**：每次 push 到 master / dev 自动构建 release APK（R8 混淆 + debug 签名，可直接安装），[Actions](https://github.com/kaosZL/ZL_Musicos/actions) 页面最新成功构建底部 Artifacts 下载。
-
-**目录结构**：
-
-```text
-src/
-  components/TV/      TV 端基础组件（焦点、卡片、按钮、面板、TVDialog 统一弹窗）
-  screens/TV/         TV 首页、排行榜、搜索、设置（扫码导入+音源管理）、播放页、队列页
-  config/hotArtists.ts  热门歌手拼音词典（搜索联想）
-  config/hotSongs.ts    热门歌曲拼音词典（搜索联想）
-  theme/tv.ts         TV 设计 token + 全分辨率等比缩放
-android/
-  app/src/main/java/.../utils/LanImportServer.java   局域网扫码导入服务（NanoHTTPD）
-  app/src/main/assets/lan_input.html                 手机端导入页
-  app/src/main/assets/script/                        预置音源脚本
-.github/workflows/build-apk.yml    CI 云构建（push 自动出 APK）
-docs/screenshots/     README 使用的 TV 截图
-```
+**CI 云构建**：push 到 master / dev 自动构建 release APK（R8 混淆），[Actions](https://github.com/kaosZL/ZL_Musicos/actions) 页 Artifacts 下载；master 发版自动上传 Release 并维护应用内更新清单。
 
 </details>
 
 ## 📦 适配设备
 
-- 全部分辨率等比适配，已在 75 寸 4K Android TV（FF 75S595C Ultra，3840x2160 / 4GB+64GB）实测。
-- `arm64-v8a`：大多数 64 位 Android TV / 盒子；`universal`：不确定设备架构时使用；`x86_64`：模拟器。
+- 全分辨率等比适配，已在 75 寸 4K Android TV（FF 75S595C Ultra）与多品牌电视/盒子实测。
+- `arm64-v8a`：大多数 64 位电视/盒子 · `universal`：不确定就选它 · `x86_64`：模拟器 · 常见问题见 [FAQ](FAQ.md)
 
 ## 🙌 致谢
 
-- [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile)：原始移动端项目。
-- Apple Music TV / tvOS：TV 端布局、比例和沉浸式播放页的视觉参考。
-- Codex：本仓库 TV 端开发、调试、打包、截图巡检和 README 整理的主要协作者。
+- [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile)：原始移动端项目
+- Apple Music TV / tvOS：大屏版式与沉浸式播放页的视觉参考
+- 所有提出 issue 与实测反馈的用户
 
 沿用原项目协议，详见 [LICENSE](LICENSE)。
 
