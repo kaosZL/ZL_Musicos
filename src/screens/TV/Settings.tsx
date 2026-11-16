@@ -322,32 +322,62 @@ function TVSettings({ componentId }: { componentId: string }) {
   }
 
   // 二维码弹层期间接管按键：弹层里没有可聚焦项，焦点控制器让路（setTVDialogActive），
-  // OK 短按 / 返回键直接关闭。400ms 防抖忽略打开弹层那次按键的余波（与 TVDialog 同理）。
-  // 有结果弹窗在显示时 OK 让给弹窗——否则确认弹窗的同一下 OK 会把二维码一起关掉、
-  // 手机页连接直接断（v1.9.25 实测反馈）
+  // OK 短按收起 / 长按 OK 关闭互联（244 实测修复：弹层开着时焦点控制器已让路，
+  // 长按底下的按钮永远到不了——这就是「关闭后文字不变、手机页仍可用」的根因）。
+  // 长按判定与遥控控制器同款：repeat 连发立即触发 + 550ms 兜底（部分固件 OK 键无连发）。
+  // 有结果/确认弹窗在显示时按键让给弹窗（isTVDialogVisible 守卫）。
   useEffect(() => {
     if (!qrImage) return
     // 计数式让路：弹层打开即获取一份，关闭时在 cleanup 里释放。
-    // （旧写法靠「每个按键重新断言」对抗 TVDialog 关闭时把标志置 false——
-    //   但断言发生在焦点控制器之后，存在穿透窗口，v1.9.25 实测「焦点卡住」的根源）
     setTVDialogActive(true)
     const openedAt = Date.now()
+    let longTimer: ReturnType<typeof setTimeout> | null = null
+    let longFired = false
+    const clearLongTimer = () => { if (longTimer) { clearTimeout(longTimer); longTimer = null } }
     const unsub = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
+      if (eventType === 'select') {
+        if (eventKeyAction === 0 && repeatCount > 0 && !longFired && !isTVDialogVisible()) {
+          // 固件有连发：立即按长按处理
+          clearLongTimer()
+          longFired = true
+          handleStopLanSession()
+          return
+        }
+        if (eventKeyAction === 0 && repeatCount === 0 && !isTVDialogVisible()) {
+          // 按下：起 550ms 兜底计时器
+          longFired = false
+          clearLongTimer()
+          longTimer = setTimeout(() => {
+            longTimer = null
+            longFired = true
+            handleStopLanSession()
+          }, 550)
+          return
+        }
+        if (eventKeyAction === 1) {
+          clearLongTimer()
+          if (longFired) return // 长按触发后的松开：不收起弹层
+          if (isTVDialogVisible()) return
+          if (Date.now() - openedAt > 400) handleCloseLanImport() // 400ms 防抖：忽略打开弹层那次的余波
+        }
+        return
+      }
       if (eventKeyAction !== 1 || repeatCount > 0) return
       if (isTVDialogVisible()) return
-      if (eventType === 'select' && Date.now() - openedAt > 400) handleCloseLanImport()
     })
     // 返回键关弹层走统一路由（z=200 弹层级，低于 TVDialog 的 300）
     const unregisterBack = registerTVBack({
       z: 200,
       componentId,
       handler: () => {
+        if (isTVDialogVisible()) return false // 让给确认弹窗的 z=300
         handleCloseLanImport()
         return true
       },
     })
     return () => {
       setTVDialogActive(false)
+      clearLongTimer()
       unsub()
       unregisterBack()
     }
@@ -520,24 +550,25 @@ function TVSettings({ componentId }: { componentId: string }) {
 
           <TVSettingsPane title={tvText.importApi} subtitle={tvText.inputRemoteApi} style={styles.importPanel}>
             {importMessage ? <TVText variant="caption" color={importMessage === tvText.importSuccess ? tvColors.primaryHigh : tvColors.warn} style={styles.message}>{importMessage}</TVText> : null}
-            {/* 手机互联会话状态行：二维码收起后手机页仍在连接（会话是全局单例，v1.9.25） */}
+            {/* 手机互联会话状态行：二维码收起后手机页仍在连接（会话是全局单例，v1.9.25）。
+                文案 v2（244 实测反馈）：去掉「手机已连上·收起不断开」的口癖，收敛为「互联中」体系 */}
             <View style={[styles.lanResult, tvLanSession.running ? styles.lanResultOk : null]}>
-              <TVText variant="body" color={tvLanSession.running ? (tvLanSession.phoneConnected ? tvColors.primaryHigh : tvColors.subtext) : tvColors.subtext}>
+              <TVText variant="body" color={tvLanSession.running ? (tvLanSession.phoneConnected ? tvColors.primaryHigh : tvColors.subtext) : (everStopped ? tvColors.warn : tvColors.subtext)}>
                 {tvLanSession.running
-                  ? (tvLanSession.phoneConnected ? '手机已连上 · 收起二维码不断开' : '二维码已打开 · 等待手机扫码')
-                  : (everStopped ? '已关闭手机互联 · 按 OK 可重新打开' : '未连接 · 按 OK 打开二维码，手机扫码操作')}
+                  ? (tvLanSession.phoneConnected ? '手机互联中 · 手机页面可正常操作' : '二维码已打开 · 等待手机扫码')
+                  : (everStopped ? '互联已关闭 · 按 OK 重新打开' : '按 OK 打开二维码 · 手机扫码管理音源与歌单')}
               </TVText>
             </View>
             <TVButton
               ref={lanButtonFocus.ref as any}
-              label={lanRunning ? '收起二维码' : tvLanSession.running ? (tvLanSession.phoneConnected ? '查看二维码 · 手机已连上' : '查看二维码 · 等待扫码') : '手机扫码导入'}
+              label={lanRunning ? '收起二维码' : tvLanSession.running ? (tvLanSession.phoneConnected ? '二维码 · 互联中' : '二维码 · 等待扫码') : '手机扫码导入'}
               tone={tvLanSession.running ? 'primary' : 'dark'}
               onPress={() => { void (lanRunning ? handleCloseLanImport() : handleOpenLanImport()) }}
               onLongPress={tvLanSession.running ? handleStopLanSession : undefined}
               nextFocusUp={updateButtonFocus.getNodeHandle() ?? undefined}
               nextFocusLeft={firstSourceFocus.getNodeHandle() ?? undefined}
             />
-            {tvLanSession.running ? <TVText variant="caption" color={tvColors.dimText} style={styles.message}>长按此按钮可关闭手机互联</TVText> : null}
+            {tvLanSession.running ? <TVText variant="caption" color={tvColors.dimText} style={styles.message}>长按此按钮（或二维码打开时长按 OK）关闭互联</TVText> : null}
           </TVSettingsPane>
         </ScrollView>
       </View>
