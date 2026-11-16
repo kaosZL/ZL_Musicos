@@ -118,8 +118,12 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
         const btn = buttonsRef.current[focusedIdxRef.current]
         if (btn) {
           debugLog(`弹窗按钮: ${btn.label}`)
-          onDismissRef.current?.()
+          // 必须先执行按钮动作再通知 onDismiss：confirmDialog 的 onDismiss 是
+          // resolve(false)（返回键/背景关闭=取消的语义），若先跑 onDismiss，
+          // Promise 已以 false 落定，按钮的 resolve(true) 永远是空操作——
+          // 「按确认=必定取消」就是 245~247 关闭互联失效的真凶（247 日志实锤）
           btn.onPress?.()
+          onDismissRef.current?.()
         }
       }
     })
