@@ -89,8 +89,13 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
     if (!visible) return
     visibleDialogCount += 1
     setTVDialogActive(true)
-    setFocusedIdx(0)
-    focusedIdxRef.current = 0
+    // 默认聚焦主按钮（tone=primary，无则第一个）：TV 用户肌肉记忆是「弹窗 → OK = 确认主操作」。
+    // 245 实测事故：confirmDialog 按钮数组 [取消, 确认]，默认聚焦 0=取消——
+    // 老板按 OK「确认关闭互联」实际点了取消，关闭流程一步没走（状态不变/服务器没停）
+    const primaryIdx = buttonsRef.current.findIndex(btn => btn.tone === 'primary')
+    const initialIdx = primaryIdx >= 0 ? primaryIdx : 0
+    setFocusedIdx(initialIdx)
+    focusedIdxRef.current = initialIdx
     visibleAtRef.current = Date.now()
 
     const unsub = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
