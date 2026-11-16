@@ -1,38 +1,38 @@
 {
-  "version": "1.9.24",
-  "tagName": "v1.9.24",
-  "releaseUrl": "https://github.com/kaosZL/ZL_Musicos/releases/tag/v1.9.24",
-  "body": "ZL-Music TV v1.9.24",
+  "version": "1.9.25",
+  "tagName": "v1.9.25",
+  "releaseUrl": "https://github.com/kaosZL/ZL_Musicos/releases/tag/v1.9.25",
+  "body": "ZL-Music TV v1.9.25",
   "assets": [
     {
       "abi": "arm64-v8a",
-      "name": "ZL-Musicos-v1.9.24-arm64-v8a.apk",
-      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.24/ZL-Musicos-v1.9.24-arm64-v8a.apk",
-      "size": 14305243
+      "name": "ZL-Musicos-v1.9.25-arm64-v8a.apk",
+      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.25/ZL-Musicos-v1.9.25-arm64-v8a.apk",
+      "size": 14313372
     },
     {
       "abi": "armeabi-v7a",
-      "name": "ZL-Musicos-v1.9.24-armeabi-v7a.apk",
-      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.24/ZL-Musicos-v1.9.24-armeabi-v7a.apk",
-      "size": 13298337
+      "name": "ZL-Musicos-v1.9.25-armeabi-v7a.apk",
+      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.25/ZL-Musicos-v1.9.25-armeabi-v7a.apk",
+      "size": 13306458
     },
     {
       "abi": "universal",
-      "name": "ZL-Musicos-v1.9.24-universal.apk",
-      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.24/ZL-Musicos-v1.9.24-universal.apk",
-      "size": 29283548
+      "name": "ZL-Musicos-v1.9.25-universal.apk",
+      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.25/ZL-Musicos-v1.9.25-universal.apk",
+      "size": 29291703
     },
     {
       "abi": "x86",
-      "name": "ZL-Musicos-v1.9.24-x86.apk",
-      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.24/ZL-Musicos-v1.9.24-x86.apk",
-      "size": 14629416
+      "name": "ZL-Musicos-v1.9.25-x86.apk",
+      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.25/ZL-Musicos-v1.9.25-x86.apk",
+      "size": 14637554
     },
     {
       "abi": "x86_64",
-      "name": "ZL-Musicos-v1.9.24-x86_64.apk",
-      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.24/ZL-Musicos-v1.9.24-x86_64.apk",
-      "size": 14629416
+      "name": "ZL-Musicos-v1.9.25-x86_64.apk",
+      "url": "https://ghfast.top/https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.25/ZL-Musicos-v1.9.25-x86_64.apk",
+      "size": 14637554
     }
   ]
 }
