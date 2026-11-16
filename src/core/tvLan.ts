@@ -350,14 +350,35 @@ export const startTvLanSession = async(): Promise<TvLanSessionState> => {
   return sessionState
 }
 
-/** 关闭手机互联会话（唯一断开方式：设置页长按按钮确认后调用） */
+/** 关闭手机互联会话（唯一断开方式：设置页长按按钮确认后调用）。
+ *  v1.9.25 · 247 防弹化：246 实测日志证明 resolve(true) 已执行但本函数的关闭
+ *  日志从未出现——退订监听段存在被 void 吞掉的静默异常。现在异常逐段捕获并记
+ *  进运行日志，状态重置/通知/停服为必经路径：任何一段抛错都不再阻断停会话。 */
 export const stopTvLanSession = async() => {
-  offWatchers?.()
+  debugLog('停会话: 开始')
+  try {
+    offWatchers?.()
+  } catch (err: unknown) {
+    debugLog(`停会话: 退订store监听异常 ${err instanceof Error ? err.message : String(err)}`)
+  }
   offWatchers = null
-  offLanEvents?.()
+  try {
+    offLanEvents?.()
+  } catch (err: unknown) {
+    debugLog(`停会话: 退订lan事件异常 ${err instanceof Error ? err.message : String(err)}`)
+  }
   offLanEvents = null
   sessionState = { running: false, url: '', phoneConnected: false }
-  notify()
+  try {
+    notify()
+  } catch (err: unknown) {
+    debugLog(`停会话: 通知订阅者异常 ${err instanceof Error ? err.message : String(err)}`)
+  }
   debugLog('手机互联会话关闭')
-  await stopLanImportServer()
+  try {
+    await stopLanImportServer()
+    debugLog('停会话: 服务器已停止')
+  } catch (err: unknown) {
+    debugLog(`停会话: 停服异常 ${err instanceof Error ? err.message : String(err)}`)
+  }
 }

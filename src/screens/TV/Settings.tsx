@@ -308,12 +308,15 @@ function TVSettings({ componentId }: { componentId: string }) {
   }
 
   const handleStopLanSession = () => {
+    if (isTVDialogVisible()) return // 防重复弹窗（repeat 风暴下可能被触发多次）
+    debugLog('长按: 请求关闭互联，弹确认框')
     confirmDialog({
       title: '关闭手机互联',
       message: '断开后手机页面将无法操作电视（音乐播放不受影响）。确定关闭吗？',
       confirmButtonText: '关闭互联',
       cancelButtonText: tvText.cancelAction,
     }).then(confirmed => {
+      debugLog(`长按: 确认结果=${confirmed}`)
       if (!confirmed) return
       setEverStopped(true)
       handleCloseLanImport()
