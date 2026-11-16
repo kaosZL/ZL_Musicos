@@ -123,7 +123,8 @@ export function useBufferProgress() {
 
     const clearItv = () => {
       if (!interval) return
-      clearInterval(interval)
+      // NodeJS.Timer 与 DOM clearInterval 的 number 形参类型不兼容（类型债清零，运行时无变化）
+      clearInterval(interval as unknown as number)
       interval = null
     }
     const updateBuffer = async() => {

@@ -157,6 +157,14 @@ public class LanImportServer extends NanoHTTPD {
     songlistsJson = (json == null || json.isEmpty()) ? "{\"lists\":[]}" : json;
   }
 
+  /** 数据同步状态快照（v1.9.25）：JS 侧推送，手机页轮询 /api/sync-status 读取。
+   *  含 pendingMode 时表示电视正在等手机页选择「首次同步方式」。 */
+  private static volatile String syncStatusJson = "{\"enabled\":false,\"connected\":false,\"message\":\"\",\"label\":\"未启用\",\"host\":\"\",\"pendingMode\":null}";
+
+  public static void setSyncStatus(String json) {
+    if (json != null && !json.isEmpty()) syncStatusJson = json;
+  }
+
   /** 运行日志环（手机控制台实时看）：记每个 API 请求与关键事件，最多 200 条 */
   private static final java.util.ArrayDeque<String> runLogs = new java.util.ArrayDeque<>(200);
   private static final Object logLock = new Object();
@@ -239,6 +247,9 @@ public class LanImportServer extends NanoHTTPD {
       return newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json; charset=utf-8", "{\"ok\":false,\"message\":\"链接已过期，请用电视屏幕上最新的二维码重新进入\"}");
     }
     if (Method.GET.equals(method) && ("/".equals(uri) || "/index.html".equals(uri))) {
+      // 手机页打开即上报"到场"（幂等）：电视端据此把状态从「等待扫码」切为「已连上」。
+      // 注意这是页面级信号，不做实时在线跟踪（老板拍板的简化语义，v1.9.25）
+      notify("phone-connected", "");
       return newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", new String(getPage(), StandardCharsets.UTF_8));
     }
     if (Method.GET.equals(method) && "/api/sources".equals(uri)) {
@@ -251,6 +262,9 @@ public class LanImportServer extends NanoHTTPD {
     // 手机页轮询歌单导出结果（导出是异步的：POST → 通知 JS 打包 → 回填 → 这里取走）
     if (Method.GET.equals(method) && "/api/songlist-export-result".equals(uri)) {
       return json(songlistExportResult);
+    }
+    if (Method.GET.equals(method) && "/api/sync-status".equals(uri)) {
+      return json(syncStatusJson);
     }
     if (Method.GET.equals(method) && "/api/logs".equals(uri)) {
       StringBuilder sb = new StringBuilder(4096);
@@ -298,6 +312,21 @@ public class LanImportServer extends NanoHTTPD {
       if ("/api/songlist-rename".equals(uri)) {
         // 歌单改名：纯 JSON（{renames:[{id,name}]}），不需要解压展开
         notify("songlist-rename", payload);
+        return json("{\"ok\":true,\"message\":\"已提交\"}");
+      }
+      if ("/api/songlist-create".equals(uri)) {
+        // 新建空歌单（v1.9.25 老板拍板：歌单增删全部集中在手机页）
+        notify("songlist-create", payload);
+        return json("{\"ok\":true,\"message\":\"已提交\"}");
+      }
+      if ("/api/sync-config".equals(uri)) {
+        // 数据同步配置（v1.9.25 老板拍板：数据同步的全部操作都在手机网页做）
+        notify("sync-config", payload);
+        return json("{\"ok\":true,\"message\":\"已提交\"}");
+      }
+      if ("/api/sync-mode".equals(uri)) {
+        // 手机页回传的「首次同步方式」选择
+        notify("sync-mode", payload);
         return json("{\"ok\":true,\"message\":\"已提交\"}");
       }
       if ("/api/songlist-remove".equals(uri)) {

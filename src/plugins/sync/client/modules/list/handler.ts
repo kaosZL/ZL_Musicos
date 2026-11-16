@@ -4,10 +4,14 @@ import log from '../../../log'
 // import { SYNC_CLOSE_CODE } from '@/config/constant'
 import { removeSyncModeEvent, selectSyncMode } from '@/core/sync'
 import { toMD5 } from '@/utils/tools'
+import { debugLog } from '@/utils/nativeModules/utils'
 import { registerEvent, unregisterEvent } from './localEvent'
 
 const logInfo = (eventName: string, success = false) => {
   log.info(`[${eventName}]${eventName.replace('list:sync:list_sync_', '').replace(/_/g, ' ')}${success ? ' success' : ''}`)
+  // 同步生命周期镜像到手机页运行日志（v1.9.25 实测反馈：排查「单向同步」类问题
+  // 需要看到握手各阶段有没有发生——set_list_data 没出现=服务端没下发=多半是方式选了覆盖）
+  debugLog(`[同步]${eventName.replace('list:sync:list_sync_', '').replace(/_/g, ' ')}${success ? ' ✓' : ''}`)
 }
 // const logError = (eventName: string, err: Error) => {
 //   log.error(`[${eventName}]${eventName.replace('list:sync:list_sync_', '').replace(/_/g, ' ')} error: ${err.message}`)

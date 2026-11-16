@@ -69,7 +69,8 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
 
   const handleLongPress = useCallback(() => {
     longPressFiredRef.current = true
-    onLongPress?.()
+    // TV 侧长按回调均不消费手势事件参数（类型来自 PressableProps，签名要求一个 event）
+    ;(onLongPress as unknown as () => void)()
   }, [onLongPress])
 
   const handlePressIn = useCallback(() => {
@@ -123,17 +124,17 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
     })
   }, [focusScopeId, hasTVPreferredFocus, nextFocusDown, nextFocusLeft, nextFocusRight, nextFocusUp, onPress, triggerTVPress])
 
+  // RN 0.73 的 PressableProps 类型未收录 TV 焦点属性（hasTVPreferredFocus / nextFocus*，
+  // 运行时有效——原生 View 层支持），这里整体断言绕过类型缺口
+  const tvFocusProps = { hasTVPreferredFocus, nextFocusDown, nextFocusLeft, nextFocusRight, nextFocusUp } as unknown as PressableProps
+
   return (
     <Pressable
       ref={nativeRef}
       focusable
       accessible
       accessibilityRole="button"
-      hasTVPreferredFocus={hasTVPreferredFocus}
-      nextFocusUp={nextFocusUp}
-      nextFocusDown={nextFocusDown}
-      nextFocusLeft={nextFocusLeft}
-      nextFocusRight={nextFocusRight}
+      {...tvFocusProps}
       onPress={onPress ? triggerTVPress : undefined}
       onLongPress={onLongPress ? handleLongPress : undefined}
       onPressIn={handlePressIn}
@@ -158,14 +159,13 @@ const styles: Record<string, ViewStyle> = {
     borderWidth: 2,
     borderColor: 'transparent',
   },
+  // 焦点态单层化（v1.9.25 实测反馈「分层显示块」）：Android 的 elevation 在电视上渲染成
+  // 硬边灰色矩形，叠加在组件自身背景上就是「框套块、块套条」的多层贴片感。
+  // 改为单层：描边 + 轻微放大 + 柔和提亮，去掉一切系统阴影/高度
   focused: {
+    // 不用 scale（实测反馈：焦点把内容撑开不好看）——描边 + 柔和提亮足够
     borderColor: tvColors.primaryHigh,
-    shadowColor: tvColors.primaryHigh,
-    shadowOpacity: 0.5,
-    shadowRadius: tvSize(14),
-    shadowOffset: { width: 0, height: tvSize(3) },
-    elevation: 10,
-    zIndex: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
 }
 

@@ -20,5 +20,9 @@ export default {
   setSyncModeComponentId(id: string) {
     state.syncModeComponentId = id
   },
+  setPendingMode(pending: { serverName: string, type: string } | null) {
+    state.pendingMode = pending
+    global.state_event.syncStatusUpdated({ ...state.status })
+  },
 }
 

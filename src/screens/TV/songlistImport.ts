@@ -1,8 +1,9 @@
-import { createList } from '@/core/list'
+import { createList, getListMusics, overwriteListMusics } from '@/core/list'
 import { getListDetail, getListDetailAll } from '@/core/songlist'
 import { userLists } from '@/utils/listManage'
 import { deduplicationList, filterMusicList, fixNewMusicInfoQuality, toNewMusicInfo } from '@/utils'
 import { findMusic } from '@/utils/musicSdk'
+import { LIST_IDS } from '@/config/constant'
 import { getSourceName } from './utils'
 import { tvText } from './labels'
 
@@ -291,6 +292,8 @@ const createListsFromParsed = async(
   // 被 userListCreate 静默跳过的歌单名（ID 撞车时上游是 `return`，既不抛错也不返回信号）。
   // 不能让它变成「提示导入成功、实际啥也没发生」，所以这里显式记下来并如实上报。
   const skippedNames: string[] = []
+  // 整包备份里恢复的内置列表（试听列表/我的收藏）汇报
+  const builtinNotes: string[] = []
   let added = 0
   // 重名兜底：同一个歌单被导入两次会生成两张同名卡片，用户根本分不出哪张是哪张，
   // 这里在重名时自动补「(2)」「(3)」序号
@@ -309,6 +312,18 @@ const createListsFromParsed = async(
 
   for (const item of items) {
     const list = deduplicationList(item.list)
+    // 整包歌单备份（lx_list.lxmc，type=playList_v2）里含【试听列表/我的收藏】两个内置条目。
+    // 旧行为把它们当自建歌单导入：id 'default'/'love' 绕过撞库检查写进 userLists（幽灵歌单），
+    // 歌曲覆写到真实内置列表的存储上——Issue #15 反馈的「恢复后自建歌单 0 首、内置列表却好了」
+    // 就是这个数据污染的表现。正确语义：对号入座——直接覆写对应内置列表的歌曲
+    if (item.id === LIST_IDS.DEFAULT || item.id === LIST_IDS.LOVE) {
+      if (!list.length) continue // 备份里内置列表为空时不覆写，避免清空电视上现有内容
+      const builtinName = item.id === LIST_IDS.DEFAULT ? '试听列表' : '我的收藏'
+      onProgress?.(`正在恢复${builtinName}…`)
+      await overwriteListMusics(item.id, list)
+      builtinNotes.push(`${builtinName} ${list.length} 首`)
+      continue
+    }
     if (!list.length) continue
     const name = uniqueName((nameHint && items.length === 1 ? nameHint : item.name) || defaultListName())
     const id = makeUniqueListId(item.id)
@@ -326,6 +341,16 @@ const createListsFromParsed = async(
       skippedNames.push(name)
       continue
     }
+    // 写歌回读校验（Issue #15）：createList 先建壳后写歌，写歌环节出问题时会留下
+    // 「有名字没歌曲」的空壳。回读一次，源列表非空而实际 0 首 → 绕过 addListMusics
+    // 直接覆写补一次，仍是 0 → 如实计为失败
+    if (list.length && !(await getListMusics(id)).length) {
+      await overwriteListMusics(id, list)
+      if (!(await getListMusics(id)).length) {
+        skippedNames.push(name)
+        continue
+      }
+    }
     createdNames.push(name)
     added += list.length
   }
@@ -335,7 +360,7 @@ const createListsFromParsed = async(
   // setUserList(userLists) 了（见 src/event/listEvent.ts）。原来那句是多余的一次
   // mylistUpdated 广播，会让「我的歌单」多渲染一次、并让设置页的快照 effect 多重跑一次。
 
-  if (!createdNames.length) {
+  if (!createdNames.length && !builtinNotes.length) {
     return {
       ok: false,
       message: skippedNames.length
@@ -347,7 +372,9 @@ const createListsFromParsed = async(
     }
   }
 
-  const parts = [`已导入 ${createdNames.length} 个歌单，共 ${added} 首`]
+  const parts: string[] = []
+  if (createdNames.length) parts.push(`已导入 ${createdNames.length} 个歌单，共 ${added} 首`)
+  if (builtinNotes.length) parts.push(`已恢复 ${builtinNotes.join('、')}`)
   if (skippedNames.length) parts.push(`另有 ${skippedNames.length} 个因 ID 冲突被跳过（${skippedNames.join('、')}）`)
   return {
     ok: true,

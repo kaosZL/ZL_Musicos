@@ -49,7 +49,7 @@ function TVHistory({ componentId }: { componentId: string }) {
   // 首选源持久化（09-22 老板需求）：排行榜页选过的源记住，首页推荐架跟随同一源
   useEffect(() => {
     void getData<string>('tv_board_source').then(saved => {
-      if (saved && sourceOptions.includes(saved) && saved !== sourceSel) setSourceSel(saved)
+      if (saved && (sourceOptions as readonly string[]).includes(saved) && saved !== sourceSel) setSourceSel(saved)
     }).catch(() => { })
   }, [])
   const getSourceHandle = (id?: string | null) => id && sourceRefs.current[id] ? findNodeHandle(sourceRefs.current[id]) : null
@@ -202,9 +202,9 @@ const styles: Record<string, ViewStyle | TextStyle | any> = {
   title: { fontSize: tvFont(48), lineHeight: tvFont(56) },
   subtitle: { marginTop: tvSize(8), color: tvColors.subtext },
   actions: { flexDirection: 'row', alignItems: 'center', gap: tvSize(12) },
-  listContent: { paddingBottom: tvSize(28) },
+  listContent: { paddingBottom: tvSize(44) },
   sourceTabWrap: { marginBottom: tvSize(14), flexGrow: 0 },
-  sourceTabContent: { flexDirection: 'row', gap: tvSize(8), alignItems: 'center', minHeight: tvSize(40), paddingRight: tvSize(8) },
+  sourceTabContent: { flexDirection: 'row', gap: tvSize(8), alignItems: 'center', minHeight: tvSize(40), paddingRight: tvSize(28) },
   sourceTab: { minHeight: tvSize(30), borderRadius: 999, paddingHorizontal: tvSize(14), alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: tvColors.border },
   sourceTabActive: { backgroundColor: 'rgba(0,103,192,0.25)', borderColor: tvColors.primary },
   sourceTabText: { color: tvColors.subtext },

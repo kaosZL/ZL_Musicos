@@ -157,6 +157,10 @@ export const pushLanSonglists = async(songlistsJson: string): Promise<void> => {
   await UtilsModule.pushLanSonglists(songlistsJson)
 }
 
+export const pushLanSyncStatus = async(syncStatusJson: string): Promise<void> => {
+  try { await UtilsModule.pushLanSyncStatus(syncStatusJson) } catch { /* 原生侧不可用时静默 */ }
+}
+
 export const pushLanSonglistExport = async(json: string): Promise<void> => {
   await UtilsModule.pushLanSonglistExport(json)
 }

@@ -298,7 +298,7 @@ function TVSearch({ componentId }: { componentId: string }) {
               <TVText variant="cardTitle" style={styles.blockTitle}>搜索历史</TVText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hotWrap} contentContainerStyle={styles.hotContent}>
                 {searchHistory.map((kw, index) => (
-                  <Focusable key={`hist_${kw}`} ref={bindHistoryRef(kw) as any} style={styles.hotItem} onPress={() => { void handleSearch(1, kw) }} onLongPress={() => { removeHistory(kw) }} nextFocusLeft={getHistoryHandle(searchHistory[index - 1]) ?? lastHotHandle} nextFocusRight={getHistoryHandle(searchHistory[index + 1]) ?? clearHistoryFocus.getNodeHandle()} nextFocusUp={lastHotHandle} nextFocusDown={keyboardHandle}>
+                  <Focusable key={`hist_${kw}`} ref={bindHistoryRef(kw) as any} style={styles.hotItem} onPress={() => { void handleSearch(1, kw) }} onLongPress={() => { removeHistory(kw) }} nextFocusLeft={getHistoryHandle(searchHistory[index - 1]) ?? lastHotHandle ?? undefined} nextFocusRight={getHistoryHandle(searchHistory[index + 1]) ?? clearHistoryFocus.getNodeHandle() ?? undefined} nextFocusUp={lastHotHandle ?? undefined} nextFocusDown={keyboardHandle}>
                     <TVText variant="body">{kw}</TVText>
                   </Focusable>
                 ))}
@@ -351,7 +351,7 @@ function TVSearch({ componentId }: { componentId: string }) {
               const itemKey = getResultKey(item)
               const prevKey = results[index - 1] ? getResultKey(results[index - 1]) : null
               const nextKey = results[index + 1] ? getResultKey(results[index + 1]) : null
-              return <TVMusicRow ref={bindResultRef(itemKey, index === 0) as any} hasTVPreferredFocus={index === 0 && !!results.length} index={index} title={item.name} subtitle={getMusicSubtitle(item)} meta={item.interval} onFocus={() => { handleResultFocus(index) }} onPress={() => { void handleOpenPlayer(item) }} nextFocusLeft={searchButtonHandle} nextFocusUp={index === 0 ? playAllFocus.getNodeHandle() ?? searchButtonHandle : (getResultHandle(prevKey) ?? undefined)} nextFocusDown={getResultHandle(nextKey) ?? (hasMore && index === results.length - 1 ? loadMoreFocus.getNodeHandle() ?? undefined : undefined)} />
+              return <TVMusicRow ref={bindResultRef(itemKey, index === 0) as any} hasTVPreferredFocus={index === 0 && !!results.length} index={index} title={item.name} subtitle={getMusicSubtitle(item)} meta={item.interval ?? undefined} onFocus={() => { handleResultFocus(index) }} onPress={() => { void handleOpenPlayer(item) }} nextFocusLeft={searchButtonHandle} nextFocusUp={index === 0 ? playAllFocus.getNodeHandle() ?? searchButtonHandle : (getResultHandle(prevKey) ?? undefined)} nextFocusDown={getResultHandle(nextKey) ?? (hasMore && index === results.length - 1 ? loadMoreFocus.getNodeHandle() ?? undefined : undefined)} />
             }}
           />
         </TVGlassPanel>

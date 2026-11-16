@@ -31,7 +31,14 @@ const TVMusicRow = forwardRef<any, Props>(({
   ...props
 }, ref) => {
   const showArt = image !== undefined || lazyMusicInfo !== undefined
-  const [resolvedImage, setResolvedImage] = useState<string | null>(image ?? null)
+  // 封面初始值直接用歌曲数据自带的专辑图（v1.9.25·239 实测：播放列表仍首字——队列条目
+  // 是拍平形状 .pic，歌单/详情条目是 meta.picUrl，两个都要读）；没有的再走聚焦时的
+  // getPicUrl 兜底，最后才是首字占位
+  const [resolvedImage, setResolvedImage] = useState<string | null>(() => {
+    if (image !== undefined) return image
+    const lazy = lazyMusicInfo as unknown as { meta?: { picUrl?: string | null }, pic?: string | null } | null | undefined
+    return lazy?.meta?.picUrl ?? lazy?.pic ?? null
+  })
   const loadedRef = useRef(false)
 
   useEffect(() => { setResolvedImage(image ?? null) }, [image])
@@ -79,7 +86,10 @@ const TVMusicRow = forwardRef<any, Props>(({
 
 const styles: Record<string, ViewStyle | any> = {
   root: {
-    minHeight: tvSize(72),
+    // 行高确定化（v1.9.25 实测反馈「焦点框跨行错位」）：minHeight 会被内容撑高，
+    // 实际行高与队列页 ITEM_SIZE 不一致 → scrollToOffset 落点偏移、焦点框跨行。
+    // 固定高度（内容垂直居中），与 ITEM_SIZE = tvSize(78) 严格一致
+    height: tvSize(78),
     borderRadius: tvSize(18),
     paddingHorizontal: tvSize(18),
     paddingVertical: tvSize(11),
@@ -91,14 +101,11 @@ const styles: Record<string, ViewStyle | any> = {
     borderWidth: 2,
     borderColor: 'transparent',
   },
+  // 焦点态单层化：去 elevation/阴影（电视上渲染成硬边灰块），描边+微放大即可
   focus: {
+    // 不用 scale（实测反馈：焦点把内容撑开不好看）
     backgroundColor: tvColors.glassHigh,
     borderColor: tvColors.primaryHigh,
-    shadowColor: tvColors.primaryHigh,
-    shadowOpacity: 0.4,
-    shadowRadius: tvSize(12),
-    shadowOffset: { width: 0, height: tvSize(3) },
-    elevation: 8,
   },
   active: {
     backgroundColor: tvColors.surfaceRed,

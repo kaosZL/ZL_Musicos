@@ -32,7 +32,8 @@ const timeoutTools = {
   clearTimeout() {
     if (!this.bgTimeout) return
     BackgroundTimer.clearTimeout(this.bgTimeout)
-    clearInterval(this.timeout!)
+    // NodeJS.Timer 与 DOM clearInterval 的 number 形参类型不兼容（类型债清零，运行时无变化）
+    clearInterval(this.timeout! as unknown as number)
     this.bgTimeout = null
     this.timeout = null
     this.time = -1

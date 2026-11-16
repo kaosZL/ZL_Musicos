@@ -82,15 +82,29 @@ const getScopedTargets = () => {
   return activeScopeId ? list.filter(target => target.scopeId === activeScopeId) : list
 }
 
+// 单目标测量超时（v1.9.25 实测反馈「关闭手机互联后焦点全死，重启才恢复」）：
+// 视图卸载/重挂瞬间的 measureInWindow 在部分机型上永远不回调，Promise 挂起 →
+// moveInFlight 卡 true → 所有方向键进队列被丢。测量必须可失败，失败的目标按不可见处理
+const MEASURE_TIMEOUT_MS = 900
+
 const measureTarget = async(target: FocusTarget) => new Promise<FocusTarget | null>(resolve => {
   if (!target.ref?.measureInWindow) {
     resolve(null)
     return
   }
 
+  let settled = false
+  const finish = (value: FocusTarget | null) => {
+    if (settled) return
+    settled = true
+    clearTimeout(timer)
+    resolve(value)
+  }
+  const timer = setTimeout(() => finish(null), MEASURE_TIMEOUT_MS)
+
   target.ref.measureInWindow((x, y, width, height) => {
     target.rect = { x, y, width, height }
-    resolve(isVisibleRect(target.rect) ? target : null)
+    finish(isVisibleRect(target.rect) ? target : null)
   })
 })
 
@@ -279,7 +293,12 @@ export const moveTVFocus = async(direction: Direction): Promise<boolean> => {
   }
   moveInFlight = true
   try {
-    return await moveTVFocusInner(direction)
+    // 总看门狗：即便某个环节意外挂起（measure 超时之外的路径），moveInFlight 也必须
+    // 在有限时间内复位，否则一次卡顿就演变成「焦点永久死锁、重启才能恢复」
+    return await Promise.race([
+      moveTVFocusInner(direction),
+      new Promise<boolean>(resolve => setTimeout(() => resolve(false), 1600)),
+    ])
   } finally {
     moveInFlight = false
     if (queuedMoveDirection) {
@@ -361,7 +380,14 @@ export const longPressActiveTVTarget = () => {
   active?.onLongPress?.()
 }
 
-/** 弹窗激活标记：弹窗打开时控制器让路，弹窗自己处理按键 */
-let tvDialogActive = false
-export const setTVDialogActive = (active: boolean) => { tvDialogActive = active }
-export const isTVDialogActive = () => tvDialogActive
+/** 弹窗激活标记：弹窗打开时控制器让路，弹窗自己处理按键。
+ * 计数式获取/释放（v1.9.25 实测反馈「结果弹窗按 OK 后焦点卡住」）：
+ * 旧实现是单布尔 + 二维码弹层「每个按键重新断言」——弹窗关闭把标志置 false 后、
+ * 重断言生效前的窗口期，焦点控制器会抢先处理不该处理的按键（注册顺序在前），
+ * 触发幻影按压/长按计时器。计数式下弹窗关闭只释放自己那一份，
+ * 二维码弹层仍持有的让路不消失，从结构上消灭空窗。 */
+let tvDialogActiveCount = 0
+export const setTVDialogActive = (active: boolean) => {
+  tvDialogActiveCount = Math.max(0, tvDialogActiveCount + (active ? 1 : -1))
+}
+export const isTVDialogActive = () => tvDialogActiveCount > 0

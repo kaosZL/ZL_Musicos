@@ -46,6 +46,12 @@ export const showTVDialog = (request: TVDialogRequest) => {
   activeListener?.(request)
 }
 
+// 弹窗「真实可见」计数（v1.9.25）：与 setTVDialogActive（计数式让路）区分——
+// 那个是「按键该不该让路」（二维码弹层也持有一份），这个是「弹窗是否正在显示」。
+// 二维码弹层靠这个信号区分「这次 OK 是给结果弹窗的还是给自己的
+let visibleDialogCount = 0
+export const isTVDialogVisible = () => visibleDialogCount > 0
+
 interface TVDialogProps {
   visible: boolean
   title: string
@@ -81,9 +87,15 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
 
   useEffect(() => {
     if (!visible) return
+    visibleDialogCount += 1
     setTVDialogActive(true)
-    setFocusedIdx(0)
-    focusedIdxRef.current = 0
+    // 默认聚焦主按钮（tone=primary，无则第一个）：TV 用户肌肉记忆是「弹窗 → OK = 确认主操作」。
+    // 245 实测事故：confirmDialog 按钮数组 [取消, 确认]，默认聚焦 0=取消——
+    // 老板按 OK「确认关闭互联」实际点了取消，关闭流程一步没走（状态不变/服务器没停）
+    const primaryIdx = buttonsRef.current.findIndex(btn => btn.tone === 'primary')
+    const initialIdx = primaryIdx >= 0 ? primaryIdx : 0
+    setFocusedIdx(initialIdx)
+    focusedIdxRef.current = initialIdx
     visibleAtRef.current = Date.now()
 
     const unsub = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
@@ -106,8 +118,12 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
         const btn = buttonsRef.current[focusedIdxRef.current]
         if (btn) {
           debugLog(`弹窗按钮: ${btn.label}`)
-          onDismissRef.current?.()
+          // 必须先执行按钮动作再通知 onDismiss：confirmDialog 的 onDismiss 是
+          // resolve(false)（返回键/背景关闭=取消的语义），若先跑 onDismiss，
+          // Promise 已以 false 落定，按钮的 resolve(true) 永远是空操作——
+          // 「按确认=必定取消」就是 245~247 关闭互联失效的真凶（247 日志实锤）
           btn.onPress?.()
+          onDismissRef.current?.()
         }
       }
     })
@@ -122,6 +138,7 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
     })
 
     return () => {
+      visibleDialogCount -= 1
       setTVDialogActive(false)
       unsub()
       unregisterBack()
@@ -217,11 +234,6 @@ const styles: Record<string, ViewStyle | TextStyle> = {
   btnFocused: {
     backgroundColor: 'rgba(255,255,255,0.28)',
     borderColor: '#FFFFFF',
-    shadowColor: '#FFFFFF',
-    shadowOpacity: 0.9,
-    shadowRadius: tvSize(20),
-    shadowOffset: { width: 0, height: tvSize(3) },
-    elevation: 12,
     transform: [{ scale: 1.06 }],
   },
   btnText: {
