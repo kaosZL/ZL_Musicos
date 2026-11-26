@@ -18,6 +18,15 @@ interface Props extends Omit<ComponentProps<typeof Focusable>, 'children'> {
   style?: ViewStyle | ViewStyle[]
 }
 
+const pickInitialRowImage = (
+  image?: string | null,
+  lazyMusicInfo?: LX.Music.MusicInfoOnline | null,
+): string | null => {
+  if (image !== undefined) return image
+  const lazy = lazyMusicInfo as unknown as { meta?: { picUrl?: string | null }, pic?: string | null } | null | undefined
+  return lazy?.meta?.picUrl ?? lazy?.pic ?? null
+}
+
 const TVMusicRow = forwardRef<any, Props>(({
   index,
   title,
@@ -28,31 +37,46 @@ const TVMusicRow = forwardRef<any, Props>(({
   active,
   lazyMusicInfo,
   style,
+  onTVFocusChange,
   ...props
 }, ref) => {
   const showArt = image !== undefined || lazyMusicInfo !== undefined
   // 封面初始值直接用歌曲数据自带的专辑图（v1.9.25·239 实测：播放列表仍首字——队列条目
   // 是拍平形状 .pic，歌单/详情条目是 meta.picUrl，两个都要读）；没有的再走聚焦时的
   // getPicUrl 兜底，最后才是首字占位
-  const [resolvedImage, setResolvedImage] = useState<string | null>(() => {
-    if (image !== undefined) return image
-    const lazy = lazyMusicInfo as unknown as { meta?: { picUrl?: string | null }, pic?: string | null } | null | undefined
-    return lazy?.meta?.picUrl ?? lazy?.pic ?? null
-  })
-  const loadedRef = useRef(false)
+  const initialImage = pickInitialRowImage(image, lazyMusicInfo)
+  const lazyKey = lazyMusicInfo ? `${lazyMusicInfo.source}_${lazyMusicInfo.id}` : null
+  const [resolvedImage, setResolvedImage] = useState<string | null>(initialImage)
+  const loadedKeyRef = useRef<string | null>(null)
+  const activeLazyKeyRef = useRef<string | null>(lazyKey)
+  activeLazyKeyRef.current = lazyKey
 
-  useEffect(() => { setResolvedImage(image ?? null) }, [image])
+  // 必须用计算后的 initialImage 同步（此前写 setResolvedImage(image ?? null)，
+  // 在只传 lazyMusicInfo、image=undefined 的队列页里挂载即把刚取到的封面清成 null）
+  useEffect(() => {
+    setResolvedImage(initialImage)
+    loadedKeyRef.current = null
+  }, [initialImage, lazyKey])
+
+  const triggerLazyPicLoad = useCallback(() => {
+    if (!lazyMusicInfo || !lazyKey || resolvedImage || loadedKeyRef.current === lazyKey) return
+    loadedKeyRef.current = lazyKey
+    const requestKey = lazyKey
+    void getPicUrl({ musicInfo: lazyMusicInfo, isRefresh: false, allowToggleSource: false }).then((url) => {
+      if (url && activeLazyKeyRef.current === requestKey) setResolvedImage(url)
+    }).catch(() => {})
+  }, [lazyKey, lazyMusicInfo, resolvedImage])
 
   const handleRowFocus = useCallback((event: Parameters<NonNullable<ComponentProps<typeof Focusable>['onFocus']>>[0]) => {
-    if (!loadedRef.current && lazyMusicInfo && !resolvedImage) {
-      loadedRef.current = true
-      void getPicUrl({ musicInfo: lazyMusicInfo, isRefresh: false, allowToggleSource: false }).then((url) => {
-        if (url) setResolvedImage(url)
-      }).catch(() => {})
-    }
+    triggerLazyPicLoad()
     const onFocus = props.onFocus as ((e: typeof event) => void) | undefined
     onFocus?.(event)
-  }, [lazyMusicInfo, resolvedImage, props])
+  }, [triggerLazyPicLoad, props.onFocus])
+
+  const handleRowTVFocusChange = useCallback((focused: boolean) => {
+    if (focused) triggerLazyPicLoad()
+    onTVFocusChange?.(focused)
+  }, [onTVFocusChange, triggerLazyPicLoad])
 
   return (
     <Focusable
@@ -61,6 +85,7 @@ const TVMusicRow = forwardRef<any, Props>(({
       focusStyle={styles.focus}
       {...props}
       onFocus={handleRowFocus}
+      onTVFocusChange={handleRowTVFocusChange}
     >
       <View style={styles.indexBox}>
         <TVText variant="body" color={active ? tvColors.primaryHigh : tvColors.dimText}>

@@ -213,6 +213,7 @@ export const clearActiveTVFocusScope = (scopeId: string) => {
 }
 
 export const isActiveTVFocusScope = (scopeId: string) => activeScopeId === scopeId
+export const getActiveTVFocusScope = () => activeScopeId
 
 export const registerTVFocusTarget = (scopeId: string, ref: FocusTargetRef | null, preferred: boolean, onPress?: () => void) => {
   const id = nextTargetId++

@@ -4,6 +4,8 @@ import { destroy, loadScript } from '@/utils/nativeModules/userApi'
 import { log as writeLog } from '@/utils/log'
 import RNFS from 'react-native-fs'
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
+import { parseUserApiScriptMeta } from '@/core/userApiWatchdog'
+import { syncActiveTVPresetCandidate } from '@/core/tvPresetUserApi'
 
 
 export const setUserApi = async(apiId: string) => {
@@ -13,14 +15,20 @@ export const setUserApi = async(apiId: string) => {
   const presetCandidate = TV_PRESET_USER_API_CANDIDATES.find(item => item.id === apiId)
   if (presetCandidate) {
     const script = await RNFS.readFileAssets(presetCandidate.assetPath, 'utf8')
+    syncActiveTVPresetCandidate(presetCandidate.id)
+    const meta = parseUserApiScriptMeta(script, {
+      name: presetCandidate.name,
+      author: presetCandidate.author,
+      version: '1',
+    })
     loadScript({
       id: presetCandidate.id,
-      name: presetCandidate.name,
+      name: meta.name,
       description: 'Built-in TV preset source',
       allowShowUpdateAlert: false,
-      author: presetCandidate.author,
+      author: meta.author,
       homepage: presetCandidate.homepage,
-      version: 'preset',
+      version: meta.version,
       script,
     })
     return

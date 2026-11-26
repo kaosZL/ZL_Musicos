@@ -6,7 +6,7 @@ import TVText from '@/components/TV/TVText'
 import TVButton from '@/components/TV/TVButton'
 import TVMusicRow from '@/components/TV/TVMusicRow'
 import TVGlassPanel from '@/components/TV/TVGlassPanel'
-import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
+import TVDialog, { resolveDismissedDialogRequest, type TVDialogRequest } from '@/components/TV/TVDialog'
 import { focusTVTargetByRef } from '@/components/TV/tvFocusManager'
 import type Focusable from '@/components/TV/Focusable'
 import Image from '@/components/common/Image'
@@ -30,7 +30,9 @@ import { createTVTabs, getSourceName } from './utils'
 
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
-const ITEM_SIZE = tvSize(78)
+const ROW_HEIGHT = tvSize(78)
+const ROW_GAP = tvSize(10)
+const ITEM_STRIDE = ROW_HEIGHT + ROW_GAP
 
 interface Props {
   componentId: string
@@ -60,7 +62,7 @@ function TVDetail({ componentId, payload }: Props) {
   const queueFocusRefresh = useTVFocusRefresh()
   const activeTabFocus = useRef<FocusNode>(null)
   const getActiveTabHandle = () => (activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null)
-  const actionFocusedRef = useRef(false)
+  const actionFocusCountRef = useRef(0)
 
   // 从操作按钮下键进列表首行：直接聚焦（不再靠 preferred 翻转间接实现——
   // 初始焦点改为仅挂载时调度后，翻转不再触发焦点移动，09-22）
@@ -73,7 +75,7 @@ function TVDetail({ componentId, payload }: Props) {
   useTVNavigationBack(componentId)
   useTVRemoteActions({
     playPause: () => { if (list.length) void handlePlay(0) },
-    down: () => { if (actionFocusedRef.current) focusFirstRow() },
+    down: () => { if (actionFocusCountRef.current > 0) focusFirstRow() },
   }, componentId)
 
   const image = payload.type === 'songlist' ? payload.songlist.img : null
@@ -172,11 +174,13 @@ function TVDetail({ componentId, payload }: Props) {
   }
 
   const handleFocus = (index: number) => {
-    listRef.current?.scrollToOffset({ offset: Math.max(0, index * ITEM_SIZE - ITEM_SIZE), animated: true })
+    listRef.current?.scrollToOffset({ offset: Math.max(0, index * ITEM_STRIDE - ITEM_STRIDE), animated: true })
   }
 
-  const handleActionFocus = () => { actionFocusedRef.current = true }
-  const handleActionBlur = () => { actionFocusedRef.current = false }
+  const handleActionFocusChange = useCallback((focused: boolean) => {
+    if (focused) actionFocusCountRef.current += 1
+    else actionFocusCountRef.current = Math.max(0, actionFocusCountRef.current - 1)
+  }, [])
 
   const handlePlay = async(index = 0) => {
     if (payload.type === 'board') await handleBoardPlay(payload.id, list, index)
@@ -269,8 +273,7 @@ function TVDetail({ componentId, payload }: Props) {
                 tone="dark"
                 style={styles.actionButton}
                 onPress={() => { void handlePlay(0) }}
-                onFocus={handleActionFocus}
-                onBlur={handleActionBlur}
+                onTVFocusChange={handleActionFocusChange}
                 hasTVPreferredFocus
                 nextFocusUp={getActiveTabHandle() ?? undefined}
                 nextFocusRight={backFocus.getNodeHandle() ?? undefined}
@@ -282,8 +285,7 @@ function TVDetail({ componentId, payload }: Props) {
                 tone="dark"
                 style={styles.backButton}
                 onPress={() => { void pop(componentId) }}
-                onFocus={handleActionFocus}
-                onBlur={handleActionBlur}
+                onTVFocusChange={handleActionFocusChange}
                 nextFocusUp={getActiveTabHandle() ?? undefined}
                 nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
                 nextFocusRight={firstRowFocus.getNodeHandle() ?? undefined}
@@ -332,7 +334,10 @@ function TVDetail({ componentId, payload }: Props) {
                 label={loadingMore ? tvText.loading : tvText.loadMore}
                 tone="dark"
                 style={styles.loadMore}
+                onTVFocusChange={focused => { if (focused) listRef.current?.scrollToEnd({ animated: true }) }}
                 onPress={() => { void handleLoadMore() }}
+                nextFocusUp={list.length ? getRowHandle(getRowKey(list[list.length - 1], list.length - 1)) ?? undefined : undefined}
+                nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
               />
             ) : null}
             renderItem={({ item, index }) => {
@@ -348,12 +353,12 @@ function TVDetail({ componentId, payload }: Props) {
                   meta={item.interval ?? getSourceName(item.source)}
                   badge={index < 3 ? tvText.hotChart : undefined}
                   hasTVPreferredFocus={false}
-                  onFocus={() => { handleFocus(index) }}
+                  onTVFocusChange={focused => { if (focused) handleFocus(index) }}
                   onPress={() => { void handlePlay(index) }}
                   onLongPress={payload.type === 'userlist' ? () => { confirmRemoveSong(item) } : () => { void handleSinglePlay(item) }}
                   nextFocusUp={index === 0 ? getActiveTabHandle() ?? playAllFocus.getNodeHandle() ?? undefined : getRowHandle(prevKey) ?? undefined}
                   nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
-                  nextFocusDown={getRowHandle(nextKey) ?? undefined}
+                  nextFocusDown={getRowHandle(nextKey) ?? (hasMore && index === list.length - 1 ? loadMoreFocus.getNodeHandle() ?? undefined : undefined)}
                 />
               )
             }}
@@ -362,16 +367,15 @@ function TVDetail({ componentId, payload }: Props) {
       </View>
       <TVDialog
         visible={!!localDialog}
+        resetKey={localDialog}
         title={localDialog?.title ?? ''}
         message={localDialog?.message}
-        buttons={localDialog?.buttons?.map(btn => ({
-          ...btn,
-          onPress: () => {
-            setLocalDialog(null)
-            btn.onPress?.()
-          },
-        })) ?? []}
-        onDismiss={() => { setLocalDialog(null) }}
+        buttons={localDialog?.buttons ?? []}
+        onDismiss={() => {
+          const closing = localDialog
+          setLocalDialog(prev => resolveDismissedDialogRequest(prev, closing))
+          closing?.onDismiss?.()
+        }}
       />
     </TVAppleScaffold>
   )

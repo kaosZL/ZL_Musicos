@@ -3,9 +3,23 @@ import musicSdk from '@/utils/musicSdk'
 // import apiSourceInfo from '@renderer/utils/musicSdk/api-source-info'
 import { updateSetting } from './common'
 import settingState from '@/store/setting/state'
-import { destroyUserApi, setUserApi } from './userApi'
+import { destroyUserApi, setUserApi, setUserApiStatus } from './userApi'
 import apiSourceInfo from '@/utils/musicSdk/api-source-info'
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
+import { state as userApiState } from '@/store/userApi/state'
+import { pickFallbackApiSource } from '@/core/userApiWatchdog'
+
+
+export const resolveFallbackApiSource = (excludeId: string, removedSourcesOverride?: readonly string[]): string => {
+  const removedSources = removedSourcesOverride ?? settingState.setting['common.tvRemovedSources'] ?? []
+  return pickFallbackApiSource({
+    excludeId,
+    userApiIds: userApiState.list.map(item => item.id),
+    presetIds: TV_PRESET_USER_API_CANDIDATES.map(item => item.id),
+    removedSources,
+    builtinIds: apiSourceInfo.filter(item => !item.disabled).map(item => item.id),
+  })
+}
 
 
 export const setApiSource = (apiId: string) => {
@@ -28,9 +42,11 @@ export const setApiSource = (apiId: string) => {
     })
   } else {
     // @ts-expect-error
-    global.lx.qualityList = musicSdk.supportQuality[apiId] ?? {}
+    const support = musicSdk.supportQuality[apiId]
+    global.lx.qualityList = support ?? {}
     destroyUserApi()
-    if (!global.lx.apiInitPromise[1]) global.lx.apiInitPromise[2](true)
+    if (!support) setUserApiStatus(false, '')
+    if (!global.lx.apiInitPromise[1]) global.lx.apiInitPromise[2](Boolean(apiId && support))
     // apiSource.value = apiId
     // void setUserApiAction(apiId)
   }

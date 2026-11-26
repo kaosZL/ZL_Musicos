@@ -121,12 +121,6 @@ const handleRequestData = async(url, {
       delete options.form
     } else if (options.formData) {
       headers['Content-Type'] = 'multipart/form-data'
-      const formBody = []
-      for (let [key, value] of Object.entries(options.form)) {
-        let encodedKey = encodeURIComponent(key)
-        let encodedValue = encodeURIComponent(value)
-        formBody.push(`${encodedKey}=${encodedValue}`)
-      }
       options.body = options.formData
       delete options.formData
     } else {

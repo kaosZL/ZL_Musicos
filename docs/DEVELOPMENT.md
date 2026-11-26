@@ -37,6 +37,7 @@ src/
     userApi                  user API 脚本装载
     tvLan.ts                 手机互联会话全局单例（见 §8）
     tvPresetUserApi.ts       预置音源加载与失败兜底（见 §7）
+    userApiWatchdog.ts       音源初始化 12s 超时看门狗与删源回退纯逻辑（见 §7）
   navigation/                RNN 屏幕注册（registerScreens）与跳转（navigation.ts）
   store/                     各状态域（setting/player/list/userApi）
 android/
@@ -129,12 +130,15 @@ playerLyrics.ts           歌词窗口纯逻辑（已唱2+当前+未唱2，杂�
 - 控制栏**呼出**（操作模式）= 焦点导航：歌词区按左/右跳焦上一首/下一首按钮，切歌必须 OK 确认
 - 歌词区 Focusable 四向 nextFocus 动态化：隐藏态全自指（引擎让路），呼出态左右指按钮
 
-### 6.3 直控层门控（防双触发，全部条件都要过）
+### 6.3 直控层门控（防双触发与串键，全部条件都要过）
 ```ts
+if (!isActiveScreen) return                       // 播放页压栈非活动屏不响应
+if (dialogActive || fullscreenLyrics) return      // 弹窗/全屏歌词期间完全让路
 if (controlFocusCountRef.current > 0) return      // 焦点在控制按钮上
 if (isSeekKey && showControls) return             // 呼出态左右键不直控
 if (Date.now() - controlFocusTimeRef.current < 500) return  // Issue #9 空窗守卫
 ```
+- 全屏歌词期间持有一次 `setTVDialogActive(true)` 让焦点控制器让路；退出需收到进入全屏后的新一次 OK 按下→松开（防止长按进入后松开手指秒退），且 `useTVRemoteActions` 仅放行专用媒体键（`allowMediaDuringOverlay`）
 
 ### 6.4 其他要点
 - 切歌锁存 pendingPlay：取新歌链接期间 isPlay 闪断，播放键图标维持播放态（8s 兜底）
@@ -148,8 +152,8 @@ if (Date.now() - controlFocusTimeRef.current < 500) return  // Issue #9 空窗�
 - 取链链路：`getMusicUrl` → `getPlayQuality`（按歌逐首降档：目标档起沿 flac24bit→flac→320k 找「歌有 && 源支持」，否则 128k）→ `handleGetOnlineMusicUrl`（**同源降档双保险**：取链失败先降档重试再换源）→ 失败换源 `getOnlineOtherSourceMusicUrl`
 - URL 有按 (musicInfo, quality) 维度的本地缓存（getStoreMusicUrl）
 - 电视端启动（`core/init/index.ts`）：`ensureTVPresetUserApi()` **每次启动都加载第一个未被删除的预置源并设为当前音源**（lulu 原版设计，用户自选的音源不跨启动保留）。预置脚本打包在 `assets/script/`，**没有更新机制**，要跟进上游需手动替换文件
-- 预置源初始化**明确失败**（`status=false` 且 id 为 `tv_preset_*`）时，`tryNextTVPresetUserApiCandidate()` 自动切到下一个预置源
-- **已知缺陷（[Issue #17](https://github.com/kaosZL/ZL_Musicos/issues/17)，待修）**：音源初始化没有超时。脚本既不报成功也不报失败时（后端返回非 200 导致脚本抛错、或脚本体执行出错——原生 `QuickJS.loadScript` 的 evaluate 异常只调 `__run_error__`，不上报 App 层），音源永远停在「加载中」，`global.lx.apiInitPromise` 永不 resolve，所有播放请求挂起，上面的自动兜底也不会触发
+- 预置源初始化失败或超时（`status=false` 且 id 为 `tv_preset_*`）时，`tryNextTVPresetUserApiCandidate(failedId)` 自动切到下一个未删除的预置源；只有全部候选耗尽后才将 `global.lx.apiInitPromise` 落定为 `false` 并弹窗提示
+- **初始化超时看门狗（v1.9.26，修复 [Issue #17](https://github.com/kaosZL/ZL_Musicos/issues/17)）**：`userApiWatchdog.ts` 在 `loadScript` 时启动 12 秒计时器；脚本异步抛错或未回报 `inited` 事件时，自动销毁卡死 QuickJS 线程、记录 `debugLog` 并走统一失败/预置源兜底链路，不再永久卡「加载中」。设置页与手机页已移除无实际实现的 `id=''` 伪「聚合音源」占位项，删源自动回退到下一个真实可用源
 
 ## 8. 局域网手机互联（LanImportServer）
 
@@ -167,8 +171,9 @@ NanoHTTPD，随机端口 + token 鉴权，`/api/` 前缀即 API。手机扫码�
 
 - 清单：`publish/tv-version.json`（**CI 在 master 发版后自动重写**，带 ghfast.top 镜像前缀，提交带 [skip ci] 防循环）
 - 检查链：镜像前缀 ×2 → raw 直连 → jsDelivr → GitHub API releases/latest（`checkTVUpdate`）
-- 下载链：`buildDownloadCandidates`（清单 URL → GitHub 原链 → 各镜像前缀，纯逻辑有单测）依次尝试
-- 新版本（v1.9.23+）：Home 启动 6s 静默检查（24h 一次，storage 键 tv_update_last_check_at），发现新版 TVDialog 引导去设置页
+- 下载链：`buildDownloadCandidates`（清单 URL → GitHub 原链 → 各镜像前缀，纯逻辑有单测）依次尝试；落盘后经 `validateDownloadedApk` 严格校验 `statusCode === 200` 与包体大小（≥1MB 且不低于清单体积的 90%），失败清理坏包继续换镜像
+- Android < 7.0（SDK < 24，如 Android 5.1）：`UtilsModule.installApk` 将 APK 复制到应用外部缓存目录（API 19+ 免存储权限）再拉起 `file://` 安装，绕开私有 `CacheDir`（`0700`）外部安装器无权读取的问题
+- 新版本（v1.9.23+）：Home 启动 6s 静默检查（24h 一次，仅检查成功后才写 `tv_update_last_check_at` 冷却时间；若已在设置页点「去更新」不再重复叠推）
 - 旧版本（v1.9.13+）：设置页手动检查读同一清单——**清单内容即对旧版本的控制面**
 
 ## 10. 构建与发版
@@ -208,9 +213,11 @@ NanoHTTPD，随机端口 + token 鉴权，`/api/` 前缀即 API。手机扫码�
 | NaN/同引用 setState | React Object.is 短路；活数组要先快照 |
 | 图标缓存 | 换图标后启动器缓存顽固，需断电重启电视 |
 | workflow 凭证守护 | 写 .yml 用编辑工具（不用 bash 拼接），防 `${{ }}` 被改写 |
-| 弹窗确认键变成取消 | TVDialog 的 select 处理若先调 onDismiss（confirmDialog 里是 resolve(false)）再调按钮 onPress，Promise 先落定为 false → 必须先执行按钮动作、后通知 onDismiss |
+| 弹窗确认键变成取消 / 连环弹窗被吞 | TVDialog 必须先执行 `btn.onPress` 后通知 `onDismiss`（遥控与 Pressable 鼠标路径同步），且宿主 `onDismiss` 需通过 `resolveDismissedDialogRequest(prev, closing)` 判等，避免 `btn.onPress` 同步弹出的二级弹窗被旧 `onDismiss` 清成 null |
 | 全屏弹层挡住按键 | 弹层打开期间焦点控制器让路，底下按钮的长按/OK 到不了 → 弹层内自带长按判定（repeat 连发立即触发 + 550ms 兜底计时器） |
-| 音源脚本不上报初始化结果 | 脚本抛错且未发 init 事件、或脚本体执行出错时 App 层无从得知 → 目前没有初始化超时（Issue #17 待修） |
+| 音源脚本不上报初始化结果 | 异步抛错或不发 `inited` 会导致永久「加载中」→ v1.9.26 起 `loadScript` 自动挂载 12s 看门狗（超时销毁线程并走失败/预置源兜底） |
+| `/api/logs` 手拼 JSON 遇换行崩盘 | `LanImportServer` 必须用 `JSONArray` 序列化运行日志，避免含 `\n` 的错误/堆栈弄坏整个手机日志控制台 |
+| `TVMusicRow` 挂载清掉 `lazyMusicInfo` 封面 | 同步 `image` prop 的 `useEffect` 必须以 `pickInitialRowImage(image, lazyMusicInfo)` 为准，禁止直接 `setResolvedImage(image ?? null)` |
 
 ## 12. 修改守则
 
@@ -224,4 +231,4 @@ NanoHTTPD，随机端口 + token 鉴权，`/api/` 前缀即 API。手机扫码�
 
 ---
 
-*最后更新：2026-11-26（v1.9.25 发布后与代码对齐：返回键统一管线、构建标记自动化、预置源加载与已知缺陷）*
+*最后更新：2026-11-26（v1.9.26·249：14 项全仓 Bug 修复——连环弹窗、队列封面、去除幽灵源、播放页门控、音源 12s 看门狗、更新校验与 Android 5.x 安装、日志 JSON 转义及原生 QuickJS 清理）*

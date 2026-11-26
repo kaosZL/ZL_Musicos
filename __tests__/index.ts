@@ -5,5 +5,6 @@ import './tvFocusEngine.test'
 import './playerLyrics.test'
 import './playerLayout.test'
 import './controlDeckGate.test'
+import './userApiWatchdog.test'
 
 void run()

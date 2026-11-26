@@ -15,7 +15,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated } from 'react-native'
 import { registerTVBack } from '@/components/TV/tvBackManager'
-import { focusTVTargetByRef } from '@/components/TV/tvFocusManager'
+import { isTVDialogVisible } from '@/components/TV/TVDialog'
+import { focusTVTargetByRef, isActiveTVFocusScope, isTVDialogActive, setTVDialogActive } from '@/components/TV/tvFocusManager'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { debugLog, onTVRemoteEvent } from '@/utils/nativeModules/utils'
@@ -70,12 +71,34 @@ export const usePlayerControlDeck = ({ componentId, canPlay, isPlay, musicId, pl
 
   // ── 全屏歌词 ──
   const [fullscreenLyrics, setFullscreenLyrics] = useState(false)
+  // 记录「因退出全屏或长按进入全屏」而需吞掉的紧邻那一次 select UP，防止松键误触暂停/播放
+  const suppressSelectUpRef = useRef(false)
+  const selectDownAtRef = useRef(0)
+  const selectHoldRef = useRef(false)
+
   useEffect(() => {
     if (!fullscreenLyrics) return
-    return onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
-      if (eventType === 'select' && eventKeyAction === 1 && repeatCount === 0) setFullscreenLyrics(false)
+    // 全屏歌词期间焦点控制器让路（与二维码弹层同款计数式让路），避免底层按钮串键；
+    // 只有进入全屏后再收到一次全新的 OK 按下→松开才退出，避免长按进入后松开手指秒退
+    setTVDialogActive(true)
+    suppressSelectUpRef.current = true
+    let sawSelectDown = false
+    const unsub = onTVRemoteEvent(({ eventType, eventKeyAction, repeatCount }) => {
+      if (!isActiveTVFocusScope(componentId) || isTVDialogVisible()) return
+      if (eventType !== 'select') return
+      if (eventKeyAction === 0 && repeatCount === 0) {
+        sawSelectDown = true
+      } else if (eventKeyAction === 1 && sawSelectDown) {
+        sawSelectDown = false
+        suppressSelectUpRef.current = true
+        setFullscreenLyrics(false)
+      }
     })
-  }, [fullscreenLyrics])
+    return () => {
+      setTVDialogActive(false)
+      unsub()
+    }
+  }, [componentId, fullscreenLyrics])
 
   // ── 返回键（统一管线 z=100 屏级拦截，单处理器单优先级）：
   //    全屏歌词 > 收起控制栏 > 交给导航返回（z=10） ──
@@ -128,7 +151,7 @@ export const usePlayerControlDeck = ({ componentId, canPlay, isPlay, musicId, pl
     requestAnimationFrame(tick)
   }, [playFocus.ref])
 
-  // ── 媒体键 + 呼出键（key UP，活动屏限定）──
+  // ── 媒体键 + 呼出键（key UP，活动屏限定；全屏歌词期间仅放行专用媒体键）──
   useTVRemoteActions({
     playPause: () => { if (canPlay) callbacksRef.current.onTogglePlay() },
     previous: () => { if (canPlay) callbacksRef.current.onPrev() },
@@ -139,7 +162,7 @@ export const usePlayerControlDeck = ({ componentId, canPlay, isPlay, musicId, pl
     down: () => { revealControls(); focusPlayAfterReveal() },
     up: () => { revealControls(); focusPlayAfterReveal() },
     menu: () => { revealControls(); focusPlayAfterReveal() },
-  }, componentId)
+  }, componentId, { allowMediaDuringOverlay: true })
 
   // ── 直控层：OK=暂停/播放（松键）、左右=切歌（松键、长按只记账防误触）──
   const canPlayRef = useRef(canPlay)
@@ -151,15 +174,40 @@ export const usePlayerControlDeck = ({ componentId, canPlay, isPlay, musicId, pl
       const isSeekKey = eventType === 'left' || eventType === 'right'
       const isSelectKey = eventType === 'select'
       if (!isSeekKey && !isSelectKey) return
+      // select 按下/长按状态在门控前记账：确保长按进入全屏或刚退出全屏后的那一次松键绝不触发暂停
+      if (isSelectKey) {
+        if (eventKeyAction === 0 && repeatCount === 0) {
+          selectDownAtRef.current = Date.now()
+          selectHoldRef.current = false
+          suppressSelectUpRef.current = false
+        } else if (eventKeyAction === 0 && (repeatCount ?? 0) > 0) {
+          selectHoldRef.current = true
+        }
+      }
       if (!shouldDirectControlHandleKey({
         canPlay: canPlayRef.current,
         focusOnControl: controlFocusCountRef.current > 0,
         isSeekKey,
         controlsVisible: controlsVisibleRefForGate.current,
         msSinceControlFocus: Date.now() - controlFocusTimeRef.current,
-      })) return
+        isActiveScreen: isActiveTVFocusScope(componentId),
+        dialogActive: isTVDialogActive(),
+        fullscreenLyrics: fullscreenLyricsRef.current,
+      })) {
+        if (isSelectKey && eventKeyAction === 1) {
+          selectHoldRef.current = false
+          suppressSelectUpRef.current = false
+        }
+        return
+      }
       if (isSelectKey) {
-        if (eventKeyAction === 1) callbacksRef.current.onTogglePlay()
+        if (eventKeyAction === 1) {
+          const heldTooLong = selectDownAtRef.current > 0 && Date.now() - selectDownAtRef.current >= 500
+          const shouldIgnore = selectHoldRef.current || suppressSelectUpRef.current || heldTooLong
+          selectHoldRef.current = false
+          suppressSelectUpRef.current = false
+          if (!shouldIgnore) callbacksRef.current.onTogglePlay()
+        }
         return
       }
       const dir = eventType === 'left' ? 'left' : 'right'
@@ -176,7 +224,7 @@ export const usePlayerControlDeck = ({ componentId, canPlay, isPlay, musicId, pl
         else callbacksRef.current.onNext()
       }
     })
-  }, [])
+  }, [componentId])
 
   // ── 切歌锁存（v1.9.21）：取新歌链接期间 isPlay 闪断，播放键图标维持播放态 ──
   const lastPlayingAtRef = useRef(0)

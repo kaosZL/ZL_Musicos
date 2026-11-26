@@ -40,12 +40,14 @@ public class QuickJS {
   }
 
   private String getPreloadScript() {
-    try {
-      InputStream inputStream = this.reactContext.getAssets().open("script/user-api-preload.js");
-      byte[] buffer = new byte[inputStream.available()];
-      inputStream.read(buffer);
-      inputStream.close();
-      return new String(buffer, StandardCharsets.UTF_8);
+    try (InputStream inputStream = this.reactContext.getAssets().open("script/user-api-preload.js");
+         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+      byte[] buf = new byte[8192];
+      int n;
+      while ((n = inputStream.read(buf)) > 0) {
+        out.write(buf, 0, n);
+      }
+      return out.toString("UTF-8");
     } catch (Exception e) {
       return null;
     }
@@ -123,9 +125,12 @@ public class QuickJS {
       }
     });
     jsContext.getGlobalObject().setProperty("__lx_native_call__set_timeout", args -> {
+      long delay = (args.length > 1 && args[1] instanceof Number) ? Math.max(0L, ((Number) args[1]).longValue()) : 0L;
+      Object timerId = args.length > 0 ? args[0] : null;
       this.timeoutHandler.postDelayed(() -> {
-        callJS("__set_timeout__", args[0]);
-      }, (int) args[1]);
+        if (this.jsContext == null) return;
+        callJS("__set_timeout__", timerId);
+      }, delay);
       return null;
     });
   }
@@ -194,6 +199,7 @@ public class QuickJS {
     return callJS(params);
   }
   public Object callJS(Object[] params) {
+    if (this.jsContext == null) return null;
     try {
       return this.jsContext.getGlobalObject().getJSFunction("__lx_native__").call(params);
     } catch (Exception e) {
@@ -214,7 +220,10 @@ public class QuickJS {
   }
 
   public void destroy () {
-    this.jsContext.destroy();
-    this.jsContext = null;
+    this.timeoutHandler.removeCallbacksAndMessages(null);
+    if (this.jsContext != null) {
+      this.jsContext.destroy();
+      this.jsContext = null;
+    }
   }
 }

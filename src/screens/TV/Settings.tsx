@@ -15,7 +15,7 @@ import { useStatus, useUserApiList } from '@/store/userApi/hook'
 import syncState from '@/store/sync/state'
 import apiSourceInfo from '@/utils/musicSdk/api-source-info'
 import { LIST_IDS } from '@/config/constant'
-import { setApiSource } from '@/core/apiSource'
+import { resolveFallbackApiSource, setApiSource } from '@/core/apiSource'
 import { updateSetting } from '@/core/common'
 import { debugLog, generateQRCodeBase64, onTVRemoteEvent } from '@/utils/nativeModules/utils'
 import { removeUserApi, setUserApiAllowShowUpdateAlert } from '@/core/userApi'
@@ -24,7 +24,7 @@ import { startTvLanSession, stopTvLanSession, subscribeTvLanSession } from '@/co
 import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
-import { setTVDialogActive } from '@/components/TV/tvFocusManager'
+import { getActiveTVFocusScope, setTVDialogActive } from '@/components/TV/tvFocusManager'
 import { registerTVBack } from '@/components/TV/tvBackManager'
 import { pushTVPlayerScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
@@ -48,6 +48,13 @@ type TVUpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'downloadin
 // 否则从设置页再 push 一个设置页时，同一次手机提交会被两个实例各处理一遍（歌单被导入两遍）。
 // 这个 token 记录「当前会话的归属实例」。
 
+const settingsScopeIds = new Set<string>()
+/** 当前栈顶活动屏是否已经是设置页（防止首页 6s 自动更新弹窗叠推第二层设置页） */
+export const isTVSettingsScreenActive = () => {
+  const active = getActiveTVFocusScope()
+  return !!active && settingsScopeIds.has(active)
+}
+
 const DEFAULT_SOURCE_FOCUS_KEY = '__default__'
 const getFocusKey = (id: string) => id || DEFAULT_SOURCE_FOCUS_KEY
 const getHandleFromMap = (mapRef: MutableRefObject<FocusRefMap>, key?: string | null) => {
@@ -63,12 +70,9 @@ const formatUpdateSize = (size: number) => {
 }
 const getUpdateErrorText = (err: unknown) => {
   const message = err instanceof Error ? err.message : ''
-  switch (message) {
-    case 'NO_APK_ASSET':
-      return tvText.updateNoPackage
-    default:
-      return tvText.updateFailed
-  }
+  if (message === 'NO_APK_ASSET') return tvText.updateNoPackage
+  if (message.startsWith('DOWNLOAD_')) return '更新包下载失败，请稍后重试'
+  return tvText.updateFailed
 }
 
 // 音乐音质四档（v1.9.23）：写 player.playQuality，核心链路按歌逐首自动降档（getPlayQuality）
@@ -123,6 +127,11 @@ function TVSettings({ componentId }: { componentId: string }) {
   const activeTabFocus = useRef<FocusNode>(null)
   const getActiveTabHandle = () => (activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null)
 
+  useEffect(() => {
+    settingsScopeIds.add(componentId)
+    return () => { settingsScopeIds.delete(componentId) }
+  }, [componentId])
+
   useTVNavigationBack(componentId)
   useTVRemoteActions({ playPause: () => { if (musicInfo.id) pushTVPlayerScreen(componentId) } }, componentId)
 
@@ -148,8 +157,8 @@ function TVSettings({ componentId }: { componentId: string }) {
     status: apiSource === item.id ? (apiStatus.status ? tvText.loaded : apiStatus.message === 'initing' ? tvText.loading : tvText.loadFailed) : tvText.preset,
   })), [apiSource, apiStatus.message, apiStatus.status, removedSources])
 
+  // 不再插入 id='' 的伪「聚合音源」占位项（底层 apiSource='' 是未选源，选了所有歌必报 Api is not found）
   const baseSources = useMemo<SourceItem[]>(() => ([
-    { id: '', name: tvText.aggregateSource, desc: tvText.sourceSettingsDesc, status: tvText.available },
     ...presetSources,
     ...defaultSources,
   ]), [defaultSources, presetSources])
@@ -391,7 +400,7 @@ function TVSettings({ componentId }: { componentId: string }) {
     try {
       const removedIsActive = apiSource === id
       await removeUserApi([id])
-      if (removedIsActive) setApiSource('')
+      if (removedIsActive) setApiSource(resolveFallbackApiSource(id))
       setImportMessage(tvText.removeSuccess)
     } catch (err: unknown) {
       setImportMessage(err instanceof Error ? err.message : tvText.removeFailed)
@@ -409,8 +418,9 @@ function TVSettings({ componentId }: { componentId: string }) {
   }
 
   const removePresetOrBuiltinSource = (id: string) => {
-    updateSetting({ 'common.tvRemovedSources': [...(removedSources ?? []), id] })
-    if (apiSource === id) setApiSource('')
+    const nextRemoved = [...(removedSources ?? []), id]
+    updateSetting({ 'common.tvRemovedSources': nextRemoved })
+    if (apiSource === id) setApiSource(resolveFallbackApiSource(id, nextRemoved))
     setImportMessage('已删除该音源')
   }
 
@@ -424,9 +434,14 @@ function TVSettings({ componentId }: { componentId: string }) {
 
   const confirmRemoveSource = (src: SourceItem) => {
     if (apiSource === src.id) {
+      const fallbackId = resolveFallbackApiSource(src.id)
+      const fallbackItem = allSources.find(item => item.id === fallbackId)
+      const fallbackTip = fallbackItem
+        ? `删除后将自动切换到「${fallbackItem.name}」，当前歌曲会继续播放完。确定删除吗？`
+        : '删除后当前没有其他可用音源，需要通过右侧「手机扫码导入」添加新音源。确定删除吗？'
       showTVDialog({
         title: '删除正在使用的音源',
-        message: `「${src.name}」正在使用中。\n删除后将自动切换到聚合音源，当前歌曲会继续播放完。确定删除吗？`,
+        message: `「${src.name}」正在使用中。\n${fallbackTip}`,
         buttons: [
           { label: '取消', tone: 'dark' },
           { label: '删除', tone: 'danger', onPress: () => { void doRemoveSource(src.id) } },
@@ -489,7 +504,9 @@ function TVSettings({ componentId }: { componentId: string }) {
         <TVSettingsPane title={`${tvText.source}${dot}${tvText.userApi}`} subtitle={tvText.sourceSettingsDesc} style={styles.sourcePanel}>
           <TVText variant="caption" color={tvColors.dimText} style={styles.listHint}>OK 键使用音源 · 长按 OK 键删除/管理</TVText>
           <ScrollView ref={sourceScrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.sourceContent}>
-            {allSources.map((src, index) => {
+            {allSources.length === 0 ? (
+              <TVText variant="body" color={tvColors.subtext} style={styles.message}>还没有可用音源，请使用右侧「手机扫码导入」导入音源脚本。</TVText>
+            ) : allSources.map((src, index) => {
               const focusKey = getFocusKey(src.id)
               const prevSourceId = allSources[index - 1]?.id
               const nextSourceId = allSources[index + 1]?.id

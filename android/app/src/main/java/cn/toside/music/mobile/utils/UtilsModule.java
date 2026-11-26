@@ -281,20 +281,41 @@ public class UtilsModule extends ReactContextBaseJavaModule {
       reactContext.startActivity(installApp);
       promise.resolve(null);
     } else {
-      // Old APIs do not handle content:// URIs, so use an old file:// style
-      String cmd = "chmod 777 " + file;
+      // API < 24（Android 5.x/6.x，如小米电视 3 Android 5.1）：PackageInstaller 不支持 content://，
+      // 且无法穿透应用私有 cache 目录（0700）。优先拷贝到应用专属外部缓存目录（API 19+ 免动态存储权限，
+      // 系统安装器可直接读取）；若无外部存储则退回 chmod 755 父目录 + chmod 644 文件并同步 waitFor()。
+      File installFile = file;
       try {
-        Runtime.getRuntime().exec(cmd);
+        File extCache = reactContext.getExternalCacheDir();
+        if (extCache != null && (extCache.exists() || extCache.mkdirs())) {
+          File target = new File(extCache, file.getName());
+          if (!target.getAbsolutePath().equals(file.getAbsolutePath())) {
+            try (java.io.InputStream in = new java.io.FileInputStream(file);
+                 java.io.OutputStream out = new java.io.FileOutputStream(target)) {
+              byte[] buf = new byte[32768];
+              int n;
+              while ((n = in.read(buf)) > 0) {
+                out.write(buf, 0, n);
+              }
+            }
+          }
+          installFile = target;
+        } else {
+          File parent = file.getParentFile();
+          if (parent != null) {
+            Runtime.getRuntime().exec(new String[]{"chmod", "755", parent.getAbsolutePath()}).waitFor();
+          }
+          Runtime.getRuntime().exec(new String[]{"chmod", "644", file.getAbsolutePath()}).waitFor();
+        }
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.setDataAndType(Uri.fromFile(installFile), "application/vnd.android.package-archive");
+        reactContext.startActivity(intent);
+        promise.resolve(null);
       } catch (Exception e) {
-        // e.printStackTrace();
         Log.e("Utils", "installApk exception : " + e.getMessage(), e);
         promise.reject("Utils", e.getMessage());
       }
-      Intent intent = new Intent(Intent.ACTION_VIEW);
-      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-      intent.setDataAndType(Uri.parse("file://" + file), "application/vnd.android.package-archive");
-      reactContext.startActivity(intent);
-      promise.resolve(null);
     }
   }
 

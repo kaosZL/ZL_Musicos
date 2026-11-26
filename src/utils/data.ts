@@ -564,12 +564,12 @@ export const addUserApi = async(script: string): Promise<LX.UserApi.UserApiInfo>
 }
 export const removeUserApi = async(ids: string[]) => {
   if (!userApis) return []
+  const idSet = new Set(ids)
   const _ids: string[] = []
   for (let index = userApis.length - 1; index > -1; index--) {
-    if (ids.includes(userApis[index].id)) {
+    if (idSet.has(userApis[index].id)) {
       _ids.push(`${userApiPrefix}${userApis[index].id}`)
       userApis.splice(index, 1)
-      ids.splice(index, 1)
     }
   }
   await saveData(userApiPrefix, userApis)
