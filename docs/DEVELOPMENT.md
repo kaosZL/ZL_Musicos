@@ -20,7 +20,8 @@ src/
   components/TV/           TV 组件体系（最重要的目录）
     tvFocusManager.ts        ★ 自研焦点引擎（见 §4）
     Focusable.tsx            焦点包装组件（Pressable + 引擎注册，见 §5）
-    TVRemoteFocusController  每屏挂载的按键→引擎接线（方向键/select/menu）
+    TVRemoteFocusController  每屏挂载的按键→引擎接线（方向键/select/menu；长按 OK=repeat 连发+550ms 兜底）
+    tvBackManager.ts          ★ 返回键唯一分发器（z 级路由，见 §3）
     TVDialog.tsx             全局弹窗（打开时接管按键，setTVDialogActive）
     TVAppleScaffold          屏幕脚手架：模糊背景 + 渐变压暗（TVFadeOverlay）
     TVKeepScreenOn           播放保活（跟随 isPlay 持有 FLAG_KEEP_SCREEN_ON）
@@ -34,6 +35,8 @@ src/
     player/player.ts         播放核心（切歌/取链/换源）
     music/utils.ts           取链与音质降档（getPlayQuality 等，见 §7）
     userApi                  user API 脚本装载
+    tvLan.ts                 手机互联会话全局单例（见 §8）
+    tvPresetUserApi.ts       预置音源加载与失败兜底（见 §7）
   navigation/                RNN 屏幕注册（registerScreens）与跳转（navigation.ts）
   store/                     各状态域（setting/player/list/userApi）
 android/
@@ -51,15 +54,25 @@ __tests__/                  零依赖单测（esbuild 打包 + node 跑，npm te
 ## 3. 按键链路（全仓库最重要的一张图）
 
 ```text
-遥控器按键
-  → MainActivity.dispatchKeyEvent()
-      非返回键（方向/OK/菜单/媒体键）→ UtilsEvent.sendTVRemoteEvent → JS onTVRemoteEvent 事件
+遥控器按键（含返回键）
+  → MainActivity.dispatchKeyEvent()   TV 构建下全部按键在此截获，不再交给安卓默认处理
+      → UtilsEvent.sendTVRemoteEvent → JS onTVRemoteEvent 事件
         ├─ TVRemoteFocusController（每屏一个）: 方向键→moveTVFocus, select→按引擎聚焦目标
+        ├─ tvBackManager（eventType='back'）: 返回键唯一分发器，按 z 级问询（见下表）
         ├─ 各屏 useTVRemoteActions（key UP 触发）：媒体键/呼出控制栏等
         └─ 播放页直控层（见 §6.3）
-  → 返回键【不走上面链路！】→ Android 原生 onBackPressed → RN BackHandler（逆序调用，
-     后注册先问）→ 无人消费则 RNN pop
 ```
+
+**返回键路由（v1.9.24 起，`tvBackManager.ts`）**：从高到低问询，谁先返回 `true` 谁消费；带 `componentId` 的条目只在该屏是活动屏时响应，被压栈的屏自动让路。只在按键**松开**且非长按连发时触发一次。
+
+| z | 注册方 | 行为 |
+|---|---|---|
+| 300 | TVDialog | 关闭弹窗 |
+| 200 | 设置页二维码弹层 | 收起弹层 |
+| 100 | 播放页 | 退出全屏歌词 / 收起控制栏 |
+| 10 | `useTVNavigationBack(componentId)` | 导航返回 |
+
+无人消费则 `exitApp()`（首页是根屏，不注册导航返回）。**每个可返回的 TV 屏幕都必须调用 `useTVNavigationBack(componentId)`**，否则在该屏按返回会直接退出应用。TV 端**不要**再直接用 RN BackHandler 处理返回键（原生已截获，BackHandler 收不到）；`useBackHandler` 只对非 TV 构建生效，`Home.tsx` 里那条调用是历史遗留。
 
 **关键不变量**：Android 原生焦点系统（FocusFinder）完全不在链路里。所有焦点决策都在 JS 引擎。这是历史决策（09-06 原生优先重构翻车回滚的教训），**不要试图拆掉 JS 引擎**。
 
@@ -108,7 +121,7 @@ playerLyrics.ts           歌词窗口纯逻辑（已唱2+当前+未唱2，杂�
 ### 6.1 控制栏显隐（v1.9.24 规则，老板拍板）
 - **不自动隐藏**：呼出后常驻
 - 呼出：上/下/菜单键（revealControls + focusPlayAfterReveal 轮询重试聚焦播放键，500ms 上限）
-- 收起：**返回键**（BackHandler 挂载时注册一次 + showControlsRef 读状态；消费一次返回，再按才退页）
+- 收起：**返回键**（`registerTVBack({ z: 100 })` 屏级拦截，状态经 ref 读取；优先级：全屏歌词 > 收起控制栏 > 交给导航返回。消费一次返回，再按才退页）
 - 进播放页默认无控制栏
 
 ### 6.2 左右键语义（v1.9.21 规则）
@@ -134,6 +147,9 @@ if (Date.now() - controlFocusTimeRef.current < 500) return  // Issue #9 空窗�
 - 音质设置键 `player.playQuality`（128k/320k/flac/flac24bit），设置页「播放」面板写入
 - 取链链路：`getMusicUrl` → `getPlayQuality`（按歌逐首降档：目标档起沿 flac24bit→flac→320k 找「歌有 && 源支持」，否则 128k）→ `handleGetOnlineMusicUrl`（**同源降档双保险**：取链失败先降档重试再换源）→ 失败换源 `getOnlineOtherSourceMusicUrl`
 - URL 有按 (musicInfo, quality) 维度的本地缓存（getStoreMusicUrl）
+- 电视端启动（`core/init/index.ts`）：`ensureTVPresetUserApi()` **每次启动都加载第一个未被删除的预置源并设为当前音源**（lulu 原版设计，用户自选的音源不跨启动保留）。预置脚本打包在 `assets/script/`，**没有更新机制**，要跟进上游需手动替换文件
+- 预置源初始化**明确失败**（`status=false` 且 id 为 `tv_preset_*`）时，`tryNextTVPresetUserApiCandidate()` 自动切到下一个预置源
+- **已知缺陷（[Issue #17](https://github.com/kaosZL/ZL_Musicos/issues/17)，待修）**：音源初始化没有超时。脚本既不报成功也不报失败时（后端返回非 200 导致脚本抛错、或脚本体执行出错——原生 `QuickJS.loadScript` 的 evaluate 异常只调 `__run_error__`，不上报 App 层），音源永远停在「加载中」，`global.lx.apiInitPromise` 永不 resolve，所有播放请求挂起，上面的自动兜底也不会触发
 
 ## 8. 局域网手机互联（LanImportServer）
 
@@ -159,7 +175,7 @@ NanoHTTPD，随机端口 + token 鉴权，`/api/` 前缀即 API。手机扫码�
 
 ### 10.1 分支与版本纪律
 - `dev` 开发、`master` 发版；老板实测通过才合 master（--no-ff merge + tag vX.Y.Z + Release）
-- 测试包必 bump versionName + versionCode + 首页右下角角标（`vX.Y.Z · N`）；正式版移除角标（buildMark 块 + 样式一起删）
+- 首页右下角的版本标记（`vX.Y.Z · N`）**自动跟随 package.json**（`Home.tsx` 运行时读取 version / versionCode），正式版同样显示，无需手动维护或移除。每轮测试包 bump `versionCode`；开新版本周期时同时 bump `version`
 - commit message 必须与 diff --stat 逐文件对账；**message 里任何位置出现 `[skip ci]` 字样都会静默跳过 CI**
 - APK 全靠 GitHub Actions（本机无 SDK 别试本地构建）；artifact zip ≥15MB 在服务器上下载必截断，分发走 Release
 
@@ -171,10 +187,12 @@ NanoHTTPD，随机端口 + token 鉴权，`/api/` 前缀即 API。手机扫码�
 - 遗留：lulu 分支触发与 apk-lulu 渠道已废弃删除，勿复活
 
 ### 10.3 发版 checklist
-1. dev 角标移除 commit → push
-2. merge master --no-ff（message 带「老板实测通过」）→ tag → push（推送断连用 代理 7897/直连 交替重试）
+1. 确认 dev 上该版本的改动老板已实测通过（版本标记自动，无需额外提交）
+2. 先 `git fetch` 并把本地 master 对齐 `origin/master`（上一次发版后 CI 机器人会直接向 master 提交更新清单），再 merge dev --no-ff（message 带「老板实测通过」）→ tag → push（推送断连用 代理 7897/直连 交替重试）；推完比对远端 sha，确认真的推上去了
 3. API 建 Release（notes 中文，make_latest=true）→ 等 CI 绿 → 确认 5 APK + 清单已自动更新
 4. 旧 Release 只保留最近 3 个（滚动删）
+
+注意：每次向 master 推送都会触发 CI 重新构建，并覆盖上传当前版本 Release 里的 APK（纯文档改动也会）。
 
 ## 11. 血泪墙（改代码前必读）
 
@@ -186,10 +204,13 @@ NanoHTTPD，随机端口 + token 鉴权，`/api/` 前缀即 API。手机扫码�
 | 不透明染色层 | 会把压暗层的矩形边界显形为「方块墙」→ 染色层必须半透明 |
 | useNativeDriver:false 颜色动画 | 逐帧卡 JS 线程，遥控按键全在 JS 线程 → 丢按键 |
 | 原生 onFocus 不可靠 | 部分电视引擎送焦点时原生事件不回调 → 副作用挂 onTVFocusChange |
-| BackHandler 重注册 | 依赖状态的监听器反复注销/重注册有时序边界 → 注册一次 + ref |
+| 返回键监听顺序 | v1.9.24 前返回键走系统 BackHandler（全局监听栈，依赖看不见的注册顺序），播放页「返回收栏」因此反复失效 → 现由原生截获、tvBackManager 按 z 级路由 |
 | NaN/同引用 setState | React Object.is 短路；活数组要先快照 |
 | 图标缓存 | 换图标后启动器缓存顽固，需断电重启电视 |
 | workflow 凭证守护 | 写 .yml 用编辑工具（不用 bash 拼接），防 `${{ }}` 被改写 |
+| 弹窗确认键变成取消 | TVDialog 的 select 处理若先调 onDismiss（confirmDialog 里是 resolve(false)）再调按钮 onPress，Promise 先落定为 false → 必须先执行按钮动作、后通知 onDismiss |
+| 全屏弹层挡住按键 | 弹层打开期间焦点控制器让路，底下按钮的长按/OK 到不了 → 弹层内自带长按判定（repeat 连发立即触发 + 550ms 兜底计时器） |
+| 音源脚本不上报初始化结果 | 脚本抛错且未发 init 事件、或脚本体执行出错时 App 层无从得知 → 目前没有初始化超时（Issue #17 待修） |
 
 ## 12. 修改守则
 
@@ -203,4 +224,4 @@ NanoHTTPD，随机端口 + token 鉴权，`/api/` 前缀即 API。手机扫码�
 
 ---
 
-*最后更新：2026-11-14（v1.9.24 开发周期）· 由类型清零/测试基建/文档化专项写入*
+*最后更新：2026-11-26（v1.9.25 发布后与代码对齐：返回键统一管线、构建标记自动化、预置源加载与已知缺陷）*
