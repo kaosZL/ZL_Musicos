@@ -3,15 +3,17 @@ import { Pressable, Text, View, type TextStyle, type ViewStyle } from 'react-nat
 import { onTVRemoteEvent, debugLog } from '@/utils/nativeModules/utils'
 import { setTVDialogActive } from './tvFocusManager'
 import { registerTVBack } from './tvBackManager'
-import { resolveDismissedDialogRequest } from './tvDialogState'
+import { resolveDismissedDialogRequest, resolveInitialDialogButtonIndex } from './tvDialogState'
 import TVText from './TVText'
 import { tvColors, tvSize } from '@/theme/tv'
 
-export { resolveDismissedDialogRequest }
+export { resolveDismissedDialogRequest, resolveInitialDialogButtonIndex }
 
 export interface TVDialogButtonConfig {
   label: string
   tone?: 'primary' | 'dark' | 'ghost' | 'danger'
+  /** 显式指定默认聚焦该按钮（如二次删除确认框中的 danger 确认按钮） */
+  autoFocus?: boolean
   onPress?: () => void
 }
 
@@ -103,11 +105,9 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
     if (!visible) return
     visibleDialogCount += 1
     setTVDialogActive(true)
-    // 默认聚焦主按钮（tone=primary，无则第一个）：TV 用户肌肉记忆是「弹窗 → OK = 确认主操作」。
-    // 245 实测事故：confirmDialog 按钮数组 [取消, 确认]，默认聚焦 0=取消——
-    // 老板按 OK「确认关闭互联」实际点了取消，关闭流程一步没走（状态不变/服务器没停）
-    const primaryIdx = buttonsRef.current.findIndex(btn => btn.tone === 'primary')
-    const initialIdx = primaryIdx >= 0 ? primaryIdx : 0
+    // 默认聚焦显式 autoFocus 或主按钮（tone=primary，无则第一个）：
+    // TV 用户肌肉记忆是「二次确认框 → OK = 确认主操作」
+    const initialIdx = resolveInitialDialogButtonIndex(buttonsRef.current)
     setFocusedIdx(initialIdx)
     focusedIdxRef.current = initialIdx
     visibleAtRef.current = Date.now()

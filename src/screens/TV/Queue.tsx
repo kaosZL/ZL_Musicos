@@ -235,7 +235,7 @@ function TVQueue({ componentId }: { componentId: string }) {
       message: `确定清空全部 ${fetchedMusicList.length} 首歌曲吗？`,
       buttons: [
         { label: '取消', tone: 'dark' },
-        { label: '清空', tone: 'danger', onPress: () => { void clearListMusics([LIST_IDS.TEMP]) } },
+        { label: '清空', tone: 'danger', autoFocus: true, onPress: () => { void clearListMusics([LIST_IDS.TEMP]) } },
       ],
     })
   }

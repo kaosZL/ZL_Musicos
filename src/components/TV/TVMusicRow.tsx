@@ -13,6 +13,8 @@ interface Props extends Omit<ComponentProps<typeof Focusable>, 'children'> {
   meta?: string
   badge?: string
   image?: string | null
+  /** 无封面时的兜底图标：letter=首字（默认），icon=音符徽标（榜单等不适合放单字的地方） */
+  artFallback?: 'letter' | 'icon'
   active?: boolean
   lazyMusicInfo?: LX.Music.MusicInfoOnline | null
   style?: ViewStyle | ViewStyle[]
@@ -34,6 +36,7 @@ const TVMusicRow = forwardRef<any, Props>(({
   meta,
   badge,
   image,
+  artFallback = 'letter',
   active,
   lazyMusicInfo,
   style,
@@ -94,7 +97,9 @@ const TVMusicRow = forwardRef<any, Props>(({
       </View>
       {showArt ? (
         <View style={styles.art}>
-          {resolvedImage ? <Image url={resolvedImage} resizeMode="cover" style={styles.artImage as ImageStyle} /> : <TVText variant="body" style={styles.artPlaceholder}>{title.slice(0, 1)}</TVText>}
+          {resolvedImage
+            ? <Image url={resolvedImage} resizeMode="cover" style={styles.artImage as ImageStyle} />
+            : <TVText variant="body" style={styles.artPlaceholder}>{artFallback === 'icon' ? '♪' : title.slice(0, 1)}</TVText>}
         </View>
       ) : null}
       <View style={styles.info}>

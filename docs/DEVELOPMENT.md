@@ -22,9 +22,13 @@ src/
     Focusable.tsx            焦点包装组件（Pressable + 引擎注册，见 §5）
     TVRemoteFocusController  每屏挂载的按键→引擎接线（方向键/select/menu；长按 OK=repeat 连发+550ms 兜底）
     tvBackManager.ts          ★ 返回键唯一分发器（z 级路由，见 §3）
-    TVDialog.tsx             全局弹窗（打开时接管按键，setTVDialogActive）
+    TVDialog.tsx             全局弹窗（打开时接管按键，setTVDialogActive；初始焦点见 tvDialogState.ts）
+    tvDialogState.ts         弹窗连环关闭仲裁 + 初始按钮焦点解析（纯逻辑，有单测）
     TVAppleScaffold          屏幕脚手架：模糊背景 + 渐变压暗（TVFadeOverlay）
     TVKeepScreenOn           播放保活（跟随 isPlay 持有 FLAG_KEEP_SCREEN_ON）
+  config/
+    setting.ts               设置加载/写入（数组配置合并走 settingMerge.ts）
+    settingMerge.ts          配置合并纯逻辑（放行原始类型数组，如 common.tvRemovedSources，有单测）
   screens/TV/               各 TV 屏幕
     Player.tsx               播放页（最复杂，见 §6）
     update.ts                应用内更新（检查/下载/安装，见 §9）
@@ -35,6 +39,8 @@ src/
     player/player.ts         播放核心（切歌/取链/换源）
     music/utils.ts           取链与音质降档（getPlayQuality 等，见 §7）
     userApi                  user API 脚本装载
+    boardCovers.ts           五平台排行榜官方封面拉取与会话级缓存（KW/KG/TX/WY/MG）
+    boardCoverParser.ts      各平台榜单封面 URL 解析器（纯逻辑，有单测）
     tvLan.ts                 手机互联会话全局单例（见 §8）
     tvPresetUserApi.ts       预置音源加载与失败兜底（见 §7）
     userApiWatchdog.ts       音源初始化 12s 超时看门狗与删源回退纯逻辑（见 §7）
@@ -218,6 +224,9 @@ NanoHTTPD，随机端口 + token 鉴权，`/api/` 前缀即 API。手机扫码�
 | 音源脚本不上报初始化结果 | 异步抛错或不发 `inited` 会导致永久「加载中」→ v1.9.26 起 `loadScript` 自动挂载 12s 看门狗（超时销毁线程并走失败/预置源兜底） |
 | `/api/logs` 手拼 JSON 遇换行崩盘 | `LanImportServer` 必须用 `JSONArray` 序列化运行日志，避免含 `\n` 的错误/堆栈弄坏整个手机日志控制台 |
 | `TVMusicRow` 挂载清掉 `lazyMusicInfo` 封面 | 同步 `image` prop 的 `useEffect` 必须以 `pickInitialRowImage(image, lazyMusicInfo)` 为准，禁止直接 `setResolvedImage(image ?? null)` |
+| 数组配置被 `setting.ts` 静默丢弃 | 上游 `mergeSetting` 只放行原始类型（string/boolean/number/null），`common.tvRemovedSources: string[]` 写入与重启恢复全部被跳过 → v1.9.26·250 抽离 `settingMerge.ts` 放行原始类型数组并做元素等值比较与浅拷贝 |
+| 二次删除确认弹窗按 OK 变成取消 | `[取消(dark), 删除(danger)]` 无 `primary` 时 TVDialog 默认焦在索引 0 → 二次危险确认按钮显式标 `autoFocus: true`（优先级高于 `primary`，一级操作菜单不标仍安全落取消） |
+| `FlatList` 点击「加载更多」焦点跳回首行 | 追加新页后 `ListFooterComponent` 被顶出视口或卸载，原生回退把焦点推到第 1 首并触发回顶滚动 → `Detail.tsx` / `Search.tsx` 补齐 `getItemLayout` + `pendingLoadMoreTargetRef` 屏蔽窗口 + 异步轮询 `focusTVTargetByRef` 将焦点精准落在新页首条（如第 31 首） |
 
 ## 12. 修改守则
 
@@ -231,4 +240,4 @@ NanoHTTPD，随机端口 + token 鉴权，`/api/` 前缀即 API。手机扫码�
 
 ---
 
-*最后更新：2026-11-26（v1.9.26·249：14 项全仓 Bug 修复——连环弹窗、队列封面、去除幽灵源、播放页门控、音源 12s 看门狗、更新校验与 Android 5.x 安装、日志 JSON 转义及原生 QuickJS 清理）*
+*最后更新：2026-11-27（v1.9.26·250：修复预置音源删除失效与二次确认默认焦点、修复榜单详情/搜索「加载更多」焦点跳回首行、接入五平台排行榜官方封面并替换首字占位）*

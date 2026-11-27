@@ -6,5 +6,6 @@ import './playerLyrics.test'
 import './playerLayout.test'
 import './controlDeckGate.test'
 import './userApiWatchdog.test'
+import './phase2Regression.test'
 
 void run()

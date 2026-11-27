@@ -10,6 +10,7 @@ import Focusable from '@/components/TV/Focusable'
 import searchMusicState from '@/store/search/music/state'
 import { tvColors, tvFont, tvSize } from '@/theme/tv'
 import { getBoardsList } from '@/core/leaderboard'
+import { getBoardCovers, getCachedBoardCovers } from '@/core/boardCovers'
 import leaderboardState, { type BoardItem } from '@/store/leaderboard/state'
 import { pushTVDetailScreen, pushTVPlayerScreen } from '@/navigation/navigation'
 import { useTVNavigationBack } from '@/utils/hooks/useTVNavigationBack'
@@ -36,6 +37,7 @@ function TVHistory({ componentId }: { componentId: string }) {
   const activeTabFocus = useRef<FocusNode>(null)
   const listRef = useRef<FlatList<BoardItem>>(null)
   const boardRefs = useRef<FocusRefMap>({})
+  const notifiedBoardNodes = useRef<FocusRefMap>({})
   const queueFocusRefresh = useTVFocusRefresh()
   // 首次加载焦点补偿只做一次（见 load effect 内注释）
   const initialFocusDoneRef = useRef(false)
@@ -43,6 +45,7 @@ function TVHistory({ componentId }: { componentId: string }) {
   useTVNavigationBack(componentId)
   const [sourceSel, setSourceSel] = useState<string>(leaderboardState.sources[0] ?? '')
   const boardSource = sourceSel as typeof leaderboardState.sources[0]
+  const [boardCovers, setBoardCovers] = useState<Record<string, string>>(() => (boardSource ? getCachedBoardCovers(boardSource) : {}))
   const sourceRefs = useRef<FocusRefMap>({})
   const sourceOptions = useMemo(() => searchMusicState.sources.filter(s => s !== 'all'), [searchMusicState.sources])
   const sourceTabs = useMemo(() => sourceOptions.map(s => ({ id: s, label: getSourceName(s) ?? s })), [sourceOptions])
@@ -89,14 +92,29 @@ function TVHistory({ componentId }: { componentId: string }) {
     return () => { mounted = false }
   }, [boardSource])
 
+  // 异步拉取各榜单官方封面（飙升榜/热歌榜/新歌榜等），会话级缓存，不阻塞榜单首屏加载
+  useEffect(() => {
+    if (!boardSource) return
+    let mounted = true
+    setBoardCovers(getCachedBoardCovers(boardSource))
+    void getBoardCovers(boardSource).then(covers => {
+      if (!mounted) return
+      setBoardCovers(covers)
+    })
+    return () => { mounted = false }
+  }, [boardSource])
+
   const getBoardKey = (item: BoardItem, index: number) => `${boardSource}_${item.bangid}_${index}`
   const getActiveTabHandle = () => activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null
   const getBoardHandle = (key?: string | null) => key && boardRefs.current[key] ? findNodeHandle(boardRefs.current[key]) : null
   const bindBoardRef = (key: string, syncFirst = false) => (node: FocusNode) => {
-    const changed = boardRefs.current[key] !== node
     boardRefs.current[key] = node
-    if (node && changed) queueFocusRefresh()
-    if (syncFirst) firstBoardFocus.ref.current = node as any
+    if (!node) return
+    const needSyncFirst = syncFirst && firstBoardFocus.ref.current !== node
+    if (needSyncFirst) firstBoardFocus.ref.current = node as any
+    const freshNode = notifiedBoardNodes.current[key] !== node
+    if (freshNode) notifiedBoardNodes.current[key] = node
+    if (freshNode || needSyncFirst) queueFocusRefresh()
   }
 
   const handleBoardFocus = (index: number) => {
@@ -112,6 +130,7 @@ function TVHistory({ componentId }: { componentId: string }) {
       source: boardSource,
       title: board.name,
       subtitle: tvText.platformHot,
+      cover: boardCovers[String(board.bangid)] ?? null,
       board,
     })
   }
@@ -179,6 +198,8 @@ function TVHistory({ componentId }: { componentId: string }) {
                  subtitle={`${getSourceName(boardSource)}${dot}${tvText.realSongs}`}
                  meta={index === 0 ? tvText.hotChart : tvText.charts}
                  badge={index < 3 ? tvText.hotChart : undefined}
+                 image={boardCovers[String(item.bangid)] ?? null}
+                 artFallback="icon"
                  active={selectedIndex === index}
                  onFocus={() => { handleBoardFocus(index) }}
                  onPress={() => { openBoard(item) }}

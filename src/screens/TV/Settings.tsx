@@ -418,8 +418,9 @@ function TVSettings({ componentId }: { componentId: string }) {
   }
 
   const removePresetOrBuiltinSource = (id: string) => {
-    const nextRemoved = [...(removedSources ?? []), id]
+    const nextRemoved = Array.from(new Set([...(removedSources ?? []), id]))
     updateSetting({ 'common.tvRemovedSources': nextRemoved })
+    debugLog(`[音源] 已删除预置/内置源: ${id}`)
     if (apiSource === id) setApiSource(resolveFallbackApiSource(id, nextRemoved))
     setImportMessage('已删除该音源')
   }
@@ -444,7 +445,7 @@ function TVSettings({ componentId }: { componentId: string }) {
         message: `「${src.name}」正在使用中。\n${fallbackTip}`,
         buttons: [
           { label: '取消', tone: 'dark' },
-          { label: '删除', tone: 'danger', onPress: () => { void doRemoveSource(src.id) } },
+          { label: '删除', tone: 'danger', autoFocus: true, onPress: () => { void doRemoveSource(src.id) } },
         ],
       })
       return

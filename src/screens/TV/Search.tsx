@@ -71,7 +71,18 @@ function TVSearch({ componentId }: { componentId: string }) {
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null)
   const listRef = useRef<FlatList<LX.Music.MusicInfoOnline>>(null)
   const resultRefs = useRef<FocusRefMap>({})
+  const notifiedResultNodes = useRef<FocusRefMap>({})
   const hotRefs = useRef<FocusRefMap>({})
+  const mountedRef = useRef(true)
+  const pendingLoadMoreTargetRef = useRef<{ index: number, key: string, until: number } | null>(null)
+  const loadMoreFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (loadMoreFocusTimerRef.current) clearTimeout(loadMoreFocusTimerRef.current)
+    }
+  }, [])
   const getHistoryHandle = (id?: string | null) => getHandleFromMap(historyRefs, id)
   const bindHistoryRef = (id: string) => (node: FocusNode) => { historyRefs.current[id] = node }
 
@@ -138,10 +149,12 @@ function TVSearch({ componentId }: { componentId: string }) {
   const bindHotRef = (id: string) => (node: FocusNode) => { hotRefs.current[id] = node }
   const bindResultRef = (key: string, syncFirstResult = false) => (node: FocusNode) => {
     resultRefs.current[key] = node
-    if (syncFirstResult && node && firstResultFocus.ref.current !== node) {
-      firstResultFocus.ref.current = node as any
-      queueFocusRefresh()
-    }
+    if (!node) return
+    const needSyncFirst = syncFirstResult && firstResultFocus.ref.current !== node
+    if (needSyncFirst) firstResultFocus.ref.current = node as any
+    const freshNode = notifiedResultNodes.current[key] !== node
+    if (freshNode) notifiedResultNodes.current[key] = node
+    if (freshNode || needSyncFirst) queueFocusRefresh()
   }
 
   const syncPageInfo = useCallback((targetSource: typeof source) => {
@@ -184,29 +197,66 @@ function TVSearch({ componentId }: { componentId: string }) {
     if (keyword !== text.trim()) setText(keyword)
     recordSearch(keyword)
     const seq = ++searchSeqRef.current
+    const prevCount = targetPage > 1 ? results.length : 0
     if (targetPage > 1) setLoadingMore(true)
     else setLoading(true)
     setError('')
     try {
       const activeSource = sourceOverride ?? source
       const list = await search(keyword, targetPage, activeSource)
-      if (seq !== searchSeqRef.current) return // 过期响应：已有更新的搜索在途/已完成，丢弃
-      setResults([...list])
+      if (!mountedRef.current || seq !== searchSeqRef.current) return // 过期响应：已有更新的搜索在途/已完成，丢弃
+      const nextList = [...list]
+      const firstNewKey = targetPage > 1 && nextList.length > prevCount ? getResultKey(nextList[prevCount]) : null
+      if (firstNewKey) {
+        pendingLoadMoreTargetRef.current = { index: prevCount, key: firstNewKey, until: Date.now() + 2500 }
+      }
+      setResults(nextList)
       syncPageInfo(activeSource)
       if (targetPage === 1) {
+        pendingLoadMoreTargetRef.current = null
         requestAnimationFrame(() => {
           listRef.current?.scrollToOffset({ offset: 0, animated: false })
           // 焦点引擎已改为「preferred 不抢仍挂载的活动焦点」，搜索成功后把焦点
           // 显式移到第一条结果（对齐此前「出结果自动跳结果区」的习惯）
           void focusTVTargetByRef(firstResultFocus.ref.current)
         })
+      } else if (firstNewKey) {
+        const targetOffset = Math.max(0, prevCount * RESULT_ITEM_SIZE - RESULT_ITEM_SIZE)
+        if (loadMoreFocusTimerRef.current) clearTimeout(loadMoreFocusTimerRef.current)
+        requestAnimationFrame(() => {
+          if (!mountedRef.current || pendingLoadMoreTargetRef.current?.key !== firstNewKey) return
+          listRef.current?.scrollToOffset({ offset: targetOffset, animated: false })
+          let tries = 0
+          const tryFocusNewRow = async() => {
+            if (!mountedRef.current || pendingLoadMoreTargetRef.current?.key !== firstNewKey) return
+            const node = resultRefs.current[firstNewKey]
+            if (node) {
+              listRef.current?.scrollToOffset({ offset: targetOffset, animated: false })
+              const focused = await focusTVTargetByRef(node)
+              if (!mountedRef.current || pendingLoadMoreTargetRef.current?.key !== firstNewKey) return
+              if (focused) {
+                pendingLoadMoreTargetRef.current = null
+                queueFocusRefresh()
+                return
+              }
+            } else if (tries === 2 || tries === 6) {
+              listRef.current?.scrollToOffset({ offset: targetOffset, animated: false })
+            }
+            if (++tries > 25) {
+              if (pendingLoadMoreTargetRef.current?.key === firstNewKey) pendingLoadMoreTargetRef.current = null
+              return
+            }
+            loadMoreFocusTimerRef.current = setTimeout(() => { void tryFocusNewRow() }, 60)
+          }
+          void tryFocusNewRow()
+        })
       }
     } catch (err: unknown) {
-      if (seq !== searchSeqRef.current) return
+      if (!mountedRef.current || seq !== searchSeqRef.current) return
       if (targetPage === 1) setResults([])
       setError(err instanceof Error ? err.message : tvText.loadFailed)
     } finally {
-      if (seq === searchSeqRef.current) {
+      if (mountedRef.current && seq === searchSeqRef.current) {
         if (targetPage > 1) setLoadingMore(false)
         else setLoading(false)
       }
@@ -243,6 +293,8 @@ function TVSearch({ componentId }: { componentId: string }) {
   }
 
   const handleResultFocus = (index: number) => {
+    const pending = pendingLoadMoreTargetRef.current
+    if (pending && Date.now() < pending.until && index !== pending.index) return
     listRef.current?.scrollToOffset({ offset: Math.max(0, index * RESULT_ITEM_SIZE - RESULT_ITEM_SIZE), animated: true })
   }
 
@@ -342,16 +394,17 @@ function TVSearch({ componentId }: { componentId: string }) {
             ref={listRef}
             data={results}
             keyExtractor={getResultKey}
+            getItemLayout={(_, index) => ({ length: RESULT_ITEM_SIZE, offset: RESULT_ITEM_SIZE * index, index })}
             showsVerticalScrollIndicator={false}
             removeClippedSubviews={false}
             contentContainerStyle={styles.resultContent}
             ListEmptyComponent={!loading && !error ? <TVText variant="meta">{tvText.emptySearchHint}</TVText> : null}
-            ListFooterComponent={hasMore ? <View style={styles.footer}><TVButton ref={loadMoreFocus.ref as any} label={loadingMore ? tvText.loading : tvText.loadMore} tone="dark" onFocus={() => { listRef.current?.scrollToEnd({ animated: true }) }} onPress={() => { void handleLoadMore() }} /></View> : null}
+            ListFooterComponent={hasMore ? <View style={styles.footer}><TVButton ref={loadMoreFocus.ref as any} label={loadingMore ? tvText.loading : tvText.loadMore} tone="dark" onTVFocusChange={focused => { if (focused && !pendingLoadMoreTargetRef.current) listRef.current?.scrollToEnd({ animated: true }) }} onPress={() => { void handleLoadMore() }} nextFocusUp={results.length ? getResultHandle(getResultKey(results[results.length - 1])) ?? undefined : undefined} nextFocusLeft={searchButtonHandle} /></View> : null}
             renderItem={({ item, index }) => {
               const itemKey = getResultKey(item)
               const prevKey = results[index - 1] ? getResultKey(results[index - 1]) : null
               const nextKey = results[index + 1] ? getResultKey(results[index + 1]) : null
-              return <TVMusicRow ref={bindResultRef(itemKey, index === 0) as any} hasTVPreferredFocus={index === 0 && !!results.length} index={index} title={item.name} subtitle={getMusicSubtitle(item)} meta={item.interval ?? undefined} onFocus={() => { handleResultFocus(index) }} onPress={() => { void handleOpenPlayer(item) }} nextFocusLeft={searchButtonHandle} nextFocusUp={index === 0 ? playAllFocus.getNodeHandle() ?? searchButtonHandle : (getResultHandle(prevKey) ?? undefined)} nextFocusDown={getResultHandle(nextKey) ?? (hasMore && index === results.length - 1 ? loadMoreFocus.getNodeHandle() ?? undefined : undefined)} />
+              return <TVMusicRow ref={bindResultRef(itemKey, index === 0) as any} hasTVPreferredFocus={index === 0 && !!results.length} index={index} title={item.name} subtitle={getMusicSubtitle(item)} meta={item.interval ?? undefined} onTVFocusChange={focused => { if (focused) handleResultFocus(index) }} onPress={() => { void handleOpenPlayer(item) }} nextFocusLeft={searchButtonHandle} nextFocusUp={index === 0 ? playAllFocus.getNodeHandle() ?? searchButtonHandle : (getResultHandle(prevKey) ?? undefined)} nextFocusDown={getResultHandle(nextKey) ?? (hasMore && index === results.length - 1 ? loadMoreFocus.getNodeHandle() ?? undefined : undefined)} />
             }}
           />
         </TVGlassPanel>
