@@ -122,7 +122,7 @@ const Focusable = forwardRef<ComponentRef<typeof Pressable>, FocusableProps>(({
       onPress: onPress ? triggerTVPress : undefined,
       onLongPress: onLongPress ? handleLongPress : undefined,
     })
-  }, [focusScopeId, hasTVPreferredFocus, nextFocusDown, nextFocusLeft, nextFocusRight, nextFocusUp, onPress, triggerTVPress])
+  }, [focusScopeId, hasTVPreferredFocus, nextFocusDown, nextFocusLeft, nextFocusRight, nextFocusUp, onPress, triggerTVPress, onLongPress, handleLongPress])
 
   // RN 0.73 的 PressableProps 类型未收录 TV 焦点属性（hasTVPreferredFocus / nextFocus*，
   // 运行时有效——原生 View 层支持），这里整体断言绕过类型缺口

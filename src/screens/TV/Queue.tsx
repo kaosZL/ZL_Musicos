@@ -8,7 +8,7 @@ import TVMusicRow from '@/components/TV/TVMusicRow'
 import TVGlassPanel from '@/components/TV/TVGlassPanel'
 import type Focusable from '@/components/TV/Focusable'
 import { Alert } from 'react-native'
-import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
+import TVDialog, { resolveDismissedDialogRequest, type TVDialogRequest } from '@/components/TV/TVDialog'
 import { tvColors, tvSize } from '@/theme/tv'
 import { usePlayerMusicInfo } from '@/store/player/hook'
 import { useMyList } from '@/store/list/hook'
@@ -235,7 +235,7 @@ function TVQueue({ componentId }: { componentId: string }) {
       message: `确定清空全部 ${fetchedMusicList.length} 首歌曲吗？`,
       buttons: [
         { label: '取消', tone: 'dark' },
-        { label: '清空', tone: 'danger', onPress: () => { void clearListMusics([LIST_IDS.TEMP]) } },
+        { label: '清空', tone: 'danger', autoFocus: true, onPress: () => { void clearListMusics([LIST_IDS.TEMP]) } },
       ],
     })
   }
@@ -320,18 +320,14 @@ function TVQueue({ componentId }: { componentId: string }) {
       </View>
       <TVDialog
         visible={!!localDialog}
+        resetKey={localDialog}
         title={localDialog?.title ?? ''}
         message={localDialog?.message}
-        buttons={localDialog?.buttons?.map(btn => ({
-          ...btn,
-          onPress: () => {
-            setLocalDialog(null)
-            btn.onPress?.()
-          },
-        })) ?? []}
+        buttons={localDialog?.buttons ?? []}
         onDismiss={() => {
-          localDialog?.onDismiss?.()
-          setLocalDialog(null)
+          const closing = localDialog
+          setLocalDialog(prev => resolveDismissedDialogRequest(prev, closing))
+          closing?.onDismiss?.()
         }}
       />
     </TVAppleScaffold>

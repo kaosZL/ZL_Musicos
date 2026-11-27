@@ -1,5 +1,5 @@
 import { type InitParams, onScriptAction, sendAction, type ResponseParams, type UpdateInfoParams, type RequestParams } from '@/utils/nativeModules/userApi'
-import { log, setUserApiList, setUserApiStatus } from '@/core/userApi'
+import { destroyUserApi, log, setUserApiList, setUserApiStatus } from '@/core/userApi'
 import settingState from '@/store/setting/state'
 import BackgroundTimer from 'react-native-background-timer'
 import { fetchData } from './request'
@@ -7,6 +7,8 @@ import { getUserApiList } from '@/utils/data'
 import { confirmDialog, openUrl, tipDialog } from '@/utils/tools'
 import { getCachedIsTV } from '@/utils/tvMode'
 import { tryNextTVPresetUserApiCandidate } from '@/core/tvPresetUserApi'
+import { setUserApiInitTimeoutHandler, USER_API_INIT_TIMEOUT_MS, userApiInitWatchdog } from '@/core/userApiWatchdog'
+import { debugLog } from '@/utils/nativeModules/utils'
 
 
 export default async(setting: LX.AppSetting) => {
@@ -75,9 +77,11 @@ export default async(setting: LX.AppSetting) => {
   }
   const handleStateChange = ({ status, errorMessage, info }: InitParams) => {
     // console.log(status, message, info)
-    setUserApiStatus(status, errorMessage)
     if (!info || info.id !== settingState.setting['common.apiSource']) return
+    userApiInitWatchdog.settle(info.id)
+    setUserApiStatus(status, errorMessage)
     if (status) {
+      debugLog(`[音源] 初始化成功: ${info.name} (${info.id})`)
       if (info.sources) {
         let apis: any = {}
         let qualitys: LX.QualityList = {}
@@ -180,34 +184,65 @@ export default async(setting: LX.AppSetting) => {
         global.lx.apis = apis
         global.state_event.apiSourceUpdated(settingState.setting['common.apiSource'])
       }
+      if (!global.lx.apiInitPromise[1]) global.lx.apiInitPromise[2](true)
     } else {
+      debugLog(`[音源] 初始化失败: ${info.name} (${info.id}) - ${errorMessage || '未知原因'}`)
       if (getCachedIsTV() && /^tv_preset_/.test(info.id)) {
-        void tryNextTVPresetUserApiCandidate().then(switched => {
-          if (switched) return
-          if (errorMessage) {
-            void tipDialog({
-              message: `${global.i18n.t('user_api__init_failed_alert', { name: info.name })}\n${errorMessage}`,
-              btnText: global.i18n.t('ok'),
-            })
+        // 先尝试自动切换到下一个内置预置源；只有全部候选都耗尽后才落定 apiInitPromise(false) 并明确弹窗告知
+        void tryNextTVPresetUserApiCandidate(info.id).then(switched => {
+          if (switched) {
+            debugLog(`[音源] 预置源 ${info.name} 失效，已自动尝试下一个预置源`)
+            return
           }
+          if (!global.lx.apiInitPromise[1]) global.lx.apiInitPromise[2](false)
+          void tipDialog({
+            title: '内置音源不可用',
+            message: `${global.i18n.t('user_api__init_failed_alert', { name: info.name })}\n${errorMessage || '接口无响应'}\n\n可前往「设置 → 手机扫码导入」导入其他可用音源。`,
+            btnText: global.i18n.t('ok'),
+          })
         }).catch(() => {
+          if (!global.lx.apiInitPromise[1]) global.lx.apiInitPromise[2](false)
           if (errorMessage) {
             void tipDialog({
+              title: '内置音源不可用',
               message: `${global.i18n.t('user_api__init_failed_alert', { name: info.name })}\n${errorMessage}`,
               btnText: global.i18n.t('ok'),
             })
           }
         })
-      } else if (errorMessage) {
-        void tipDialog({
-          message: `${global.i18n.t('user_api__init_failed_alert', { name: info.name })}\n${errorMessage}`,
-          // selection: true,
-          btnText: global.i18n.t('ok'),
-        })
+      } else {
+        if (!global.lx.apiInitPromise[1]) global.lx.apiInitPromise[2](false)
+        if (errorMessage) {
+          void tipDialog({
+            message: `${global.i18n.t('user_api__init_failed_alert', { name: info.name })}\n${errorMessage}`,
+            // selection: true,
+            btnText: global.i18n.t('ok'),
+          })
+        }
       }
     }
-    if (!global.lx.apiInitPromise[1]) global.lx.apiInitPromise[2](status)
   }
+
+  // 初始化看门狗超时回调（Issue #17）：脚本异步抛错或未回报 init 事件时，销毁卡死线程并走统一失败/兜底链路
+  setUserApiInitTimeoutHandler((timedOut) => {
+    if (timedOut.id !== settingState.setting['common.apiSource']) return
+    const sec = Math.round(USER_API_INIT_TIMEOUT_MS / 1000)
+    debugLog(`[音源] 初始化超时(${sec}s): ${timedOut.name} (${timedOut.id})`)
+    destroyUserApi()
+    handleStateChange({
+      status: false,
+      errorMessage: `初始化超时（${sec}秒内未收到音源响应，接口可能已失效或网络不通）`,
+      info: {
+        id: timedOut.id,
+        name: timedOut.name,
+        description: '',
+        author: '',
+        homepage: '',
+        version: '',
+        allowShowUpdateAlert: false,
+      },
+    })
+  })
   const showUpdateAlert = ({ name, log, updateUrl }: UpdateInfoParams) => {
     if (updateUrl) {
       void confirmDialog({

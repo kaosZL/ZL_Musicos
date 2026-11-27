@@ -1,10 +1,12 @@
 import { NativeEventEmitter, NativeModules } from 'react-native'
+import { armUserApiInitWatchdog, userApiInitWatchdog } from '@/core/userApiWatchdog'
 
 const { UserApiModule } = NativeModules
 
 let loadScriptInfo: LX.UserApi.UserApiInfo | null = null
 export const loadScript = (info: LX.UserApi.UserApiInfo & { script: string }) => {
   loadScriptInfo = info
+  armUserApiInitWatchdog({ id: info.id, name: info.name })
   UserApiModule.loadScript({
     id: info.id,
     name: info.name,
@@ -96,5 +98,6 @@ export const onScriptAction = (handler: (event: ActionsEvent) => void): () => vo
 }
 
 export const destroy = () => {
+  userApiInitWatchdog.cancel()
   UserApiModule.destroy()
 }

@@ -1,5 +1,5 @@
 import { test, eq } from './harness'
-import { buildDownloadCandidates } from '../src/screens/TV/updateUrlChain'
+import { buildDownloadCandidates, validateDownloadedApk } from '../src/screens/TV/updateUrlChain'
 
 const GH = 'https://github.com/kaosZL/ZL_Musicos/releases/download/v1.9.23/ZL-Musicos-v1.9.23-arm64-v8a.apk'
 
@@ -25,4 +25,16 @@ test('候选去重', () => {
 test('与 GitHub 无关的 URL：原样单候选', () => {
   const url = 'https://example.com/app.apk'
   eq(buildDownloadCandidates(url), [url])
+})
+
+test('下载校验：HTTP 200 且体积达标 → 通过', () => {
+  eq(validateDownloadedApk(200, 18_500_000, 18_500_000), { ok: true })
+  eq(validateDownloadedApk(200, 2_000_000, 0), { ok: true })
+})
+
+test('下载校验：镜像站返回 403/502 错误页或低于 1MB → 拒绝并触发换镜像', () => {
+  eq(validateDownloadedApk(502, 2048, 18_500_000).ok, false)
+  eq(validateDownloadedApk(403, 18_500_000, 18_500_000).ok, false)
+  eq(validateDownloadedApk(200, 4096, 18_500_000).ok, false)
+  eq(validateDownloadedApk(200, 5_000_000, 18_500_000).ok, false)
 })

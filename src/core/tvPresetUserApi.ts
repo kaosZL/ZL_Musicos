@@ -2,6 +2,7 @@ import { Platform } from 'react-native'
 import RNFS from 'react-native-fs'
 import { loadScript } from '@/utils/nativeModules/userApi'
 import { setUserApiStatus } from '@/core/userApi'
+import { parseUserApiScriptMeta } from '@/core/userApiWatchdog'
 import { getCachedIsTV } from '@/utils/tvMode'
 import { updateSetting } from '@/core/common'
 import settingState from '@/store/setting/state'
@@ -9,6 +10,11 @@ import { TV_PRESET_USER_API_CANDIDATES } from '@/config/tvPresetUserApi'
 
 export type TVPresetUserApiCandidate = typeof TV_PRESET_USER_API_CANDIDATES[number]
 let activeCandidateIndex = -1
+
+export const syncActiveTVPresetCandidate = (apiId: string) => {
+  const idx = TV_PRESET_USER_API_CANDIDATES.findIndex(item => item.id === apiId)
+  if (idx >= 0) activeCandidateIndex = idx
+}
 
 const createPendingApiInit = () => {
   if (!global.lx.apiInitPromise[1]) return
@@ -25,20 +31,22 @@ export const loadTVPresetUserApiCandidate = async(candidate: TVPresetUserApiCand
   const script = await RNFS.readFileAssets(candidate.assetPath, 'utf8')
   if (!script.trim()) throw new Error(`tv preset user api script is empty: ${candidate.id}`)
 
+  syncActiveTVPresetCandidate(candidate.id)
   createPendingApiInit()
   setUserApiStatus(false, 'initing')
   // 解析脚本头部元信息，与用户导入路径保持一致（不再写死 version='preset'）
-  const header = /^\/\*[\S|\s]+?\*\//.exec(script)?.[0] ?? ''
-  const parsedName = /@name\s*(.+)/.exec(header)?.[1]?.trim()
-  const parsedVersion = /@version\s*(\S+)/.exec(header)?.[1]?.trim()
-  const parsedAuthor = /@author\s*(.+)/.exec(header)?.[1]?.trim()
+  const meta = parseUserApiScriptMeta(script, {
+    name: candidate.name,
+    author: candidate.author,
+    version: '1',
+  })
   loadScript({
     id: candidate.id,
-    name: parsedName || candidate.name,
-    version: parsedVersion || '1',
-    author: parsedAuthor || candidate.author,
+    name: meta.name,
+    version: meta.version,
+    author: meta.author,
     description: '',
-    homepage: '',
+    homepage: candidate.homepage,
     allowShowUpdateAlert: false,
     script,
   })
@@ -66,10 +74,12 @@ export const ensureTVPresetUserApi = async() => {
   return false
 }
 
-export const tryNextTVPresetUserApiCandidate = async() => {
+export const tryNextTVPresetUserApiCandidate = async(failedId?: string) => {
   if (!getCachedIsTV()) return false
   const removedSources = settingState.setting['common.tvRemovedSources'] ?? []
-  let nextIndex = activeCandidateIndex + 1
+  const failedIndex = failedId ? TV_PRESET_USER_API_CANDIDATES.findIndex(item => item.id === failedId) : -1
+  const baseIndex = failedIndex >= 0 ? failedIndex : activeCandidateIndex
+  let nextIndex = baseIndex + 1
   while (nextIndex < TV_PRESET_USER_API_CANDIDATES.length && removedSources.includes(TV_PRESET_USER_API_CANDIDATES[nextIndex].id)) nextIndex++
   if (nextIndex >= TV_PRESET_USER_API_CANDIDATES.length) return false
   activeCandidateIndex = nextIndex

@@ -35,3 +35,18 @@ test('无歌可操作 → 全部拒绝', () => {
   eq(shouldDirectControlHandleKey({ ...base, canPlay: false }), false)
   eq(shouldDirectControlHandleKey({ ...base, canPlay: false, isSeekKey: true, controlsVisible: true }), false)
 })
+
+test('v1.9.26 门控：全屏歌词期间直控全部拒绝（不误暂停、不切歌）', () => {
+  eq(shouldDirectControlHandleKey({ ...base, fullscreenLyrics: true }), false)
+  eq(shouldDirectControlHandleKey({ ...base, isSeekKey: true, fullscreenLyrics: true }), false)
+})
+
+test('v1.9.26 门控：全局弹窗激活期间直控全部拒绝', () => {
+  eq(shouldDirectControlHandleKey({ ...base, dialogActive: true }), false)
+  eq(shouldDirectControlHandleKey({ ...base, isSeekKey: true, dialogActive: true }), false)
+})
+
+test('v1.9.26 门控：播放页压栈非活动屏时直控全部拒绝', () => {
+  eq(shouldDirectControlHandleKey({ ...base, isActiveScreen: false }), false)
+  eq(shouldDirectControlHandleKey({ ...base, isSeekKey: true, isActiveScreen: false }), false)
+})

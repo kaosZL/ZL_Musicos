@@ -8,6 +8,7 @@ export type TVDetailPayload =
     source: LX.OnlineSource
     title: string
     subtitle?: string
+    cover?: string | null
     board: BoardItem
   }
   | {

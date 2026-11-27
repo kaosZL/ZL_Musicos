@@ -3,12 +3,17 @@ import { Pressable, Text, View, type TextStyle, type ViewStyle } from 'react-nat
 import { onTVRemoteEvent, debugLog } from '@/utils/nativeModules/utils'
 import { setTVDialogActive } from './tvFocusManager'
 import { registerTVBack } from './tvBackManager'
+import { resolveDismissedDialogRequest, resolveInitialDialogButtonIndex } from './tvDialogState'
 import TVText from './TVText'
 import { tvColors, tvSize } from '@/theme/tv'
+
+export { resolveDismissedDialogRequest, resolveInitialDialogButtonIndex }
 
 export interface TVDialogButtonConfig {
   label: string
   tone?: 'primary' | 'dark' | 'ghost' | 'danger'
+  /** 显式指定默认聚焦该按钮（如二次删除确认框中的 danger 确认按钮） */
+  autoFocus?: boolean
   onPress?: () => void
 }
 
@@ -27,11 +32,18 @@ type TVDialogListener = (request: TVDialogRequest | null) => void
 // 「我的歌单 → 歌单详情 → 返回 → 长按删除」确认框不弹就是这条链路（Settings.tsx 注释曾记录过）
 const dialogHosts = new Set<TVDialogListener>()
 let activeListener: TVDialogListener | null = null
+// 首屏 TVDialogHost 挂载前若有弹窗请求（如启动阶段错误提示），暂存一份待首个 Host 挂载后立即弹出
+let pendingDialogRequest: TVDialogRequest | null = null
 
 /** 注册一个弹窗宿主，返回反注册函数（在 Host 卸载时调用） */
 export const setTVDialogListener = (listener: TVDialogListener) => {
   dialogHosts.add(listener)
   activeListener = listener
+  if (pendingDialogRequest) {
+    const queued = pendingDialogRequest
+    pendingDialogRequest = null
+    listener(queued)
+  }
   return () => {
     dialogHosts.delete(listener)
     if (activeListener === listener) {
@@ -43,7 +55,11 @@ export const setTVDialogListener = (listener: TVDialogListener) => {
 }
 
 export const showTVDialog = (request: TVDialogRequest) => {
-  activeListener?.(request)
+  if (activeListener) {
+    activeListener(request)
+  } else {
+    pendingDialogRequest = request
+  }
 }
 
 // 弹窗「真实可见」计数（v1.9.25）：与 setTVDialogActive（计数式让路）区分——
@@ -89,11 +105,9 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
     if (!visible) return
     visibleDialogCount += 1
     setTVDialogActive(true)
-    // 默认聚焦主按钮（tone=primary，无则第一个）：TV 用户肌肉记忆是「弹窗 → OK = 确认主操作」。
-    // 245 实测事故：confirmDialog 按钮数组 [取消, 确认]，默认聚焦 0=取消——
-    // 老板按 OK「确认关闭互联」实际点了取消，关闭流程一步没走（状态不变/服务器没停）
-    const primaryIdx = buttonsRef.current.findIndex(btn => btn.tone === 'primary')
-    const initialIdx = primaryIdx >= 0 ? primaryIdx : 0
+    // 默认聚焦显式 autoFocus 或主按钮（tone=primary，无则第一个）：
+    // TV 用户肌肉记忆是「二次确认框 → OK = 确认主操作」
+    const initialIdx = resolveInitialDialogButtonIndex(buttonsRef.current)
     setFocusedIdx(initialIdx)
     focusedIdxRef.current = initialIdx
     visibleAtRef.current = Date.now()
@@ -156,8 +170,10 @@ const TVDialog = ({ visible, title, message, buttons, onDismiss, resetKey }: TVD
             <Pressable
               key={`${button.label}_${index}`}
               onPress={() => {
-                onDismissRef.current?.()
+                // 与遥控 select 路径保持一致：必须先执行按钮动作再通知 onDismiss，
+                // 避免飞鼠/鼠标点击 confirmDialog「确认」时 onDismiss 先 resolve(false)
                 button.onPress?.()
+                onDismissRef.current?.()
               }}
               style={[
                 styles.btnBase,
@@ -185,8 +201,11 @@ export const TVDialogHost = memo(() => {
       message={request?.message}
       buttons={request?.buttons ?? []}
       onDismiss={() => {
-        setRequest(null)
-        request?.onDismiss?.()
+        // 先行 btn.onPress 若已同步打开二级弹窗（如设置页「删除使用中音源」/「开启更新提醒」），
+        // setRequest 队列里已是新 request；只有当前仍为正在关闭的这一份才清成 null
+        const closing = request
+        setRequest(prev => resolveDismissedDialogRequest(prev, closing))
+        closing?.onDismiss?.()
       }}
     />
   )

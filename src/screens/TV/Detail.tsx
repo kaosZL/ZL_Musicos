@@ -6,7 +6,7 @@ import TVText from '@/components/TV/TVText'
 import TVButton from '@/components/TV/TVButton'
 import TVMusicRow from '@/components/TV/TVMusicRow'
 import TVGlassPanel from '@/components/TV/TVGlassPanel'
-import TVDialog, { type TVDialogRequest } from '@/components/TV/TVDialog'
+import TVDialog, { resolveDismissedDialogRequest, type TVDialogRequest } from '@/components/TV/TVDialog'
 import { focusTVTargetByRef } from '@/components/TV/tvFocusManager'
 import type Focusable from '@/components/TV/Focusable'
 import Image from '@/components/common/Image'
@@ -18,6 +18,7 @@ import { useTVRemoteActions } from '@/utils/hooks/useTVRemoteActions'
 import { useTVFocusRef } from '@/components/TV/useTVFocusRef'
 import { useTVFocusRefresh } from '@/components/TV/useTVFocusRefresh'
 import { getListDetail as getBoardListDetail } from '@/core/leaderboard'
+import { getBoardCovers, getCachedBoardCover } from '@/core/boardCovers'
 import { getListDetail as getSonglistDetail } from '@/core/songlist'
 import { handlePlay as handleBoardPlay } from '@/screens/Home/Views/Leaderboard/listAction'
 import { handlePlay as handleSonglistPlay } from '@/screens/SonglistDetail/listAction'
@@ -30,7 +31,9 @@ import { createTVTabs, getSourceName } from './utils'
 
 type FocusNode = ComponentRef<typeof Focusable> | null
 type FocusRefMap = Record<string, FocusNode>
-const ITEM_SIZE = tvSize(78)
+const ROW_HEIGHT = tvSize(78)
+const ROW_GAP = tvSize(10)
+const ITEM_STRIDE = ROW_HEIGHT + ROW_GAP
 
 interface Props {
   componentId: string
@@ -60,7 +63,38 @@ function TVDetail({ componentId, payload }: Props) {
   const queueFocusRefresh = useTVFocusRefresh()
   const activeTabFocus = useRef<FocusNode>(null)
   const getActiveTabHandle = () => (activeTabFocus.current ? findNodeHandle(activeTabFocus.current) : null)
-  const actionFocusedRef = useRef(false)
+  const actionFocusCountRef = useRef(0)
+  const mountedRef = useRef(true)
+  const notifiedRowNodes = useRef<FocusRefMap>({})
+  // 加载更多后将焦点精准落在新页第一首（如第 31 首），同时屏蔽期间 Android 原生回退首行导致的回顶滚动
+  const pendingLoadMoreTargetRef = useRef<{ index: number, key: string, until: number } | null>(null)
+  const loadMoreFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (loadMoreFocusTimerRef.current) clearTimeout(loadMoreFocusTimerRef.current)
+    }
+  }, [])
+
+  // 排行榜封面：优先用传入/缓存的官方榜单封面，缺失时异步拉取榜单封面，再退回榜单第一首带封面的歌曲图
+  const [boardCover, setBoardCover] = useState<string | null>(() => {
+    if (payload.type !== 'board') return null
+    return payload.cover ?? getCachedBoardCover(payload.source, payload.board.bangid)
+  })
+  useEffect(() => {
+    if (payload.type !== 'board') return
+    const initial = payload.cover ?? getCachedBoardCover(payload.source, payload.board.bangid)
+    setBoardCover(initial)
+    if (initial) return
+    let mounted = true
+    void getBoardCovers(payload.source).then(covers => {
+      if (!mounted) return
+      const hit = covers[String(payload.board.bangid)] ?? null
+      if (hit) setBoardCover(hit)
+    })
+    return () => { mounted = false }
+  }, [payload])
 
   // 从操作按钮下键进列表首行：直接聚焦（不再靠 preferred 翻转间接实现——
   // 初始焦点改为仅挂载时调度后，翻转不再触发焦点移动，09-22）
@@ -73,10 +107,15 @@ function TVDetail({ componentId, payload }: Props) {
   useTVNavigationBack(componentId)
   useTVRemoteActions({
     playPause: () => { if (list.length) void handlePlay(0) },
-    down: () => { if (actionFocusedRef.current) focusFirstRow() },
+    down: () => { if (actionFocusCountRef.current > 0) focusFirstRow() },
   }, componentId)
 
-  const image = payload.type === 'songlist' ? payload.songlist.img : null
+  const firstSongPic = list.find(item => item.meta?.picUrl)?.meta?.picUrl ?? null
+  const image = payload.type === 'songlist'
+    ? (payload.songlist.img || firstSongPic)
+    : payload.type === 'board'
+      ? (boardCover || firstSongPic)
+      : firstSongPic
   const heroMeta = payload.type === 'songlist'
     ? `${getSourceName(payload.source)}${dot}${tvText.songlist}${payload.songlist.play_count ? `${dot}${payload.songlist.play_count}` : ''}`
     : payload.type === 'board'
@@ -123,6 +162,18 @@ function TVDetail({ componentId, payload }: Props) {
     return () => { mounted = false }
   }, [payload, retryToken])
 
+  const getRowKey = useCallback((item: LX.Music.MusicInfoOnline, index: number) => `${item.source}_${item.id}_${index}`, [])
+  const getRowHandle = (key?: string | null) => key && rowRefs.current[key] ? findNodeHandle(rowRefs.current[key]) : null
+  const bindRowRef = (key: string, syncFirst = false) => (node: FocusNode) => {
+    rowRefs.current[key] = node
+    if (!node) return
+    const needSyncFirst = syncFirst && firstRowFocus.ref.current !== node
+    if (needSyncFirst) firstRowFocus.ref.current = node as any
+    const freshNode = notifiedRowNodes.current[key] !== node
+    if (freshNode) notifiedRowNodes.current[key] = node
+    if (freshNode || needSyncFirst) queueFocusRefresh()
+  }
+
   // 在线歌单/榜单分页：首屏只拿第一页（约 30 首），滚到底点「加载更多」拉下一页（09-20 需求）
   const isOnlineList = payload.type === 'board' || payload.type === 'songlist'
   const hasMore = isOnlineList && !loading && !error && total > list.length && listLimit > 0
@@ -134,14 +185,52 @@ function TVDetail({ componentId, payload }: Props) {
       const result = payload.type === 'board'
         ? await getBoardListDetail(payload.id, nextPage)
         : await getSonglistDetail(payload.id, payload.source, nextPage)
+      if (!mountedRef.current) return
       // 分页接口偶尔重复返回边界歌曲，按 source+id 去重后追加
       const seen = new Set(list.map(m => `${m.source}_${m.id}`))
       const fresh = result.list.filter(m => !seen.has(`${m.source}_${m.id}`))
+      const firstNewIndex = list.length
+      const firstNewKey = fresh.length ? getRowKey(fresh[0], firstNewIndex) : null
+      if (firstNewKey) {
+        pendingLoadMoreTargetRef.current = { index: firstNewIndex, key: firstNewKey, until: Date.now() + 2500 }
+      }
       setList(prev => [...prev, ...fresh])
       setLoadedPage(nextPage)
-      if (result.total) setTotal(result.total)
+      if (!result.list.length) setTotal(list.length)
+      else if (result.total) setTotal(result.total)
+      if (firstNewKey) {
+        const targetOffset = Math.max(0, firstNewIndex * ITEM_STRIDE - ITEM_STRIDE)
+        if (loadMoreFocusTimerRef.current) clearTimeout(loadMoreFocusTimerRef.current)
+        requestAnimationFrame(() => {
+          if (!mountedRef.current || pendingLoadMoreTargetRef.current?.key !== firstNewKey) return
+          listRef.current?.scrollToOffset({ offset: targetOffset, animated: false })
+          let tries = 0
+          const tryFocusNewRow = async() => {
+            if (!mountedRef.current || pendingLoadMoreTargetRef.current?.key !== firstNewKey) return
+            const node = rowRefs.current[firstNewKey]
+            if (node) {
+              listRef.current?.scrollToOffset({ offset: targetOffset, animated: false })
+              const focused = await focusTVTargetByRef(node)
+              if (!mountedRef.current || pendingLoadMoreTargetRef.current?.key !== firstNewKey) return
+              if (focused) {
+                pendingLoadMoreTargetRef.current = null
+                queueFocusRefresh()
+                return
+              }
+            } else if (tries === 2 || tries === 6) {
+              listRef.current?.scrollToOffset({ offset: targetOffset, animated: false })
+            }
+            if (++tries > 25) {
+              if (pendingLoadMoreTargetRef.current?.key === firstNewKey) pendingLoadMoreTargetRef.current = null
+              return
+            }
+            loadMoreFocusTimerRef.current = setTimeout(() => { void tryFocusNewRow() }, 60)
+          }
+          void tryFocusNewRow()
+        })
+      }
     } catch { /* 加载更多失败保持现状，可重点「重试」重新拉首页 */ }
-    finally { setLoadingMore(false) }
+    finally { if (mountedRef.current) setLoadingMore(false) }
   }
 
   // 本地歌单（userlist）内容变化时实时刷新：
@@ -161,22 +250,16 @@ function TVDetail({ componentId, payload }: Props) {
     return () => { global.app_event.off('myListMusicUpdate', handleMusicUpdate) }
   }, [payload])
 
-  const getRowKey = useCallback((item: LX.Music.MusicInfoOnline, index: number) => `${item.source}_${item.id}_${index}`, [])
-  const getRowHandle = (key?: string | null) => key && rowRefs.current[key] ? findNodeHandle(rowRefs.current[key]) : null
-  const bindRowRef = (key: string, syncFirst = false) => (node: FocusNode) => {
-    rowRefs.current[key] = node
-    if (syncFirst && node && firstRowFocus.ref.current !== node) {
-      firstRowFocus.ref.current = node as any
-      queueFocusRefresh()
-    }
-  }
-
   const handleFocus = (index: number) => {
-    listRef.current?.scrollToOffset({ offset: Math.max(0, index * ITEM_SIZE - ITEM_SIZE), animated: true })
+    const pending = pendingLoadMoreTargetRef.current
+    if (pending && Date.now() < pending.until && index !== pending.index) return
+    listRef.current?.scrollToOffset({ offset: Math.max(0, index * ITEM_STRIDE - ITEM_STRIDE), animated: true })
   }
 
-  const handleActionFocus = () => { actionFocusedRef.current = true }
-  const handleActionBlur = () => { actionFocusedRef.current = false }
+  const handleActionFocusChange = useCallback((focused: boolean) => {
+    if (focused) actionFocusCountRef.current += 1
+    else actionFocusCountRef.current = Math.max(0, actionFocusCountRef.current - 1)
+  }, [])
 
   const handlePlay = async(index = 0) => {
     if (payload.type === 'board') await handleBoardPlay(payload.id, list, index)
@@ -215,7 +298,7 @@ function TVDetail({ componentId, payload }: Props) {
       message: `确定从该歌单删除这首歌吗？${item.singer ? `（${item.singer}）` : ''}`,
       buttons: [
         { label: '取消', tone: 'dark' },
-        { label: '删除', tone: 'danger', onPress: () => { void doRemoveSong(item) } },
+        { label: '删除', tone: 'danger', autoFocus: true, onPress: () => { void doRemoveSong(item) } },
       ],
     })
   }
@@ -251,7 +334,7 @@ function TVDetail({ componentId, payload }: Props) {
           <View style={styles.coverStage}>
             <View style={styles.coverGlow} />
             <View style={styles.coverFrame}>
-              {image ? <Image url={image} style={styles.coverImage as ImageStyle} resizeMode="cover" /> : <TVText variant="pageTitle" color={tvColors.primaryHigh} style={styles.coverPlaceholder}>{(payload.title || '?').slice(0, 1)}</TVText>}
+              {image ? <Image url={image} style={styles.coverImage as ImageStyle} resizeMode="cover" /> : <TVText variant="pageTitle" color={tvColors.primaryHigh} style={styles.coverPlaceholder}>♪</TVText>}
             </View>
             <View style={styles.coverReflection} />
           </View>
@@ -269,8 +352,7 @@ function TVDetail({ componentId, payload }: Props) {
                 tone="dark"
                 style={styles.actionButton}
                 onPress={() => { void handlePlay(0) }}
-                onFocus={handleActionFocus}
-                onBlur={handleActionBlur}
+                onTVFocusChange={handleActionFocusChange}
                 hasTVPreferredFocus
                 nextFocusUp={getActiveTabHandle() ?? undefined}
                 nextFocusRight={backFocus.getNodeHandle() ?? undefined}
@@ -282,8 +364,7 @@ function TVDetail({ componentId, payload }: Props) {
                 tone="dark"
                 style={styles.backButton}
                 onPress={() => { void pop(componentId) }}
-                onFocus={handleActionFocus}
-                onBlur={handleActionBlur}
+                onTVFocusChange={handleActionFocusChange}
                 nextFocusUp={getActiveTabHandle() ?? undefined}
                 nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
                 nextFocusRight={firstRowFocus.getNodeHandle() ?? undefined}
@@ -303,6 +384,7 @@ function TVDetail({ componentId, payload }: Props) {
             ref={listRef}
             data={list}
             keyExtractor={getRowKey}
+            getItemLayout={(_, index) => ({ length: ITEM_STRIDE, offset: tvSize(14) + ITEM_STRIDE * index, index })}
             style={styles.list}
             showsVerticalScrollIndicator={false}
             removeClippedSubviews={false}
@@ -332,7 +414,10 @@ function TVDetail({ componentId, payload }: Props) {
                 label={loadingMore ? tvText.loading : tvText.loadMore}
                 tone="dark"
                 style={styles.loadMore}
+                onTVFocusChange={focused => { if (focused && !pendingLoadMoreTargetRef.current) listRef.current?.scrollToEnd({ animated: true }) }}
                 onPress={() => { void handleLoadMore() }}
+                nextFocusUp={list.length ? getRowHandle(getRowKey(list[list.length - 1], list.length - 1)) ?? undefined : undefined}
+                nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
               />
             ) : null}
             renderItem={({ item, index }) => {
@@ -348,12 +433,12 @@ function TVDetail({ componentId, payload }: Props) {
                   meta={item.interval ?? getSourceName(item.source)}
                   badge={index < 3 ? tvText.hotChart : undefined}
                   hasTVPreferredFocus={false}
-                  onFocus={() => { handleFocus(index) }}
+                  onTVFocusChange={focused => { if (focused) handleFocus(index) }}
                   onPress={() => { void handlePlay(index) }}
                   onLongPress={payload.type === 'userlist' ? () => { confirmRemoveSong(item) } : () => { void handleSinglePlay(item) }}
                   nextFocusUp={index === 0 ? getActiveTabHandle() ?? playAllFocus.getNodeHandle() ?? undefined : getRowHandle(prevKey) ?? undefined}
                   nextFocusLeft={playAllFocus.getNodeHandle() ?? undefined}
-                  nextFocusDown={getRowHandle(nextKey) ?? undefined}
+                  nextFocusDown={getRowHandle(nextKey) ?? (hasMore && index === list.length - 1 ? loadMoreFocus.getNodeHandle() ?? undefined : undefined)}
                 />
               )
             }}
@@ -362,16 +447,15 @@ function TVDetail({ componentId, payload }: Props) {
       </View>
       <TVDialog
         visible={!!localDialog}
+        resetKey={localDialog}
         title={localDialog?.title ?? ''}
         message={localDialog?.message}
-        buttons={localDialog?.buttons?.map(btn => ({
-          ...btn,
-          onPress: () => {
-            setLocalDialog(null)
-            btn.onPress?.()
-          },
-        })) ?? []}
-        onDismiss={() => { setLocalDialog(null) }}
+        buttons={localDialog?.buttons ?? []}
+        onDismiss={() => {
+          const closing = localDialog
+          setLocalDialog(prev => resolveDismissedDialogRequest(prev, closing))
+          closing?.onDismiss?.()
+        }}
       />
     </TVAppleScaffold>
   )

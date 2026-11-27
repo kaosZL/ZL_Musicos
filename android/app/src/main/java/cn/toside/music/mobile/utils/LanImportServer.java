@@ -267,18 +267,14 @@ public class LanImportServer extends NanoHTTPD {
       return json(syncStatusJson);
     }
     if (Method.GET.equals(method) && "/api/logs".equals(uri)) {
-      StringBuilder sb = new StringBuilder(4096);
-      sb.append('[');
+      // 使用 JSONArray 序列化，确保日志中的换行/制表/控制字符均合法转义，避免单条多行日志拖垮整个手机日志面板
+      org.json.JSONArray arr = new org.json.JSONArray();
       synchronized (logLock) {
-        boolean first = true;
         for (String line : runLogs) {
-          if (!first) sb.append(',');
-          sb.append('"').append(line.replace("\\", "\\\\").replace("\"", "\\\"")).append('"');
-          first = false;
+          arr.put(line);
         }
       }
-      sb.append(']');
-      return json(sb.toString());
+      return json(arr.toString());
     }
     if (Method.POST.equals(method)) {
       Map<String, String> body = new HashMap<>();

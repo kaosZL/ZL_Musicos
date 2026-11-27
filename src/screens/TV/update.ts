@@ -1,10 +1,10 @@
 import { version as currentVersion } from '../../../package.json'
 import { APP_PROVIDER_NAME } from '@/config/constant'
 import { compareVer } from '@/utils'
-import { downloadFile, stopDownload, temporaryDirectoryPath } from '@/utils/fs'
+import { downloadFile, stopDownload, temporaryDirectoryPath, unlink } from '@/utils/fs'
 import { getSupportedAbis, installApk } from '@/utils/nativeModules/utils'
 import { httpFetch } from '@/utils/request'
-import { buildDownloadCandidates } from './updateUrlChain'
+import { buildDownloadCandidates, validateDownloadedApk } from './updateUrlChain'
 
 const TV_UPDATE_MANIFEST_URLS = [
   // 国内可达优先：公共 gh 镜像前缀 → 直连 → jsDelivr 兜底（v1.9.23）
@@ -243,7 +243,10 @@ export const downloadTVUpdate = async(info: TVUpdateInfo, onProgress: (total: nu
       })
 
       downloadJobId = jobId
-      await promise
+      const result = await promise
+      downloadJobId = null
+      const check = validateDownloadedApk(result.statusCode, result.bytesWritten, info.asset.size)
+      if (!check.ok) throw new Error(check.reason)
       downloadedApkPath = savePath
       return savePath
     } catch (err: unknown) {
@@ -252,6 +255,8 @@ export const downloadTVUpdate = async(info: TVUpdateInfo, onProgress: (total: nu
         stopDownload(downloadJobId)
         downloadJobId = null
       }
+      // 清理镜像报错页或截断坏包，继续尝试下一条候选镜像
+      void unlink(savePath).catch(() => { })
     }
   }
   throw lastError ?? new Error('DOWNLOAD_FAILED')

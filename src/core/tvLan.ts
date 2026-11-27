@@ -6,7 +6,7 @@ import syncState from '@/store/sync/state'
 import { userLists } from '@/utils/listManage'
 import { LIST_IDS } from '@/config/constant'
 import { createList, getListMusics, removeUserList, updateUserList } from '@/core/list'
-import { setApiSource } from '@/core/apiSource'
+import { resolveFallbackApiSource, setApiSource } from '@/core/apiSource'
 import { updateSetting } from '@/core/common'
 import { importUserApi, removeUserApi } from '@/core/userApi'
 import { connectServer, disconnectServer } from '@/plugins/sync'
@@ -67,14 +67,13 @@ const pushSourcesSnapshot = () => {
     const apiSource = settingState.setting['common.apiSource']
     const removedSources = settingState.setting['common.tvRemovedSources'] ?? []
     const userApiList = userApiState.list
-    // 与设置页展示列表同源：用户音源在前，随后聚合/预置/内置；手机页只消费 id/name/active/isUser
+    // 与设置页展示列表同源：用户音源在前，随后预置/内置（不塞 id='' 的幽灵聚合项）；手机页只消费 id/name/active/isUser
     const sources = [
       ...userApiList.map(item => ({
         id: item.id,
         name: item.name,
         isUser: true,
       })),
-      { id: '', name: tvText.aggregateSource, isUser: false },
       ...TV_PRESET_USER_API_CANDIDATES.filter(item => !removedSources.includes(item.id)).map(item => ({
         id: item.id, name: getSourceName(item.id), isUser: false,
       })),
@@ -146,7 +145,7 @@ const handleRemoveSource = async(id: string) => {
   try {
     const removedIsActive = settingState.setting['common.apiSource'] === id
     await removeUserApi([id])
-    if (removedIsActive) setApiSource('')
+    if (removedIsActive) setApiSource(resolveFallbackApiSource(id))
     showLanResult('音源', tvText.removeSuccess)
   } catch (err: unknown) {
     showLanResult('音源', err instanceof Error ? err.message : tvText.removeFailed)
@@ -166,8 +165,19 @@ const handleLanEvent = async(action: string, payload: string) => {
     }
     if (action === 'import') {
       const data = JSON.parse(payload || '{}') as { url?: string, script?: string }
-      let script = data.script ?? ''
-      if (!script && data.url) script = await httpFetch(data.url).promise.then(resp => resp.body) as string
+      let script = typeof data.script === 'string' ? data.script : ''
+      if (!script && data.url) {
+        const resp = await httpFetch(data.url).promise
+        if (!resp.ok || resp.statusCode !== 200) {
+          showLanResult(tvText.importFailed, `下载音源脚本失败（HTTP ${resp.statusCode || '网络错误'}）`)
+          return
+        }
+        if (typeof resp.body !== 'string') {
+          showLanResult(tvText.importFailed, '链接返回的不是有效的 JS 音源脚本（疑似返回了 JSON 或非文本内容）')
+          return
+        }
+        script = resp.body
+      }
       if (!script.trim()) {
         showLanResult(tvText.importFailed, '手机提交的内容为空')
         return
@@ -179,7 +189,7 @@ const handleLanEvent = async(action: string, payload: string) => {
       if (data.id) await handleRemoveSource(data.id)
     } else if (action === 'activate') {
       const data = JSON.parse(payload || '{}') as { id?: string }
-      if (data.id) setApiSource(data.id)
+      if (typeof data.id === 'string' && data.id.trim()) setApiSource(data.id)
     } else if (action === 'songlist') {
       const data = JSON.parse(payload || '{}') as {
         text?: string
@@ -307,6 +317,9 @@ const handleLanEvent = async(action: string, payload: string) => {
 
 let offLanEvents: (() => void) | null = null
 let offWatchers: (() => void) | null = null
+// 并发防重入守卫：快速双击「手机扫码导入」或启停并发时，防止注册两份事件/store 监听导致单次手机操作执行两遍
+let startPromise: Promise<TvLanSessionState> | null = null
+let sessionSeq = 0
 
 const watchStores = () => {
   // 音源列表 / 当前音源变化 → 重推音源快照
@@ -333,21 +346,37 @@ const watchStores = () => {
   }
 }
 
-/** 开启手机互联会话（幂等）。返回含二维码 URL 的会话状态。 */
+/** 开启手机互联会话（幂等且并发安全）。返回含二维码 URL 的会话状态。 */
 export const startTvLanSession = async(): Promise<TvLanSessionState> => {
   if (sessionState.running) return sessionState
-  const { ip, port, token } = await startLanImportServer(9527)
-  const url = `http://${ip}:${port}/?t=${encodeURIComponent(token)}`
-  await refreshSyncHost()
-  offLanEvents = onLanSourceEvent(({ action, payload }) => { void handleLanEvent(action, payload) })
-  watchStores()
-  sessionState = { running: true, url, phoneConnected: false }
-  notify()
-  debugLog(`手机互联会话开启: ${ip}:${port}`)
-  pushSourcesSnapshot()
-  void pushSonglistsSnapshot()
-  pushSyncSnapshot()
-  return sessionState
+  if (startPromise) return startPromise
+  const mySeq = ++sessionSeq
+  startPromise = (async() => {
+    try {
+      const { ip, port, token } = await startLanImportServer(9527)
+      const url = `http://${ip}:${port}/?t=${encodeURIComponent(token)}`
+      await refreshSyncHost()
+      // 启动在途期间若收到 stopTvLanSession，立即回收服务器，不再挂载监听
+      if (mySeq !== sessionSeq) {
+        void stopLanImportServer().catch(() => { })
+        return sessionState
+      }
+      offLanEvents?.()
+      offWatchers?.()
+      offLanEvents = onLanSourceEvent(({ action, payload }) => { void handleLanEvent(action, payload) })
+      watchStores()
+      sessionState = { running: true, url, phoneConnected: false }
+      notify()
+      debugLog(`手机互联会话开启: ${ip}:${port}`)
+      pushSourcesSnapshot()
+      void pushSonglistsSnapshot()
+      pushSyncSnapshot()
+      return sessionState
+    } finally {
+      startPromise = null
+    }
+  })()
+  return startPromise
 }
 
 /** 关闭手机互联会话（唯一断开方式：设置页长按按钮确认后调用）。
@@ -355,6 +384,7 @@ export const startTvLanSession = async(): Promise<TvLanSessionState> => {
  *  日志从未出现——退订监听段存在被 void 吞掉的静默异常。现在异常逐段捕获并记
  *  进运行日志，状态重置/通知/停服为必经路径：任何一段抛错都不再阻断停会话。 */
 export const stopTvLanSession = async() => {
+  sessionSeq += 1
   debugLog('停会话: 开始')
   try {
     offWatchers?.()
